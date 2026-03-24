@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import * as actions from "../lib/actions";
 
@@ -67,20 +67,48 @@ export default function Home() {
   const [editingEventText, setEditingEventText] = useState("");
   const [editingMessage, setEditingMessage] = useState<string | null>(null);
   const [editingMessageText, setEditingMessageText] = useState("");
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const fetchInitialData = async () => {
+  const scrollToBottom = () => {
+    if (messagesEndRef.current) {
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      }, 100);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "messages") {
+      scrollToBottom();
+    }
+  }, [messages, activeTab]);
+
+  const fetchInitialData = async (silent = false) => {
     try {
+      if (!silent) setIsRefreshing(true);
       const data = await actions.fetchData();
       setTickets(data.tickets);
       setWishlist(data.wishlist);
       setPlans(data.plans);
       setDates(data.dates);
       setMessages(data.messages);
+      if (!silent) setIsRefreshing(false);
     } catch (error) {
       console.error('Failed to fetch data:', error);
-      alert('Failed to load data. Please check your database connection.');
+      if (!silent) alert('Failed to load data. Please check your database connection.');
+      setIsRefreshing(false);
     }
   };
+
+  useEffect(() => {
+    if (view !== "login") {
+      const interval = setInterval(() => {
+        fetchInitialData(true);
+      }, 3000);
+      return () => clearInterval(interval);
+    }
+  }, [view]);
 
   useEffect(() => {
     if (view !== "login") {
@@ -484,13 +512,22 @@ export default function Home() {
               </div>
             </div>
           </div>
-          <button 
-            onClick={() => setView("login")}
-            className="group p-3 bg-zinc-800/50 rounded-2xl text-zinc-500 hover:text-white hover:bg-zinc-800 transition-all active:scale-90 border border-zinc-700/50"
-            title="Log Out"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="group-hover:rotate-12 transition-transform"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-          </button>
+          <div className="flex gap-2">
+            <button 
+              onClick={() => fetchInitialData()}
+              className={`group p-3 bg-zinc-800/50 rounded-2xl text-zinc-500 hover:text-white hover:bg-zinc-800 transition-all active:scale-90 border border-zinc-700/50 ${isRefreshing ? "animate-spin" : ""}`}
+              title="Refresh Data"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            </button>
+            <button 
+              onClick={() => setView("login")}
+              className="group p-3 bg-zinc-800/50 rounded-2xl text-zinc-500 hover:text-white hover:bg-zinc-800 transition-all active:scale-90 border border-zinc-700/50"
+              title="Log Out"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="group-hover:rotate-12 transition-transform"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            </button>
+          </div>
         </div>
 
         {/* Tab Navigation */}
@@ -529,7 +566,7 @@ export default function Home() {
                 </h2>
                 <span className="text-[8px] font-black text-zinc-700 uppercase tracking-widest">Priority: High</span>
               </div>
-              <div className="bg-zinc-900 p-8 rounded-[2.5rem] border border-zinc-800/50 shadow-2xl relative overflow-hidden">
+              <div className="bg-zinc-900 p-6 sm:p-8 rounded-[2.5rem] border border-zinc-800/50 shadow-2xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 blur-[80px] -mr-16 -mt-16 rounded-full"></div>
                 <form onSubmit={(e) => handleCreateTicket(e, currentUser)} className="flex flex-col gap-6 relative z-10">
                   <textarea
@@ -640,9 +677,9 @@ export default function Home() {
               <span className="w-2 h-2 bg-pink-500 rounded-full"></span>
               Wishlist Terminal
             </h2>
-            <div className="bg-zinc-900 p-8 rounded-[3rem] border border-zinc-800/50 shadow-2xl space-y-8 relative overflow-hidden">
+            <div className="bg-zinc-900 p-6 sm:p-8 rounded-[2.5rem] sm:rounded-[3rem] border border-zinc-800/50 shadow-2xl space-y-8 relative overflow-hidden">
                <div className="absolute top-0 right-0 w-32 h-32 bg-pink-500/5 blur-[80px] -mr-16 -mt-16 rounded-full"></div>
-              <div className="flex gap-4 relative z-10">
+              <div className="flex flex-col sm:flex-row gap-4 relative z-10">
                 <input 
                   value={newWish}
                   onChange={(e) => setNewWish(e.target.value)}
@@ -651,7 +688,7 @@ export default function Home() {
                 />
                 <button 
                   onClick={handleCreateWish}
-                  className="bg-white text-black w-16 h-16 flex items-center justify-center rounded-2xl shadow-xl active:scale-90 transition-all hover:bg-zinc-200"
+                  className="bg-white text-black w-full sm:w-16 h-16 flex items-center justify-center rounded-2xl shadow-xl active:scale-90 transition-all hover:bg-zinc-200"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 </button>
@@ -706,13 +743,13 @@ export default function Home() {
                                 setEditingWish(w._id);
                                 setEditingWishText(w.content);
                               }}
-                              className="text-zinc-500 hover:text-zinc-400 text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                              className="text-zinc-500 hover:text-white text-xs px-2 py-1 rounded transition-colors"
                             >
                               ✏
                             </button>
                             <button
                               onClick={() => handleDeleteWish(w._id)}
-                              className="text-red-500 hover:text-red-400 text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                              className="text-red-500 hover:text-red-400 text-xs px-2 py-1 rounded transition-colors"
                             >
                               🗑
                             </button>
@@ -735,7 +772,7 @@ export default function Home() {
             </h2>
             <div className="bg-zinc-900 p-8 rounded-[3rem] border border-zinc-800 shadow-2xl space-y-8 relative overflow-hidden">
                <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 blur-[80px] -mr-16 -mt-16 rounded-full"></div>
-              <div className="flex gap-4 relative z-10">
+              <div className="flex flex-col sm:flex-row gap-4 relative z-10">
                 <input 
                   value={newPlan}
                   onChange={(e) => setNewPlan(e.target.value)}
@@ -744,7 +781,7 @@ export default function Home() {
                 />
                 <button 
                   onClick={handleCreatePlan}
-                  className="bg-white text-black w-16 h-16 flex items-center justify-center rounded-2xl shadow-xl active:scale-90 transition-all hover:bg-zinc-200"
+                  className="bg-white text-black w-full sm:w-16 h-16 flex items-center justify-center rounded-2xl shadow-xl active:scale-90 transition-all hover:bg-zinc-200"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 </button>
@@ -799,13 +836,13 @@ export default function Home() {
                                 setEditingPlan(p._id);
                                 setEditingPlanText(p.content);
                               }}
-                              className="text-zinc-500 hover:text-zinc-400 text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                              className="text-zinc-500 hover:text-white text-xs px-2 py-1 rounded transition-colors"
                             >
                               ✏
                             </button>
                             <button
                               onClick={() => handleDeletePlan(p._id)}
-                              className="text-red-500 hover:text-red-400 text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                              className="text-red-500 hover:text-red-400 text-xs px-2 py-1 rounded transition-colors"
                             >
                               🗑
                             </button>
@@ -826,9 +863,9 @@ export default function Home() {
               <span className="w-2 h-2 bg-amber-500 rounded-full"></span>
               Timeline Logs
             </h2>
-            <div className="bg-zinc-900 p-8 rounded-[3rem] border border-zinc-800/50 shadow-2xl space-y-8 relative overflow-hidden">
+            <div className="bg-zinc-900 p-6 sm:p-8 rounded-[2.5rem] sm:rounded-[3rem] border border-zinc-800/50 shadow-2xl space-y-8 relative overflow-hidden">
                <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/5 blur-[80px] -mr-16 -mt-16 rounded-full"></div>
-              <div className="flex gap-4 relative z-10">
+              <div className="flex flex-col sm:flex-row gap-4 relative z-10">
                 <input 
                   value={newEvent}
                   onChange={(e) => setNewEvent(e.target.value)}
@@ -843,7 +880,7 @@ export default function Home() {
                 />
                 <button 
                   onClick={handleCreateDate}
-                  className="bg-white text-black w-16 h-16 flex items-center justify-center rounded-2xl shadow-xl active:scale-90 transition-all hover:bg-zinc-200"
+                  className="bg-white text-black w-full sm:w-16 h-16 flex items-center justify-center rounded-2xl shadow-xl active:scale-90 transition-all hover:bg-zinc-200"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 </button>
@@ -899,14 +936,14 @@ export default function Home() {
                           <>
                             <span className="text-lg font-black mb-2 text-white group-hover:translate-x-1 transition-transform">{d.event}</span>
                             <span className="text-[10px] font-black text-zinc-600 uppercase tracking-[0.2em]">{d.date}</span>
-                            <div className="flex gap-2 mt-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div className="flex gap-2 mt-3">
                               <button
                                 onClick={() => {
                                   setEditingDate(d._id);
                                   setEditingEventText(d.event);
                                   setEditingDateText(d.date);
                                 }}
-                                className="text-zinc-500 hover:text-zinc-400 text-xs px-2 py-1 rounded"
+                                className="text-zinc-500 hover:text-white transition-colors text-xs px-2 py-1 rounded"
                               >
                                 ✏ Edit
                               </button>
@@ -933,10 +970,21 @@ export default function Home() {
               <span className="w-2 h-2 bg-indigo-500 rounded-full"></span>
               Secure Messages
             </h2>
-            <div className="bg-zinc-900 p-8 rounded-[3rem] border border-zinc-800 shadow-2xl relative overflow-hidden min-h-[400px] flex flex-col">
+            <div className="bg-zinc-900 p-6 sm:p-8 rounded-[2.5rem] sm:rounded-[3rem] border border-zinc-800 shadow-2xl relative overflow-hidden min-h-[400px] flex flex-col">
               <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 blur-[80px] -mr-16 -mt-16 rounded-full"></div>
               
-              <div className="flex-1 space-y-4 mb-8 relative z-10 overflow-y-auto no-scrollbar max-h-[300px]">
+              <div className="flex justify-between items-center mb-6 px-1 relative z-10">
+                <p className="text-[10px] font-black uppercase tracking-[0.4em] text-zinc-700">Message Buffer</p>
+                <button 
+                  onClick={() => fetchInitialData()}
+                  className={`p-2 bg-zinc-950/50 border border-zinc-800 rounded-xl text-zinc-500 hover:text-white transition-all active:scale-90 ${isRefreshing ? "animate-spin text-white" : ""}`}
+                  title="Refresh Messages"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                </button>
+              </div>
+              
+              <div className="flex-1 space-y-4 mb-8 relative z-10 overflow-y-auto no-scrollbar max-h-[500px] min-h-[300px] scroll-smooth px-1">
                 {messages.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-full text-center py-12">
                     <div className="w-16 h-16 bg-zinc-950 rounded-full flex items-center justify-center mx-auto border border-zinc-800 mb-6">
@@ -957,10 +1005,10 @@ export default function Home() {
                         className={`flex flex-col ${m.createdBy === currentUser ? "items-end" : "items-start"}`}
                       >
                         <div 
-                          className={`max-w-[80%] p-4 rounded-2xl text-sm font-bold group relative ${
+                          className={`max-w-[90%] p-4 rounded-2xl text-sm font-bold group relative break-words whitespace-pre-wrap overflow-hidden ${
                             m.createdBy === currentUser 
                               ? "bg-white text-black rounded-tr-none" 
-                              : "bg-zinc-800 text-white rounded-tl-none"
+                              : "bg-zinc-800 text-white rounded-tl-none border border-zinc-700/50"
                           }`}
                         >
                           {editingMessage === m._id ? (
@@ -983,7 +1031,7 @@ export default function Home() {
                             m.text
                           )}
                           {m.createdBy === currentUser && (
-                            <div className="flex gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div className="flex gap-1 mt-2">
                               {editingMessage === m._id ? (
                                 <>
                                   <button
@@ -1029,23 +1077,27 @@ export default function Home() {
                         </span>
                       </div>
                     ))}
+                    <div ref={messagesEndRef} />
                   </div>
                 )}
               </div>
 
-              <form onSubmit={handleSendMessage} className="relative z-10 flex gap-3">
-                <input 
-                  value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
-                  className="flex-1 bg-zinc-950 border border-zinc-800 rounded-2xl px-6 py-4 text-sm font-bold text-white outline-none focus:border-indigo-500 placeholder:text-zinc-800 transition-all shadow-inner" 
-                  placeholder="Type a message..."
-                />
-                <button 
-                  type="submit"
-                  className="bg-white text-black w-14 h-14 flex items-center justify-center rounded-2xl shadow-xl active:scale-90 transition-all hover:bg-zinc-200"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polyline points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                </button>
+              <form onSubmit={handleSendMessage} className="relative z-10">
+                <div className="relative group">
+                  <input 
+                    value={newMessage}
+                    onChange={(e) => setNewMessage(e.target.value)}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-[2rem] px-8 py-5 text-sm font-bold text-white outline-none focus:border-indigo-500/50 focus:ring-4 focus:ring-indigo-500/10 placeholder:text-zinc-800 transition-all shadow-inner pr-20" 
+                    placeholder="Type a message..."
+                  />
+                  <button 
+                    type="submit"
+                    className="absolute right-2 top-2 bottom-2 bg-white text-black px-6 flex items-center justify-center rounded-[1.5rem] shadow-xl active:scale-90 transition-all hover:bg-zinc-100 disabled:bg-zinc-900 disabled:text-zinc-700 disabled:shadow-none"
+                    disabled={!newMessage.trim()}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polyline points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                  </button>
+                </div>
               </form>
             </div>
           </section>

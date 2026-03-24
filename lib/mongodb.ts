@@ -7,13 +7,18 @@ if (!MONGODB_URI) {
 }
 
 // In-memory storage for development when MongoDB is not available
-const inMemoryStorage = {
-  tickets: [] as any[],
-  wishlist: [] as any[],
-  plans: [] as any[],
-  dates: [] as any[],
-  messages: [] as any[]
-};
+// Cached on global to persist through HMR in development
+let inMemoryStorage = (global as any).inMemoryStorage;
+
+if (!inMemoryStorage) {
+  inMemoryStorage = (global as any).inMemoryStorage = {
+    tickets: [],
+    wishlist: [],
+    plans: [],
+    dates: [],
+    messages: []
+  };
+}
 
 let cached = (global as any).mongoose;
 
