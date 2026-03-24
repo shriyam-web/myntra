@@ -1,24 +1,13 @@
 "use server";
 
-import dbConnect, { inMemoryStorage } from "./mongodb";
+import dbConnect from "./mongodb";
 import { Ticket, Wishlist, Plan, TimelineDate, Message } from "../models/schemas";
 import { revalidatePath } from "next/cache";
 
 // FETCH ALL DATA
 export async function fetchData() {
   try {
-    const connection = await dbConnect();
-
-    // Use in-memory storage if no database connection
-    if (connection.inMemory) {
-      return {
-        tickets: inMemoryStorage.tickets.map(t => ({ ...t, _id: t.id })),
-        wishlist: inMemoryStorage.wishlist.map(w => ({ ...w, _id: w.id })),
-        plans: inMemoryStorage.plans.map(p => ({ ...p, _id: p.id })),
-        dates: inMemoryStorage.dates.map(d => ({ ...d, _id: d.id })),
-        messages: inMemoryStorage.messages.map(m => ({ ...m, _id: m._id }))
-      };
-    }
+    await dbConnect();
 
     const [tickets, wishlist, plans, dates, messages] = await Promise.all([
       Ticket.find({}).sort({ createdAt: -1 }),
@@ -44,21 +33,7 @@ export async function fetchData() {
 // TICKETS (Complaints)
 export async function createTicket(data: { description: string; createdBy: string }) {
   try {
-    const connection = await dbConnect();
-
-    if (connection.inMemory) {
-      const ticket = {
-        id: Date.now().toString(),
-        description: data.description,
-        createdBy: data.createdBy,
-        status: "open",
-        createdAt: new Date().toISOString()
-      };
-      inMemoryStorage.tickets.push(ticket);
-      revalidatePath('/');
-      return ticket;
-    }
-
+    await dbConnect();
     const ticket = await Ticket.create(data);
     revalidatePath('/');
     return JSON.parse(JSON.stringify(ticket));
@@ -68,20 +43,9 @@ export async function createTicket(data: { description: string; createdBy: strin
   }
 }
 
-export async function updateTicket(id: string, updates: any) {
+export async function updateTicket(id: string, updates: Record<string, unknown>) {
   try {
-    const connection = await dbConnect();
-
-    if (connection.inMemory) {
-      const ticketIndex = inMemoryStorage.tickets.findIndex(t => t.id === id);
-      if (ticketIndex !== -1) {
-        inMemoryStorage.tickets[ticketIndex] = { ...inMemoryStorage.tickets[ticketIndex], ...updates };
-        revalidatePath('/');
-        return inMemoryStorage.tickets[ticketIndex];
-      }
-      throw new Error('Ticket not found');
-    }
-
+    await dbConnect();
     const ticket = await Ticket.findByIdAndUpdate(id, updates, { new: true });
     revalidatePath('/');
     return JSON.parse(JSON.stringify(ticket));
@@ -93,18 +57,7 @@ export async function updateTicket(id: string, updates: any) {
 
 export async function deleteTicket(id: string) {
   try {
-    const connection = await dbConnect();
-
-    if (connection.inMemory) {
-      const ticketIndex = inMemoryStorage.tickets.findIndex(t => t.id === id);
-      if (ticketIndex !== -1) {
-        inMemoryStorage.tickets.splice(ticketIndex, 1);
-        revalidatePath('/');
-        return;
-      }
-      throw new Error('Ticket not found');
-    }
-
+    await dbConnect();
     await Ticket.findByIdAndDelete(id);
     revalidatePath('/');
   } catch (error) {
@@ -116,20 +69,7 @@ export async function deleteTicket(id: string) {
 // WISHLIST
 export async function createWish(data: { content: string; createdBy: string }) {
   try {
-    const connection = await dbConnect();
-
-    if (connection.inMemory) {
-      const wish = {
-        id: Date.now().toString(),
-        content: data.content,
-        createdBy: data.createdBy,
-        createdAt: new Date().toISOString()
-      };
-      inMemoryStorage.wishlist.push(wish);
-      revalidatePath('/');
-      return wish;
-    }
-
+    await dbConnect();
     const wish = await Wishlist.create(data);
     revalidatePath('/');
     return JSON.parse(JSON.stringify(wish));
@@ -141,18 +81,7 @@ export async function createWish(data: { content: string; createdBy: string }) {
 
 export async function updateWish(id: string, content: string) {
   try {
-    const connection = await dbConnect();
-
-    if (connection.inMemory) {
-      const wishIndex = inMemoryStorage.wishlist.findIndex(w => w.id === id);
-      if (wishIndex !== -1) {
-        inMemoryStorage.wishlist[wishIndex].content = content;
-        revalidatePath('/');
-        return inMemoryStorage.wishlist[wishIndex];
-      }
-      throw new Error('Wish not found');
-    }
-
+    await dbConnect();
     const wish = await Wishlist.findByIdAndUpdate(id, { content }, { new: true });
     revalidatePath('/');
     return JSON.parse(JSON.stringify(wish));
@@ -164,18 +93,7 @@ export async function updateWish(id: string, content: string) {
 
 export async function deleteWish(id: string) {
   try {
-    const connection = await dbConnect();
-
-    if (connection.inMemory) {
-      const wishIndex = inMemoryStorage.wishlist.findIndex(w => w.id === id);
-      if (wishIndex !== -1) {
-        inMemoryStorage.wishlist.splice(wishIndex, 1);
-        revalidatePath('/');
-        return;
-      }
-      throw new Error('Wish not found');
-    }
-
+    await dbConnect();
     await Wishlist.findByIdAndDelete(id);
     revalidatePath('/');
   } catch (error) {
@@ -187,20 +105,7 @@ export async function deleteWish(id: string) {
 // PLANS
 export async function createPlan(data: { content: string; createdBy: string }) {
   try {
-    const connection = await dbConnect();
-
-    if (connection.inMemory) {
-      const plan = {
-        id: Date.now().toString(),
-        content: data.content,
-        createdBy: data.createdBy,
-        createdAt: new Date().toISOString()
-      };
-      inMemoryStorage.plans.push(plan);
-      revalidatePath('/');
-      return plan;
-    }
-
+    await dbConnect();
     const plan = await Plan.create(data);
     revalidatePath('/');
     return JSON.parse(JSON.stringify(plan));
@@ -212,18 +117,7 @@ export async function createPlan(data: { content: string; createdBy: string }) {
 
 export async function updatePlan(id: string, content: string) {
   try {
-    const connection = await dbConnect();
-
-    if (connection.inMemory) {
-      const planIndex = inMemoryStorage.plans.findIndex(p => p.id === id);
-      if (planIndex !== -1) {
-        inMemoryStorage.plans[planIndex].content = content;
-        revalidatePath('/');
-        return inMemoryStorage.plans[planIndex];
-      }
-      throw new Error('Plan not found');
-    }
-
+    await dbConnect();
     const plan = await Plan.findByIdAndUpdate(id, { content }, { new: true });
     revalidatePath('/');
     return JSON.parse(JSON.stringify(plan));
@@ -235,18 +129,7 @@ export async function updatePlan(id: string, content: string) {
 
 export async function deletePlan(id: string) {
   try {
-    const connection = await dbConnect();
-
-    if (connection.inMemory) {
-      const planIndex = inMemoryStorage.plans.findIndex(p => p.id === id);
-      if (planIndex !== -1) {
-        inMemoryStorage.plans.splice(planIndex, 1);
-        revalidatePath('/');
-        return;
-      }
-      throw new Error('Plan not found');
-    }
-
+    await dbConnect();
     await Plan.findByIdAndDelete(id);
     revalidatePath('/');
   } catch (error) {
@@ -258,21 +141,7 @@ export async function deletePlan(id: string) {
 // TIMELINE DATES
 export async function createDate(data: { event: string; date: string; createdBy: string }) {
   try {
-    const connection = await dbConnect();
-
-    if (connection.inMemory) {
-      const dateEntry = {
-        id: Date.now().toString(),
-        event: data.event,
-        date: data.date,
-        createdBy: data.createdBy,
-        createdAt: new Date().toISOString()
-      };
-      inMemoryStorage.dates.push(dateEntry);
-      revalidatePath('/');
-      return dateEntry;
-    }
-
+    await dbConnect();
     const dateEntry = await TimelineDate.create(data);
     revalidatePath('/');
     return JSON.parse(JSON.stringify(dateEntry));
@@ -282,20 +151,9 @@ export async function createDate(data: { event: string; date: string; createdBy:
   }
 }
 
-export async function updateDate(id: string, updates: any) {
+export async function updateDate(id: string, updates: Record<string, unknown>) {
   try {
-    const connection = await dbConnect();
-
-    if (connection.inMemory) {
-      const dateIndex = inMemoryStorage.dates.findIndex(d => d.id === id);
-      if (dateIndex !== -1) {
-        inMemoryStorage.dates[dateIndex] = { ...inMemoryStorage.dates[dateIndex], ...updates };
-        revalidatePath('/');
-        return inMemoryStorage.dates[dateIndex];
-      }
-      throw new Error('Date not found');
-    }
-
+    await dbConnect();
     const dateEntry = await TimelineDate.findByIdAndUpdate(id, updates, { new: true });
     revalidatePath('/');
     return JSON.parse(JSON.stringify(dateEntry));
@@ -307,18 +165,7 @@ export async function updateDate(id: string, updates: any) {
 
 export async function deleteDate(id: string) {
   try {
-    const connection = await dbConnect();
-
-    if (connection.inMemory) {
-      const dateIndex = inMemoryStorage.dates.findIndex(d => d.id === id);
-      if (dateIndex !== -1) {
-        inMemoryStorage.dates.splice(dateIndex, 1);
-        revalidatePath('/');
-        return;
-      }
-      throw new Error('Date not found');
-    }
-
+    await dbConnect();
     await TimelineDate.findByIdAndDelete(id);
     revalidatePath('/');
   } catch (error) {
@@ -330,20 +177,7 @@ export async function deleteDate(id: string) {
 // MESSAGES
 export async function createMessage(data: { text: string; createdBy: string }) {
   try {
-    const connection = await dbConnect();
-    if (connection.inMemory) {
-      const message = {
-        _id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        text: data.text,
-        createdBy: data.createdBy,
-        createdAt: new Date().toISOString(),
-        __v: 0
-      };
-      inMemoryStorage.messages.push(message);
-      revalidatePath('/');
-      return message;
-    }
-
+    await dbConnect();
     const message = await Message.create(data);
     revalidatePath('/');
     return JSON.parse(JSON.stringify(message));
@@ -355,17 +189,7 @@ export async function createMessage(data: { text: string; createdBy: string }) {
 
 export async function updateMessage(id: string, text: string) {
   try {
-    const connection = await dbConnect();
-    if (connection.inMemory) {
-      const messageIndex = inMemoryStorage.messages.findIndex(msg => msg._id === id);
-      if (messageIndex !== -1) {
-        inMemoryStorage.messages[messageIndex].text = text;
-        revalidatePath('/');
-        return inMemoryStorage.messages[messageIndex];
-      }
-      throw new Error('Message not found');
-    }
-
+    await dbConnect();
     const message = await Message.findByIdAndUpdate(id, { text }, { new: true });
     revalidatePath('/');
     return JSON.parse(JSON.stringify(message));
@@ -377,17 +201,7 @@ export async function updateMessage(id: string, text: string) {
 
 export async function deleteMessage(id: string) {
   try {
-    const connection = await dbConnect();
-    if (connection.inMemory) {
-      const messageIndex = inMemoryStorage.messages.findIndex(msg => msg._id === id);
-      if (messageIndex !== -1) {
-        inMemoryStorage.messages.splice(messageIndex, 1);
-        revalidatePath('/');
-        return;
-      }
-      throw new Error('Message not found');
-    }
-
+    await dbConnect();
     await Message.findByIdAndDelete(id);
     revalidatePath('/');
   } catch (error) {

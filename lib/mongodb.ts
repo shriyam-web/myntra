@@ -1,73 +1,90 @@
 import mongoose from 'mongoose';
+import dns from 'dns';
 
-const MONGODB_URI = process.env.MONGODB_URI;
-
-if (!MONGODB_URI) {
-  console.log('⚠️  No MONGODB_URI found. Using in-memory fallback for development.');
+// Fix for querySrv ECONNREFUSED issues with some DNS servers
+try {
+  dns.setServers(['8.8.8.8', '8.8.4.4']);
+} catch (e) {
+  console.warn('⚠️ Could not set custom DNS servers, using system default');
 }
 
-// In-memory storage for development when MongoDB is not available
-// Cached on global to persist through HMR in development
-let inMemoryStorage = (global as any).inMemoryStorage;
+console.log('🔍 Loading mongodb.ts - DNS fix applied');
 
-if (!inMemoryStorage) {
-  inMemoryStorage = (global as any).inMemoryStorage = {
-    tickets: [],
-    wishlist: [],
-    plans: [],
-    dates: [],
-    messages: []
-  };
+interface MongooseCache {
+  conn: unknown;
+  promise: Promise<unknown> | null;
 }
 
-let cached = (global as any).mongoose;
+declare global {
+  var mongoose: MongooseCache | undefined;
+}
 
-if (!cached) {
-  cached = (global as any).mongoose = { conn: null, promise: null };
+const cached = global.mongoose || { conn: null, promise: null };
+
+if (!global.mongoose) {
+  const globalRef = global as unknown as { mongoose?: MongooseCache };
+  globalRef.mongoose = cached as MongooseCache;
 }
 
 async function dbConnect() {
-  // If no MongoDB URI, use in-memory storage
-  if (!MONGODB_URI) {
-    console.log('💾 Using in-memory storage (no database connection)');
-    return { inMemory: true };
-  }
+  const MONGODB_URI = process.env.MONGODB_URI;
 
-  // If we already determined to use in-memory storage, return that
-  if (cached.conn && typeof cached.conn === 'object' && 'inMemory' in cached.conn) {
-    return cached.conn;
+  console.log('🔐 MONGODB_URI:', MONGODB_URI?.substring(0, 50) + '...');
+
+  if (!MONGODB_URI) {
+    throw new Error('MONGODB_URI environment variable is not set. Please configure .env.local');
   }
 
   if (cached.conn) {
+    console.log('📌 Using cached MongoDB connection');
     return cached.conn;
   }
 
   if (!cached.promise) {
+    // Use the URI as provided (supports SRV URIs with authSource)
+    const connectionUri = MONGODB_URI;
+
     const opts = {
       bufferCommands: false,
-      serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of 30s
-      socketTimeoutMS: 45000, // Close sockets after 45s of inactivity
+      serverSelectionTimeoutMS: 30000,
+      socketTimeoutMS: 45000,
+      connectTimeoutMS: 30000,
+      maxPoolSize: 10,
+      minPoolSize: 2,
     };
 
-    cached.promise = mongoose.connect(MONGODB_URI, opts).then((mongoose) => {
-      console.log('✅ Connected to MongoDB');
-      return mongoose;
-    }).catch(async (error) => {
-      console.error('❌ MongoDB connection error:', error instanceof Error ? error.message : String(error));
-      console.log('💡 Falling back to in-memory storage');
-      // Cache the in-memory decision
-      cached.conn = { inMemory: true };
-      return cached.conn;
-    });
+    console.log('🔄 Attempting MongoDB connection...');
+    console.log('📍 Host: cluster0.da9eud5.mongodb.net');
+
+    cached.promise = mongoose.connect(connectionUri, opts)
+      .then((mongoose) => {
+        console.log('✅ Successfully connected to MongoDB Atlas');
+        return mongoose;
+      })
+      .catch((error) => {
+        console.error('❌ MongoDB connection error:', error instanceof Error ? error.message : String(error));
+        
+        if (error instanceof Error) {
+          if (error.message.includes('querySrv')) {
+            console.error('💡 Hint: DNS/SRV lookup failed - attempting direct connection');
+          }
+          if (error.message.includes('ECONNREFUSED')) {
+            console.error('💡 Hint: Connection refused - ensure MongoDB Atlas IP whitelist allows your IP');
+          }
+          if (error.message.includes('authentication failed') || error.message.includes('Unauthorized')) {
+            console.error('💡 Hint: Authentication failed - check username/password in MONGODB_URI');
+          }
+        }
+        
+        // Clear the promise so retry is possible
+        cached.promise = null;
+        throw error;
+      });
   }
 
   const result = await cached.promise;
-  if (result && typeof result === 'object' && 'inMemory' in result) {
-    return result;
-  }
   cached.conn = result;
   return cached.conn;
 }
 
 export default dbConnect;
-export { inMemoryStorage };

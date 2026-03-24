@@ -68,15 +68,22 @@ export default function Home() {
   const [editingMessage, setEditingMessage] = useState<string | null>(null);
   const [editingMessageText, setEditingMessageText] = useState("");
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isMessageExpanded, setIsMessageExpanded] = useState(false);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
-    if (messagesEndRef.current) {
-      setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-      }, 100);
-    }
+    setTimeout(() => {
+      if (messagesContainerRef.current) {
+        messagesContainerRef.current.scrollTo({ top: messagesContainerRef.current.scrollHeight, behavior: "smooth" });
+      }
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    }, 80);
   };
+
+  const messagingSectionWrapperClass = isMessageExpanded
+    ? "fixed inset-0 z-50 bg-zinc-950 p-4 sm:relative sm:inset-auto sm:bg-transparent"
+    : "";
 
   useEffect(() => {
     if (activeTab === "messages") {
@@ -112,8 +119,12 @@ export default function Home() {
 
   useEffect(() => {
     if (view !== "login") {
-      fetchInitialData();
+      const timer = setTimeout(() => {
+        fetchInitialData();
+      }, 0);
+      return () => clearTimeout(timer);
     }
+    return undefined;
   }, [view]);
 
   useEffect(() => {
@@ -160,7 +171,7 @@ export default function Home() {
         // 3. Fallback for Insecure Contexts (Network URLs/IPs)
         // If we can't detect, assume the user is being safe (Incognito)
         resolve(true);
-      } catch (err) {
+      } catch {
         // On any error, default to true to avoid blocking the user
         resolve(true);
       }
@@ -210,6 +221,7 @@ export default function Home() {
     }
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleDeleteTicket = async (id: string) => {
     try {
       await actions.deleteTicket(id);
@@ -535,7 +547,7 @@ export default function Home() {
           {sortedTabs.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
+              onClick={() => setActiveTab(tab.id as typeof activeTab)}
               className={`flex items-center gap-2 px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] transition-all whitespace-nowrap border ${
                 activeTab === tab.id 
                   ? "bg-white text-black shadow-2xl shadow-white/10 border-white scale-105" 
@@ -965,7 +977,7 @@ export default function Home() {
           </section>
         )}
         {activeTab === "messages" && (
-          <section className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+          <section className={`space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 ${messagingSectionWrapperClass}`}>
             <h2 className="text-sm font-black text-white px-1 uppercase tracking-[0.3em] flex items-center gap-3">
               <span className="w-2 h-2 bg-indigo-500 rounded-full"></span>
               Secure Messages
@@ -973,18 +985,28 @@ export default function Home() {
             <div className="bg-zinc-900 p-6 sm:p-8 rounded-[2.5rem] sm:rounded-[3rem] border border-zinc-800 shadow-2xl relative overflow-hidden min-h-[400px] flex flex-col">
               <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 blur-[80px] -mr-16 -mt-16 rounded-full"></div>
               
-              <div className="flex justify-between items-center mb-6 px-1 relative z-10">
+              <div className="flex justify-between items-center mb-6 px-1 relative z-10 gap-2">
                 <p className="text-[10px] font-black uppercase tracking-[0.4em] text-zinc-700">Message Buffer</p>
-                <button 
-                  onClick={() => fetchInitialData()}
-                  className={`p-2 bg-zinc-950/50 border border-zinc-800 rounded-xl text-zinc-500 hover:text-white transition-all active:scale-90 ${isRefreshing ? "animate-spin text-white" : ""}`}
-                  title="Refresh Messages"
-                >
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsMessageExpanded(prev => !prev)}
+                    className="p-2 bg-zinc-950/50 border border-zinc-800 rounded-xl text-zinc-500 hover:text-white transition-all active:scale-90"
+                    title={isMessageExpanded ? "Minimize messages" : "Maximize messages"}
+                  >
+                    {isMessageExpanded ? "🗕" : "🗖"}
+                  </button>
+                  <button 
+                    onClick={() => fetchInitialData()}
+                    className={`p-2 bg-zinc-950/50 border border-zinc-800 rounded-xl text-zinc-500 hover:text-white transition-all active:scale-90 ${isRefreshing ? "animate-spin text-white" : ""}`}
+                    title="Refresh Messages"
+                  >
                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
                 </button>
               </div>
-              
-              <div className="flex-1 space-y-4 mb-8 relative z-10 overflow-y-auto no-scrollbar max-h-[500px] min-h-[300px] scroll-smooth px-1">
+              </div>
+
+              <div ref={messagesContainerRef} className="flex-1 space-y-4 mb-8 relative z-10 overflow-y-auto no-scrollbar max-h-[500px] min-h-[300px] scroll-smooth px-1">
                 {messages.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-full text-center py-12">
                     <div className="w-16 h-16 bg-zinc-950 rounded-full flex items-center justify-center mx-auto border border-zinc-800 mb-6">
