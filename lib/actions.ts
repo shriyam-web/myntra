@@ -1,7 +1,7 @@
 "use server";
 
 import dbConnect from "./mongodb";
-import { Ticket, Wishlist, Plan, TimelineDate, Message } from "../models/schemas";
+import { Ticket, Wishlist, Plan, TimelineDate, Message, User } from "../models/schemas";
 import { revalidatePath } from "next/cache";
 
 // FETCH ALL DATA
@@ -9,12 +9,13 @@ export async function fetchData(messageLimit = 50) {
   try {
     await dbConnect();
 
-    const [tickets, wishlist, plans, dates, messages] = await Promise.all([
+    const [tickets, wishlist, plans, dates, messages, users] = await Promise.all([
       Ticket.find({}).sort({ createdAt: -1 }),
       Wishlist.find({}),
       Plan.find({}),
       TimelineDate.find({}),
-      Message.find({}).sort({ createdAt: -1 }).limit(messageLimit)
+      Message.find({}).sort({ createdAt: -1 }).limit(messageLimit),
+      User.find({})
     ]);
 
     // Reverse messages to show chronological order (oldest to newest)
@@ -25,7 +26,8 @@ export async function fetchData(messageLimit = 50) {
       wishlist: JSON.parse(JSON.stringify(wishlist)),
       plans: JSON.parse(JSON.stringify(plans)),
       dates: JSON.parse(JSON.stringify(dates)),
-      messages: JSON.parse(JSON.stringify(sortedMessages))
+      messages: JSON.parse(JSON.stringify(sortedMessages)),
+      users: JSON.parse(JSON.stringify(users))
     };
   } catch (error) {
     console.error('Database fetch error:', error);
@@ -210,5 +212,18 @@ export async function deleteMessage(id: string) {
   } catch (error) {
     console.error('Failed to delete message:', error);
     throw new Error('Failed to delete message. Database connection error.');
+  }
+}
+
+export async function updatePresence(username: string) {
+  try {
+    await dbConnect();
+    await User.findOneAndUpdate(
+      { username },
+      { lastSeen: new Date() },
+      { upsert: true, new: true }
+    );
+  } catch (error) {
+    console.error('Failed to update presence:', error);
   }
 }

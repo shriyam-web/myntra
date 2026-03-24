@@ -29,8 +29,14 @@ const MessageSchema = new Schema({
   createdAt: { type: Date, default: Date.now },
 });
 
+const UserSchema = new Schema({
+  username: { type: String, required: true, unique: true },
+  lastSeen: { type: Date, default: Date.now },
+});
+
 export const Ticket = models.Ticket || model('Ticket', TicketSchema);
 export const Wishlist = models.Wishlist || model('Wishlist', WishlistSchema);
 export const Plan = models.Plan || model('Plan', PlanSchema);
 export const TimelineDate = models.TimelineDate || model('TimelineDate', DateSchema);
 export const Message = models.Message || model('Message', MessageSchema);
+export const User = models.User || model('User', UserSchema);
