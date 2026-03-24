@@ -5,7 +5,7 @@ import { Ticket, Wishlist, Plan, TimelineDate, Message } from "../models/schemas
 import { revalidatePath } from "next/cache";
 
 // FETCH ALL DATA
-export async function fetchData() {
+export async function fetchData(messageLimit = 50) {
   try {
     await dbConnect();
 
@@ -14,15 +14,18 @@ export async function fetchData() {
       Wishlist.find({}),
       Plan.find({}),
       TimelineDate.find({}),
-      Message.find({}).sort({ createdAt: 1 })
+      Message.find({}).sort({ createdAt: -1 }).limit(messageLimit)
     ]);
+
+    // Reverse messages to show chronological order (oldest to newest)
+    const sortedMessages = messages.reverse();
 
     return {
       tickets: JSON.parse(JSON.stringify(tickets)),
       wishlist: JSON.parse(JSON.stringify(wishlist)),
       plans: JSON.parse(JSON.stringify(plans)),
       dates: JSON.parse(JSON.stringify(dates)),
-      messages: JSON.parse(JSON.stringify(messages))
+      messages: JSON.parse(JSON.stringify(sortedMessages))
     };
   } catch (error) {
     console.error('Database fetch error:', error);

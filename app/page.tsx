@@ -54,6 +54,8 @@ export default function Home() {
   const [dates, setDates] = useState<TimelineDate[]>([]);
   const [newEvent, setNewEvent] = useState("");
   const [newDate, setNewDate] = useState("");
+  const [messageLimit, setMessageLimit] = useState(50);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
 
   const [activeTab, setActiveTab] = useState<"complaints" | "wishlist" | "plans" | "dates" | "messages" | "emergency" | "news">("complaints");
 
@@ -71,14 +73,17 @@ export default function Home() {
   const [isMessageExpanded, setIsMessageExpanded] = useState(false);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const lastMessageIdRef = useRef<string | null>(null);
 
-  const scrollToBottom = () => {
+  const scrollToBottom = (instant = false) => {
     setTimeout(() => {
       if (messagesContainerRef.current) {
-        messagesContainerRef.current.scrollTo({ top: messagesContainerRef.current.scrollHeight, behavior: "smooth" });
+        messagesContainerRef.current.scrollTo({
+          top: messagesContainerRef.current.scrollHeight,
+          behavior: instant ? "auto" : "smooth"
+        });
       }
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-    }, 80);
+    }, 100);
   };
 
   const messagingSectionWrapperClass = isMessageExpanded
@@ -86,19 +91,33 @@ export default function Home() {
     : "";
 
   useEffect(() => {
-    if (activeTab === "messages") {
-      scrollToBottom();
+    if (activeTab === "messages" && messages.length > 0) {
+      const lastMessage = messages[messages.length - 1];
+      
+      // Only scroll if last message changed OR if we just switched to this tab
+      if (lastMessage._id !== lastMessageIdRef.current) {
+        lastMessageIdRef.current = lastMessage._id;
+        scrollToBottom(lastMessage.createdBy === currentUser);
+      }
     }
   }, [messages, activeTab]);
 
   const fetchInitialData = async (silent = false) => {
     try {
       if (!silent) setIsRefreshing(true);
-      const data = await actions.fetchData();
+      const data = await actions.fetchData(messageLimit);
       setTickets(data.tickets);
       setWishlist(data.wishlist);
       setPlans(data.plans);
       setDates(data.dates);
+      
+      // Update messages and check if there are more
+      if (data.messages.length < messageLimit) {
+        setHasMoreMessages(false);
+      } else {
+        setHasMoreMessages(true);
+      }
+      
       setMessages(data.messages);
       if (!silent) setIsRefreshing(false);
     } catch (error) {
@@ -107,6 +126,16 @@ export default function Home() {
       setIsRefreshing(false);
     }
   };
+
+  const loadMoreMessages = () => {
+    setMessageLimit(prev => prev + 50);
+  };
+
+  useEffect(() => {
+    if (view !== "login") {
+      fetchInitialData(true);
+    }
+  }, [messageLimit]);
 
   useEffect(() => {
     if (view !== "login") {
@@ -389,11 +418,11 @@ export default function Home() {
           <div className="w-16 h-16 bg-red-900/20 rounded-full flex items-center justify-center mb-6">
             <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
           </div>
-          <h1 className="text-xl font-black text-white mb-4 uppercase tracking-[0.2em] text-center">
+          <h1 className="text-xl font-bold text-white mb-4 tracking-[0.1em] text-center">
             Security Violation
           </h1>
-          <p className="text-zinc-500 text-xs font-bold uppercase tracking-widest text-center leading-relaxed mb-8">
-            This terminal requires <span className="text-red-500 underline decoration-2 underline-offset-4 font-black">Incognito Mode</span> for session initialization. 
+          <p className="text-zinc-500 text-xs font-medium uppercase tracking-widest text-center leading-relaxed mb-8">
+            This terminal requires <span className="text-red-500 underline decoration-2 underline-offset-4 font-bold">Incognito Mode</span> for session initialization. 
             Please relaunch your browser in private mode to continue.
           </p>
           <div className="w-full h-px bg-zinc-800 mb-8"></div>
@@ -411,10 +440,10 @@ export default function Home() {
         <div className="bg-zinc-900 p-10 rounded-[40px] border border-zinc-800 w-full max-w-sm flex flex-col items-center shadow-2xl relative overflow-hidden group">
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-zinc-700 to-transparent"></div>
           
-          <h1 className="text-2xl font-black text-white mb-2 uppercase tracking-[0.3em] text-center">
+          <h1 className="text-2xl font-bold text-white mb-2 uppercase tracking-[0.1em] text-center">
             Internal Terminal
           </h1>
-          <p className="text-[10px] text-zinc-600 font-black uppercase tracking-widest mb-10">Sign in to continue</p>
+          <p className="text-[10px] text-zinc-600 font-bold uppercase tracking-widest mb-10">Sign in to continue</p>
 
           <form onSubmit={handleLogin} className="flex flex-col gap-6 w-full">
             <div className="space-y-3">
@@ -475,13 +504,13 @@ export default function Home() {
   };
 
   const tabs = [
-    { id: "complaints", label: "Complaints", icon: "!" },
-    { id: "wishlist", label: "Wishlist", icon: "♥" },
-    { id: "plans", label: "Plans", icon: "★" },
-    { id: "dates", label: "Timeline", icon: "📅" },
-    { id: "messages", label: "Message", icon: "✉" },
-    { id: "emergency", label: "Emergency", icon: "☎" },
-    { id: "news", label: "What's New", icon: "✨" },
+    { id: "complaints", label: "Complaints", icon: <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> },
+    { id: "wishlist", label: "Wishlist", icon: <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg> },
+    { id: "plans", label: "Plans", icon: <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg> },
+    { id: "dates", label: "Timeline", icon: <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> },
+    { id: "messages", label: "Message", icon: <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> },
+    { id: "emergency", label: "Emergency", icon: <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg> },
+    { id: "news", label: "What's New", icon: <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg> },
   ] as const;
 
   const sortedTabs = [...tabs].sort((a, b) => {
@@ -510,15 +539,15 @@ export default function Home() {
               />
             </div>
             <div className="flex flex-col">
-              <h1 className="text-xl font-black text-white leading-none tracking-tight flex items-center gap-2">
+              <h1 className="text-xl font-bold text-white leading-none tracking-tight flex items-center gap-2">
                 Gudda Portal
                 <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
               </h1>
               <div className="flex items-center gap-2 mt-2">
-                <span className="text-[9px] font-black text-zinc-500 uppercase tracking-[0.2em] border border-zinc-800 px-2 py-0.5 rounded-md bg-zinc-950/50">
-                  Viewing as {currentUser}
+                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider border border-zinc-800 px-2 py-0.5 rounded-md bg-zinc-950/50">
+                  {currentUser}
                 </span>
-                <span className="text-[8px] font-bold text-zinc-700 uppercase tracking-widest">
+                <span className="text-[9px] font-medium text-zinc-700 uppercase tracking-widest">
                   Secure Session
                 </span>
               </div>
@@ -548,14 +577,14 @@ export default function Home() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as typeof activeTab)}
-              className={`flex items-center gap-2 px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-[0.15em] transition-all whitespace-nowrap border ${
+              className={`flex items-center gap-2.5 px-5 py-3.5 rounded-2xl text-[11px] font-bold uppercase tracking-wider transition-all whitespace-nowrap border ${
                 activeTab === tab.id 
-                  ? "bg-white text-black shadow-2xl shadow-white/10 border-white scale-105" 
-                  : "bg-zinc-900 text-zinc-500 border-zinc-800 hover:bg-zinc-800 hover:text-zinc-300"
+                  ? "bg-white text-black shadow-xl shadow-white/10 border-white scale-105" 
+                  : "bg-zinc-900/50 text-zinc-500 border-zinc-800/50 hover:bg-zinc-800 hover:text-zinc-300"
               }`}
             >
-              <div className="flex items-center gap-2">
-                <span className="text-xs">{tab.icon}</span>
+              <div className="flex items-center gap-2.5">
+                <span>{tab.icon}</span>
                 {tab.label}
                 {hasNewContent(tab.id) && (
                   <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>
@@ -977,150 +1006,158 @@ export default function Home() {
           </section>
         )}
         {activeTab === "messages" && (
-          <section className={`space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 ${messagingSectionWrapperClass}`}>
-            <h2 className="text-sm font-black text-white px-1 uppercase tracking-[0.3em] flex items-center gap-3">
-              <span className="w-2 h-2 bg-indigo-500 rounded-full"></span>
-              Secure Messages
-            </h2>
-            <div className="bg-zinc-900 p-6 sm:p-8 rounded-[2.5rem] sm:rounded-[3rem] border border-zinc-800 shadow-2xl relative overflow-hidden min-h-[400px] flex flex-col">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 blur-[80px] -mr-16 -mt-16 rounded-full"></div>
-              
-              <div className="flex justify-between items-center mb-6 px-1 relative z-10 gap-2">
-                <p className="text-[10px] font-black uppercase tracking-[0.4em] text-zinc-700">Message Buffer</p>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsMessageExpanded(prev => !prev)}
-                    className="p-2 bg-zinc-950/50 border border-zinc-800 rounded-xl text-zinc-500 hover:text-white transition-all active:scale-90"
-                    title={isMessageExpanded ? "Minimize messages" : "Maximize messages"}
-                  >
-                    {isMessageExpanded ? "🗕" : "🗖"}
-                  </button>
-                  <button 
-                    onClick={() => fetchInitialData()}
-                    className={`p-2 bg-zinc-950/50 border border-zinc-800 rounded-xl text-zinc-500 hover:text-white transition-all active:scale-90 ${isRefreshing ? "animate-spin text-white" : ""}`}
-                    title="Refresh Messages"
-                  >
+          <section className={`space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 ${messagingSectionWrapperClass}`}>
+            <div className="flex items-center justify-between px-2">
+              <h2 className="text-sm font-bold text-white flex items-center gap-3">
+                <span className="flex h-3 w-3 relative">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-indigo-500"></span>
+                </span>
+                Direct Messages
+              </h2>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsMessageExpanded(prev => !prev)}
+                  className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl text-zinc-500 hover:text-white transition-all active:scale-90"
+                  title={isMessageExpanded ? "Minimize messages" : "Maximize messages"}
+                >
+                  {isMessageExpanded ? "🗕" : "🗖"}
+                </button>
+                <button 
+                  onClick={() => fetchInitialData()}
+                  className={`p-2 bg-zinc-900 border border-zinc-800 rounded-xl text-zinc-500 hover:text-white transition-all active:scale-90 ${isRefreshing ? "animate-spin text-white" : ""}`}
+                  title="Refresh Messages"
+                >
                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
                 </button>
               </div>
-              </div>
+            </div>
 
-              <div ref={messagesContainerRef} className="flex-1 space-y-4 mb-8 relative z-10 overflow-y-auto no-scrollbar max-h-[500px] min-h-[300px] scroll-smooth px-1">
+            <div className="bg-zinc-900/50 rounded-[2.5rem] border border-zinc-800 shadow-2xl relative overflow-hidden flex flex-col backdrop-blur-sm">
+              <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 blur-[100px] -mr-32 -mt-32 rounded-full"></div>
+              
+              <div 
+                ref={messagesContainerRef} 
+                className="flex-1 overflow-y-auto no-scrollbar max-h-[60vh] min-h-[400px] scroll-smooth px-4 py-6"
+              >
+                {hasMoreMessages && messages.length >= 50 && (
+                  <div className="flex justify-center mb-6">
+                    <button 
+                      onClick={loadMoreMessages}
+                      className="px-5 py-2.5 bg-zinc-800/40 border border-zinc-700/30 rounded-full text-[11px] font-bold uppercase tracking-wider text-zinc-400 hover:text-white hover:bg-zinc-800 hover:border-zinc-600 transition-all shadow-lg active:scale-95"
+                    >
+                      Load History (Previous 50)
+                    </button>
+                  </div>
+                )}
+
                 {messages.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-full text-center py-12">
-                    <div className="w-16 h-16 bg-zinc-950 rounded-full flex items-center justify-center mx-auto border border-zinc-800 mb-6">
-                      <span className="text-xl">✉</span>
+                  <div className="flex flex-col items-center justify-center h-full text-center py-20">
+                    <div className="w-16 h-16 bg-zinc-950 rounded-full flex items-center justify-center mx-auto border border-zinc-800 mb-6 shadow-inner">
+                      <span className="text-xl text-indigo-500">✉</span>
                     </div>
-                    <p className="text-zinc-400 font-bold text-sm tracking-tight px-4">
-                      End-to-end encrypted messaging bridge is active.
-                    </p>
-                    <p className="text-[10px] text-zinc-700 font-black uppercase tracking-widest italic">
-                      No new transmissions in buffer
+                    <p className="text-zinc-400 font-medium text-sm tracking-tight px-4 max-w-[200px]">
+                      Encrypted bridge active. Send a message to start.
                     </p>
                   </div>
                 ) : (
-                  <div className="space-y-4">
-                    {messages.map((m) => (
-                      <div 
-                        key={m._id} 
-                        className={`flex flex-col ${m.createdBy === currentUser ? "items-end" : "items-start"}`}
-                      >
+                  <div className="space-y-6">
+                    {messages.map((m) => {
+                      const isMe = m.createdBy === currentUser;
+                      const senderColor = m.createdBy === 'saba' ? 'text-pink-400' : 'text-blue-400';
+                      
+                      return (
                         <div 
-                          className={`max-w-[90%] p-4 rounded-2xl text-sm font-bold group relative break-words whitespace-pre-wrap overflow-hidden ${
-                            m.createdBy === currentUser 
-                              ? "bg-white text-black rounded-tr-none" 
-                              : "bg-zinc-800 text-white rounded-tl-none border border-zinc-700/50"
-                          }`}
+                          key={m._id} 
+                          className={`flex flex-col ${isMe ? "items-end" : "items-start"}`}
                         >
-                          {editingMessage === m._id ? (
-                            <input
-                              value={editingMessageText}
-                              onChange={(e) => setEditingMessageText(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') handleUpdateMessage(m._id, editingMessageText);
-                                if (e.key === 'Escape') {
-                                  setEditingMessage(null);
-                                  setEditingMessageText("");
-                                }
-                              }}
-                              className={`w-full bg-transparent border border-zinc-600 rounded px-2 py-1 text-sm font-bold outline-none ${
-                                m.createdBy === currentUser ? "text-black" : "text-white"
-                              }`}
-                              autoFocus
-                            />
-                          ) : (
-                            m.text
-                          )}
-                          {m.createdBy === currentUser && (
-                            <div className="flex gap-1 mt-2">
-                              {editingMessage === m._id ? (
-                                <>
-                                  <button
-                                    onClick={() => handleUpdateMessage(m._id, editingMessageText)}
-                                    className="text-green-500 hover:text-green-400 text-xs px-2 py-1 rounded"
-                                  >
-                                    ✓
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      setEditingMessage(null);
-                                      setEditingMessageText("");
-                                    }}
-                                    className="text-zinc-500 hover:text-zinc-400 text-xs px-2 py-1 rounded"
-                                  >
-                                    ✕
-                                  </button>
-                                </>
-                              ) : (
-                                <>
-                                  <button
-                                    onClick={() => {
-                                      setEditingMessage(m._id);
-                                      setEditingMessageText(m.text);
-                                    }}
-                                    className="text-zinc-500 hover:text-zinc-400 text-xs px-2 py-1 rounded"
-                                  >
-                                    ✏
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeleteMessage(m._id)}
-                                    className="text-red-500 hover:text-red-400 text-xs px-2 py-1 rounded"
-                                  >
-                                    🗑
-                                  </button>
-                                </>
-                              )}
-                            </div>
-                          )}
+                          <div className={`flex items-center gap-2 mb-1.5 px-1.5 ${isMe ? "flex-row-reverse" : "flex-row"}`}>
+                            <span className={`text-[11px] font-bold tracking-tight ${senderColor}`}>
+                              {m.createdBy}
+                            </span>
+                            <span className="text-[10px] text-zinc-600 font-medium">
+                              {m.createdAt.split(',')[1]}
+                            </span>
+                          </div>
+
+                          <div 
+                            className={`max-w-[85%] p-4 rounded-3xl text-[14.5px] leading-[1.6] relative break-words whitespace-pre-wrap shadow-xl ${
+                              isMe 
+                                ? "bg-indigo-600 text-white rounded-tr-none shadow-indigo-900/10" 
+                                : "bg-zinc-800/80 text-zinc-100 rounded-tl-none border border-zinc-700/30 shadow-black/20"
+                            }`}
+                          >
+                            {editingMessage === m._id ? (
+                              <div className="flex flex-col gap-2 min-w-[200px]">
+                                <textarea
+                                  value={editingMessageText}
+                                  onChange={(e) => setEditingMessageText(e.target.value)}
+                                  className="w-full bg-black/20 border border-white/20 rounded-xl px-3 py-2 text-sm font-medium outline-none text-white resize-none"
+                                  autoFocus
+                                  rows={2}
+                                />
+                                <div className="flex justify-end gap-2">
+                                  <button onClick={() => handleUpdateMessage(m._id, editingMessageText)} className="text-[10px] font-black text-white bg-green-600 px-3 py-1 rounded-lg">SAVE</button>
+                                  <button onClick={() => { setEditingMessage(null); setEditingMessageText(""); }} className="text-[10px] font-black text-white bg-zinc-700 px-3 py-1 rounded-lg">CANCEL</button>
+                                </div>
+                              </div>
+                            ) : (
+                              m.text
+                            )}
+                            
+                            {isMe && editingMessage !== m._id && (
+                              <div className="absolute -left-12 top-1/2 -translate-y-1/2 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button
+                                  onClick={() => {
+                                    setEditingMessage(m._id);
+                                    setEditingMessageText(m.text);
+                                  }}
+                                  className="p-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-500 hover:text-white transition-colors"
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteMessage(m._id)}
+                                  className="p-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-red-500 hover:bg-red-950 transition-colors"
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        <span className="text-[8px] font-black text-zinc-700 uppercase tracking-widest mt-1 px-1">
-                          {m.createdAt.split(',')[1]}
-                        </span>
-                      </div>
-                    ))}
+                      );
+                    })}
                     <div ref={messagesEndRef} />
                   </div>
                 )}
               </div>
 
-              <form onSubmit={handleSendMessage} className="relative z-10">
-                <div className="relative group">
-                  <input 
+              <div className="p-4 bg-zinc-950/50 border-t border-zinc-800/50 backdrop-blur-md">
+                <form onSubmit={handleSendMessage} className="relative group">
+                  <textarea 
                     value={newMessage}
                     onChange={(e) => setNewMessage(e.target.value)}
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-[2rem] px-8 py-5 text-sm font-bold text-white outline-none focus:border-indigo-500/50 focus:ring-4 focus:ring-indigo-500/10 placeholder:text-zinc-800 transition-all shadow-inner pr-20" 
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSendMessage(e);
+                      }
+                    }}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 text-[15px] text-white outline-none focus:border-indigo-500/40 focus:ring-4 focus:ring-indigo-500/5 placeholder:text-zinc-600 transition-all shadow-inner resize-none min-h-[58px] max-h-[120px] pr-14" 
                     placeholder="Type a message..."
+                    rows={1}
                   />
                   <button 
                     type="submit"
-                    className="absolute right-2 top-2 bottom-2 bg-white text-black px-6 flex items-center justify-center rounded-[1.5rem] shadow-xl active:scale-90 transition-all hover:bg-zinc-100 disabled:bg-zinc-900 disabled:text-zinc-700 disabled:shadow-none"
+                    className="absolute right-3 bottom-3 bg-white text-black w-10 h-10 flex items-center justify-center rounded-xl shadow-xl active:scale-90 transition-all hover:bg-indigo-500 hover:text-white disabled:bg-zinc-800 disabled:text-zinc-600 disabled:shadow-none group"
                     disabled={!newMessage.trim()}
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polyline points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform"><line x1="22" y1="2" x2="11" y2="13"/><polyline points="22 2 15 22 11 13 2 9 22 2"/></svg>
                   </button>
-                </div>
-              </form>
+                </form>
+              </div>
             </div>
           </section>
         )}
