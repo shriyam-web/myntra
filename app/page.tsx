@@ -82,6 +82,7 @@ export default function Home() {
   const [activeMessageActions, setActiveMessageActions] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isMessageExpanded, setIsMessageExpanded] = useState(false);
+  const [showScrollButton, setShowScrollButton] = useState(false);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const lastMessageIdRef = useRef<string | null>(null);
@@ -286,12 +287,29 @@ export default function Home() {
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim()) return;
+    
+    const messageText = newMessage;
+    const tempId = Date.now().toString();
+    const optimisticMessage: Message = {
+      _id: tempId,
+      text: messageText,
+      createdAt: new Date().toISOString(),
+      createdBy: currentUser as "alpha 1" | "delta 1"
+    };
+    
+    // Optimistic update
+    setMessages(prev => [...prev, optimisticMessage]);
+    setNewMessage("");
+    scrollToBottom(true);
+
     try {
-      await actions.createMessage({ text: newMessage, createdBy: currentUser as "alpha 1" | "delta 1" });
-      setNewMessage("");
-      fetchInitialData();
+      await actions.createMessage({ text: messageText, createdBy: currentUser as "alpha 1" | "delta 1" });
+      fetchInitialData(true);
     } catch (error) {
       console.error('Failed to send message:', error);
+      // Remove optimistic message on error
+      setMessages(prev => prev.filter(m => m._id !== tempId));
+      setNewMessage(messageText); // Restore input
       alert('Failed to send message. Please check your database connection.');
     }
   };
@@ -303,6 +321,18 @@ export default function Home() {
     } catch (error) {
       console.error('Failed to delete message:', error);
       alert('Failed to delete message. Please check your database connection.');
+    }
+  };
+
+  const handleDeleteAllMessages = async () => {
+    if (!confirm("Are you sure you want to clear all messages?")) return;
+    try {
+      await actions.deleteAllMessages();
+      setMessages([]);
+      fetchInitialData();
+    } catch (error) {
+      console.error('Failed to clear chat:', error);
+      alert('Failed to clear chat. Please check your database connection.');
     }
   };
 
@@ -568,6 +598,17 @@ export default function Home() {
     }
   };
 
+  const hasUnreadMessages = () => {
+    const me = users.find(u => u.username === currentUser);
+    if (!me) return false;
+    
+    // If no lastReadAt, everything is unread
+    if (!me.lastReadAt) return messages.some(m => m.createdBy !== currentUser);
+    
+    const lastRead = new Date(me.lastReadAt).getTime();
+    return messages.some(m => m.createdBy !== currentUser && new Date(m.createdAt).getTime() > lastRead);
+  };
+
   const tabs = [
     { id: "complaints", label: "Complaints", icon: <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> },
     { id: "wishlist", label: "Wishlist", icon: <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg> },
@@ -585,6 +626,15 @@ export default function Home() {
     if (!aNew && bNew) return 1;
     return 0;
   });
+
+  const handleScroll = () => {
+    if (messagesContainerRef.current) {
+      const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
+      // Show button if we're not at the bottom (with some threshold)
+      const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
+      setShowScrollButton(!isNearBottom);
+    }
+  };
 
   return (
     <div className="flex flex-col min-h-screen bg-zinc-950 text-zinc-100 font-sans pb-2 selection:bg-white selection:text-black">
@@ -1091,14 +1141,16 @@ export default function Home() {
                 </div>
               </h2>
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleMarkAsRead}
-                  className="p-2 bg-indigo-500/10 border border-indigo-500/20 rounded-xl text-indigo-400 hover:bg-indigo-500/20 transition-all active:scale-90 flex items-center justify-center min-w-[36px] min-h-[36px]"
-                  title="Mark all as read"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 7 17l-5-5"/><path d="m22 10-7.5 7.5L13 16"/></svg>
-                </button>
+                {hasUnreadMessages() && (
+                  <button
+                    type="button"
+                    onClick={handleMarkAsRead}
+                    className="p-2 bg-indigo-500/10 border border-indigo-500/20 rounded-xl text-indigo-400 hover:bg-indigo-500/20 transition-all active:scale-90 flex items-center justify-center min-w-[36px] min-h-[36px]"
+                    title="Mark all as read"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 7 17l-5-5"/><path d="m22 10-7.5 7.5L13 16"/></svg>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setIsMessageExpanded(prev => !prev)}
@@ -1118,6 +1170,13 @@ export default function Home() {
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
                 </button>
+                <button 
+                  onClick={handleDeleteAllMessages}
+                  className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl text-red-500 hover:text-red-400 transition-all active:scale-90"
+                  title="Clear Chat"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                </button>
               </div>
             </div>
 
@@ -1126,8 +1185,18 @@ export default function Home() {
               
               <div 
                 ref={messagesContainerRef} 
+                onScroll={handleScroll}
                 className={`flex-1 overflow-y-auto no-scrollbar scroll-smooth px-4 py-6 ${isMessageExpanded ? "h-full" : "max-h-[60vh] min-h-[400px]"}`}
               >
+                {showScrollButton && (
+                  <button
+                    onClick={() => scrollToBottom()}
+                    className="fixed bottom-32 right-10 z-[70] p-4 bg-indigo-500 text-white rounded-full shadow-2xl animate-bounce hover:bg-indigo-400 active:scale-90 transition-all border-4 border-zinc-950"
+                    title="Scroll to bottom"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><path d="m7 13 5 5 5-5M7 6l5 5 5-5"/></svg>
+                  </button>
+                )}
                 {hasMoreMessages && messages.length >= 50 && (
                   <div className="flex justify-center mb-6">
                     <button 
@@ -1152,6 +1221,8 @@ export default function Home() {
                   <div className="space-y-6">
                     {messages.map((m) => {
                       const isMe = m.createdBy === currentUser;
+                      const partner = users.find(u => u.username !== currentUser);
+                      const isRead = isMe && partner?.lastReadAt && new Date(m.createdAt).getTime() <= new Date(partner.lastReadAt).getTime();
                       
                       return (
                         <div 
@@ -1162,6 +1233,17 @@ export default function Home() {
                             <span className="text-[10px] text-zinc-600 font-medium">
                               {m.createdAt.split(',')[1]}
                             </span>
+                            {isMe && (
+                              <span className={`text-[10px] ${isRead ? "text-blue-500" : "text-zinc-600"}`} title={isRead ? "Read" : "Sent"}>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                  {isRead ? (
+                                    <path d="M18 6 7 17l-5-5m16 0-7.5 7.5L13 16" />
+                                  ) : (
+                                    <path d="M20 6 9 17l-5-5" />
+                                  )}
+                                </svg>
+                              </span>
+                            )}
                           </div>
 
                           <div 

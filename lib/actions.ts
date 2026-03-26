@@ -241,6 +241,17 @@ export async function deleteMessage(id: string) {
   }
 }
 
+export async function deleteAllMessages() {
+  try {
+    await dbConnect();
+    await Message.deleteMany({});
+    revalidatePath('/');
+  } catch (error) {
+    console.error('Failed to clear chat:', error);
+    throw new Error('Failed to clear chat. Database connection error.');
+  }
+}
+
 export async function updatePresence(username: string) {
   try {
     await dbConnect();
