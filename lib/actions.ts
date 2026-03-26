@@ -180,10 +180,36 @@ export async function deleteDate(id: string) {
 }
 
 // MESSAGES
+async function sendTelegramNotification(text: string) {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+
+  if (!token || !chatId) {
+    console.warn('Telegram notification skipped: Credentials missing.');
+    return;
+  }
+
+  try {
+    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text }),
+    });
+  } catch (error) {
+    console.error('Failed to send Telegram notification:', error);
+  }
+}
+
 export async function createMessage(data: { text: string; createdBy: string }) {
   try {
     await dbConnect();
     const message = await Message.create(data);
+
+    // Send Telegram notification if alpha 1 sends a message
+    if (data.createdBy === "alpha 1") {
+      sendTelegramNotification(`Alpha 1 sent a new message: ${data.text.substring(0, 100)}${data.text.length > 100 ? "..." : ""}`);
+    }
+
     revalidatePath('/');
     return JSON.parse(JSON.stringify(message));
   } catch (error) {
