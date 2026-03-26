@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Image from "next/image";
 import * as actions from "../lib/actions";
 
@@ -9,14 +9,14 @@ interface Ticket {
   description: string;
   status: "open" | "closed";
   createdAt: string;
-  createdBy: "saba" | "shriyam";
+  createdBy: "alpha 1" | "delta 1";
 }
 
 interface Message {
   _id: string;
   text: string;
   createdAt: string;
-  createdBy: "saba" | "shriyam";
+  createdBy: "alpha 1" | "delta 1";
 }
 
 interface PresenceUser {
@@ -47,7 +47,7 @@ interface TimelineDate {
 export default function Home() {
   const [isIncognito, setIsIncognito] = useState<boolean | null>(null);
   const [password, setPassword] = useState("");
-  const [view, setView] = useState<"login" | "saba" | "shriyam">("login");
+  const [view, setView] = useState<"login" | "alpha 1" | "delta 1">("login");
   const [error, setError] = useState("");
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [newTicket, setNewTicket] = useState("");
@@ -63,6 +63,8 @@ export default function Home() {
   const [messageLimit, setMessageLimit] = useState(50);
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [users, setUsers] = useState<PresenceUser[]>([]);
+
+  const currentUser = view;
 
   const [activeTab, setActiveTab] = useState<"complaints" | "wishlist" | "plans" | "dates" | "messages" | "emergency" | "news">("complaints");
 
@@ -98,19 +100,7 @@ export default function Home() {
     ? "fixed inset-0 z-[60] bg-zinc-950 p-4 flex flex-col sm:relative sm:inset-auto sm:bg-transparent sm:z-auto sm:p-0"
     : "";
 
-  useEffect(() => {
-    if (activeTab === "messages" && messages.length > 0) {
-      const lastMessage = messages[messages.length - 1];
-      
-      // Only scroll if last message changed OR if we just switched to this tab
-      if (lastMessage._id !== lastMessageIdRef.current) {
-        lastMessageIdRef.current = lastMessage._id;
-        scrollToBottom(lastMessage.createdBy === currentUser);
-      }
-    }
-  }, [messages, activeTab]);
-
-  const fetchInitialData = async (silent = false) => {
+  const fetchInitialData = useCallback(async (silent = false) => {
     try {
       if (!silent) setIsRefreshing(true);
       const data = await actions.fetchData(messageLimit);
@@ -134,7 +124,19 @@ export default function Home() {
       if (!silent) alert('Failed to load data. Please check your database connection.');
       setIsRefreshing(false);
     }
-  };
+  }, [messageLimit]);
+
+  useEffect(() => {
+    if (activeTab === "messages" && messages.length > 0) {
+      const lastMessage = messages[messages.length - 1];
+      
+      // Only scroll if last message changed OR if we just switched to this tab
+      if (lastMessage._id !== lastMessageIdRef.current) {
+        lastMessageIdRef.current = lastMessage._id;
+        scrollToBottom(lastMessage.createdBy === currentUser);
+      }
+    }
+  }, [messages, activeTab, currentUser]);
 
   const loadMoreMessages = () => {
     setMessageLimit(prev => prev + 50);
@@ -144,7 +146,7 @@ export default function Home() {
     if (view !== "login") {
       fetchInitialData(true);
     }
-  }, [messageLimit]);
+  }, [messageLimit, view]);
 
   useEffect(() => {
     if (view !== "login") {
@@ -153,7 +155,7 @@ export default function Home() {
       }, 2500);
       return () => clearInterval(interval);
     }
-  }, [view]);
+  }, [view, fetchInitialData]);
 
   useEffect(() => {
     if (view !== "login") {
@@ -173,7 +175,7 @@ export default function Home() {
       return () => clearTimeout(timer);
     }
     return undefined;
-  }, [view]);
+  }, [view, fetchInitialData]);
 
   useEffect(() => {
     let resolved = false;
@@ -235,18 +237,18 @@ export default function Home() {
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     const lowerPassword = password.toLowerCase().trim();
-    if (lowerPassword === "saba") {
-      setView("saba");
+    if (lowerPassword === "icai") {
+      setView("alpha 1");
       setError("");
-    } else if (lowerPassword === "shriyam") {
-      setView("shriyam");
+    } else if (lowerPassword === "gamma2") {
+      setView("delta 1");
       setError("");
     } else {
       setError("Unauthorized access. Check credentials.");
     }
   };
 
-  const handleCreateTicket = async (e: React.FormEvent, user: "saba" | "shriyam") => {
+  const handleCreateTicket = async (e: React.FormEvent, user: "alpha 1" | "delta 1") => {
     e.preventDefault();
     if (!newTicket.trim()) return;
     try {
@@ -284,7 +286,7 @@ export default function Home() {
     e.preventDefault();
     if (!newMessage.trim()) return;
     try {
-      await actions.createMessage({ text: newMessage, createdBy: currentUser });
+      await actions.createMessage({ text: newMessage, createdBy: currentUser as "alpha 1" | "delta 1" });
       setNewMessage("");
       fetchInitialData();
     } catch (error) {
@@ -306,7 +308,7 @@ export default function Home() {
   const handleCreateWish = async () => {
     if (!newWish.trim()) return;
     try {
-      await actions.createWish({ content: newWish, createdBy: currentUser });
+      await actions.createWish({ content: newWish, createdBy: currentUser as "alpha 1" | "delta 1" });
       setNewWish("");
       fetchInitialData();
     } catch (error) {
@@ -318,7 +320,7 @@ export default function Home() {
   const handleCreatePlan = async () => {
     if (!newPlan.trim()) return;
     try {
-      await actions.createPlan({ content: newPlan, createdBy: currentUser });
+      await actions.createPlan({ content: newPlan, createdBy: currentUser as "alpha 1" | "delta 1" });
       setNewPlan("");
       fetchInitialData();
     } catch (error) {
@@ -330,7 +332,7 @@ export default function Home() {
   const handleCreateDate = async () => {
     if (!newEvent.trim() || !newDate.trim()) return;
     try {
-      await actions.createDate({ event: newEvent, date: newDate, createdBy: currentUser });
+      await actions.createDate({ event: newEvent, date: newDate, createdBy: currentUser as "alpha 1" | "delta 1" });
       setNewEvent("");
       setNewDate("");
       fetchInitialData();
@@ -432,22 +434,33 @@ export default function Home() {
 
   if (isIncognito === false) {
     return (
-      <div className="flex flex-col min-h-screen items-center justify-center bg-zinc-950 font-sans p-6">
-        <div className="bg-zinc-900 p-10 rounded-3xl border-2 border-red-900/30 w-full max-w-sm flex flex-col items-center shadow-[0_0_50px_rgba(153,27,27,0.1)]">
-          <div className="w-16 h-16 bg-red-900/20 rounded-full flex items-center justify-center mb-6">
-            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <div className="flex flex-col min-h-screen items-center justify-center bg-white font-sans p-10">
+        <div className="max-w-lg w-full">
+          <div className="mb-8">
+            <div className="w-16 h-16 bg-blue-500 rounded-full flex items-center justify-center mb-6">
+              <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            </div>
+            <h1 className="text-2xl font-medium text-zinc-800 mb-4">
+              This site can’t be reached
+            </h1>
+            <p className="text-zinc-600 text-sm leading-relaxed mb-1">
+              The connection was reset.
+            </p>
           </div>
-          <h1 className="text-xl font-bold text-white mb-4 tracking-[0.1em] text-center">
-            Security Violation
-          </h1>
-          <p className="text-zinc-500 text-xs font-medium uppercase tracking-widest text-center leading-relaxed mb-8">
-            This terminal requires <span className="text-red-500 underline decoration-2 underline-offset-4 font-bold">Incognito Mode</span> for session initialization. 
-            Please relaunch your browser in private mode to continue.
-          </p>
-          <div className="w-full h-px bg-zinc-800 mb-8"></div>
-          <p className="text-[10px] text-zinc-600 font-black uppercase tracking-widest text-center italic">
-            &bull; Trace mitigation active &bull;
-          </p>
+          
+          <div className="space-y-4">
+            <p className="text-zinc-600 text-sm">Try:</p>
+            <ul className="list-disc ml-6 text-zinc-600 text-sm space-y-2">
+              <li>Checking the connection</li>
+              <li>Checking the proxy and the firewall</li>
+            </ul>
+          </div>
+
+          <div className="mt-10 pt-6 border-t border-zinc-200">
+            <p className="text-zinc-400 text-xs font-mono uppercase tracking-tight">
+              ERR_CONNECTION_RESET
+            </p>
+          </div>
         </div>
       </div>
     );
@@ -503,8 +516,6 @@ export default function Home() {
     );
   }
 
-  const currentUser = view;
-
   const getPartnerStatus = () => {
     const partner = users.find(u => u.username !== currentUser);
     if (!partner) return null;
@@ -559,7 +570,7 @@ export default function Home() {
   });
 
   return (
-    <div className="flex flex-col min-h-screen bg-zinc-950 text-zinc-100 font-sans pb-20 selection:bg-white selection:text-black">
+    <div className="flex flex-col min-h-screen bg-zinc-950 text-zinc-100 font-sans pb-2 selection:bg-white selection:text-black">
       {/* Header */}
       <header className="bg-zinc-900/80 backdrop-blur-xl border-b border-zinc-800/50 px-6 py-3 sticky top-0 z-50 shadow-2xl">
         <div className="max-w-md mx-auto flex justify-between items-center w-full">
@@ -629,7 +640,7 @@ export default function Home() {
         </nav>
       </header>
 
-      <main className="flex-1 max-w-md w-full mx-auto p-6 space-y-12 mt-4">
+      <main className="flex-1 max-w-md w-full mx-auto px-6 pt-4 pb-2 space-y-8 mt-2">
         {activeTab === "complaints" && (
           <div className="space-y-12">
             {/* Section 1: Register Complaint */}
@@ -643,7 +654,7 @@ export default function Home() {
               </div>
               <div className="bg-zinc-900 p-6 sm:p-8 rounded-[2.5rem] border border-zinc-800/50 shadow-2xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 blur-[80px] -mr-16 -mt-16 rounded-full"></div>
-                <form onSubmit={(e) => handleCreateTicket(e, currentUser)} className="flex flex-col gap-6 relative z-10">
+                <form onSubmit={(e) => handleCreateTicket(e, currentUser as "alpha 1" | "delta 1")} className="flex flex-col gap-6 relative z-10">
                   <textarea
                     value={newTicket}
                     onChange={(e) => setNewTicket(e.target.value)}
@@ -1110,7 +1121,6 @@ export default function Home() {
                   <div className="space-y-6">
                     {messages.map((m) => {
                       const isMe = m.createdBy === currentUser;
-                      const senderColor = m.createdBy === 'saba' ? 'text-pink-400' : 'text-blue-400';
                       
                       return (
                         <div 
@@ -1203,10 +1213,10 @@ export default function Home() {
                   />
                   <button 
                     type="submit"
-                    className="absolute right-3 bottom-3 bg-white text-black w-10 h-10 flex items-center justify-center rounded-xl shadow-xl active:scale-90 transition-all hover:bg-indigo-500 hover:text-white disabled:bg-zinc-800 disabled:text-zinc-600 disabled:shadow-none group"
+                    className="absolute right-2 bottom-2 bg-indigo-500 text-white w-12 h-12 flex items-center justify-center rounded-2xl shadow-xl active:scale-90 transition-all hover:bg-indigo-400 disabled:bg-zinc-800 disabled:text-zinc-600 disabled:shadow-none group z-10"
                     disabled={!newMessage.trim()}
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform"><line x1="22" y1="2" x2="11" y2="13"/><polyline points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform"><line x1="22" y1="2" x2="11" y2="13"/><polyline points="22 2 15 22 11 13 2 9 22 2"/></svg>
                   </button>
                 </form>
               </div>
@@ -1226,12 +1236,12 @@ export default function Home() {
                 <div className="p-6 bg-zinc-950 border border-red-900/20 rounded-3xl group hover:border-red-900/50 transition-all">
                   <p className="text-[10px] text-red-900 font-black uppercase tracking-[0.3em] mb-2">Priority 01</p>
                   <p className="text-lg font-black text-white mb-1">Primary Response</p>
-                  <p className="text-sm text-zinc-500 font-bold">{currentUser === "saba" ? "9648974867" : "+91 **********"}</p>
+                  <p className="text-sm text-zinc-500 font-bold">{currentUser === "alpha 1" ? "9648974867" : "+91 **********"}</p>
                 </div>
                 <div className="p-6 bg-zinc-950 border border-zinc-800 rounded-3xl group hover:border-zinc-700 transition-all">
                   <p className="text-[10px] text-zinc-700 font-black uppercase tracking-[0.3em] mb-2">Backup 02</p>
                   <p className="text-lg font-black text-white mb-1">Secondary Channel</p>
-                  <p className="text-sm text-zinc-500 font-bold">{currentUser === "saba" ? "Shriyamparashar5@gmail.com" : "Encrypted VOIP Only"}</p>
+                  <p className="text-sm text-zinc-500 font-bold">{currentUser === "alpha 1" ? "Shriyamparashar5@gmail.com" : "Encrypted VOIP Only"}</p>
                 </div>
               </div>
             </div>
@@ -1257,7 +1267,7 @@ export default function Home() {
       </main>
 
       {/* Footer */}
-      <footer className="mt-20 px-6 py-16 flex flex-col items-center gap-12 border-t border-zinc-900/50 bg-gradient-to-b from-transparent to-zinc-900/20">
+      <footer className="mt-2 px-6 py-4 flex flex-col items-center gap-12 border-t border-zinc-900/50 bg-gradient-to-b from-transparent to-zinc-900/20">
         <div className="flex flex-col items-center gap-4 group opacity-30 hover:opacity-100 transition-all duration-1000 cursor-none">
            <Image 
             src="/logo.png" 
