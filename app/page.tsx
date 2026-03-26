@@ -23,6 +23,7 @@ interface PresenceUser {
   _id: string;
   username: string;
   lastSeen: string;
+  lastReadAt?: string;
 }
 
 interface WishlistItem {
@@ -392,6 +393,15 @@ export default function Home() {
     }
   };
 
+  const handleMarkAsRead = async () => {
+    try {
+      await actions.markAllAsRead(view as string);
+      fetchInitialData(true);
+    } catch (error) {
+      console.error('Failed to mark as read:', error);
+    }
+  };
+
   // Delete handlers
   const handleDeleteWish = async (id: string) => {
     try {
@@ -520,7 +530,8 @@ export default function Home() {
     const partner = users.find(u => u.username !== currentUser);
     if (!partner) return null;
     
-    const lastSeen = new Date(partner.lastSeen).getTime();
+    const lastSeenDate = new Date(partner.lastSeen);
+    const lastSeen = lastSeenDate.getTime();
     const now = new Date().getTime();
     const isOnline = now - lastSeen < 15000; // 15 seconds threshold
     
@@ -528,10 +539,16 @@ export default function Home() {
     
     // Format last seen
     const diff = now - lastSeen;
-    if (diff < 60000) return "Last seen just now";
-    if (diff < 3600000) return `Last seen ${Math.floor(diff / 60000)}m ago`;
-    if (diff < 86400000) return `Last seen ${Math.floor(diff / 3600000)}h ago`;
-    return `Last seen ${new Date(partner.lastSeen).toLocaleDateString()}`;
+    if (diff < 3600000) { // Less than 1 hour
+      const mins = Math.floor(diff / 60000);
+      return mins <= 0 ? "Last seen just now" : `Last seen ${mins} minutes ago`;
+    }
+    
+    const day = lastSeenDate.getDate();
+    const month = lastSeenDate.toLocaleString('default', { month: 'long' });
+    const time = lastSeenDate.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    
+    return `Last seen ${day} ${month}, ${time}`;
   };
 
   const hasNewContent = (tabId: string) => {
@@ -575,20 +592,9 @@ export default function Home() {
       <header className="bg-zinc-900/80 backdrop-blur-xl border-b border-zinc-800/50 px-6 py-3 sticky top-0 z-50 shadow-2xl">
         <div className="max-w-md mx-auto flex justify-between items-center w-full">
           <div className="flex items-center gap-4">
-            <div className="relative group cursor-pointer">
-              <div className="absolute -inset-2 bg-white/5 rounded-full blur-xl group-hover:bg-white/10 transition-all duration-700"></div>
-              <Image 
-                src="/logo.png" 
-                alt="System Logo" 
-                width={40} 
-                height={40} 
-                className="relative rounded-full border border-zinc-700 shadow-2xl object-cover grayscale hover:grayscale-0 transition-all duration-500"
-                priority
-              />
-            </div>
             <div className="flex flex-col">
               <h1 className="text-lg font-bold text-white leading-none tracking-tight flex items-center gap-2">
-                Gudda Portal
+                HeyYou
                 <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
               </h1>
               <div className="flex items-center gap-2 mt-1">
@@ -1060,14 +1066,39 @@ export default function Home() {
                 </span>
                 <div className="flex flex-col">
                   <span className="leading-tight">Direct Messages</span>
-                  {getPartnerStatus() && (
-                    <span className={`text-[9px] font-bold uppercase tracking-[0.1em] mt-0.5 ${getPartnerStatus() === "Online" ? "text-green-500 animate-pulse" : "text-zinc-600"}`}>
-                      {getPartnerStatus()}
-                    </span>
-                  )}
+                  <div className="flex flex-col gap-0.5 mt-0.5">
+                    {getPartnerStatus() && (
+                      <span className={`text-[9px] font-bold uppercase tracking-[0.1em] ${getPartnerStatus() === "Online" ? "text-green-500 animate-pulse" : "text-zinc-600"}`}>
+                        {getPartnerStatus()}
+                      </span>
+                    )}
+                    {users.find(u => u.username !== currentUser)?.lastReadAt && (
+                      <span className="text-[8px] font-bold uppercase tracking-[0.1em] text-indigo-400">
+                        {(() => {
+                          const partner = users.find(u => u.username !== currentUser)!;
+                          const readDate = new Date(partner.lastReadAt!);
+                          const now = new Date();
+                          const isToday = readDate.toDateString() === now.toDateString();
+                          const time = readDate.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+                          if (isToday) return `Read at ${time}`;
+                          const day = readDate.getDate();
+                          const month = readDate.toLocaleString('default', { month: 'long' });
+                          return `Read ${day} ${month}, ${time}`;
+                        })()}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </h2>
               <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleMarkAsRead}
+                  className="p-2 bg-indigo-500/10 border border-indigo-500/20 rounded-xl text-indigo-400 hover:bg-indigo-500/20 transition-all active:scale-90 flex items-center justify-center min-w-[36px] min-h-[36px]"
+                  title="Mark all as read"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 7 17l-5-5"/><path d="m22 10-7.5 7.5L13 16"/></svg>
+                </button>
                 <button
                   type="button"
                   onClick={() => setIsMessageExpanded(prev => !prev)}
@@ -1197,7 +1228,7 @@ export default function Home() {
               </div>
 
               <div className="p-4 bg-zinc-950/50 border-t border-zinc-800/50 backdrop-blur-md">
-                <form onSubmit={handleSendMessage} className="relative group">
+                <form onSubmit={handleSendMessage} className="flex gap-2 items-end">
                   <textarea 
                     value={newMessage}
                     onChange={(e) => setNewMessage(e.target.value)}
@@ -1207,13 +1238,13 @@ export default function Home() {
                         handleSendMessage(e);
                       }
                     }}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 text-[15px] text-white outline-none focus:border-indigo-500/40 focus:ring-4 focus:ring-indigo-500/5 placeholder:text-zinc-600 transition-all shadow-inner resize-none min-h-[58px] max-h-[120px] pr-14" 
+                    className="flex-1 bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 text-[15px] text-white outline-none focus:border-indigo-500/40 focus:ring-4 focus:ring-indigo-500/5 placeholder:text-zinc-600 transition-all shadow-inner resize-none min-h-[58px] max-h-[120px]" 
                     placeholder="Type a message..."
                     rows={1}
                   />
                   <button 
                     type="submit"
-                    className="absolute right-2 bottom-2 bg-indigo-500 text-white w-12 h-12 flex items-center justify-center rounded-2xl shadow-xl active:scale-90 transition-all hover:bg-indigo-400 disabled:bg-zinc-800 disabled:text-zinc-600 disabled:shadow-none group z-10"
+                    className="bg-indigo-500 text-white min-w-[80px] px-6 h-[58px] flex items-center justify-center rounded-2xl shadow-xl active:scale-90 transition-all hover:bg-indigo-400 disabled:bg-zinc-800 disabled:text-zinc-600 disabled:shadow-none group"
                     disabled={!newMessage.trim()}
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform"><line x1="22" y1="2" x2="11" y2="13"/><polyline points="22 2 15 22 11 13 2 9 22 2"/></svg>
@@ -1269,15 +1300,8 @@ export default function Home() {
       {/* Footer */}
       <footer className="mt-2 px-6 py-4 flex flex-col items-center gap-12 border-t border-zinc-900/50 bg-gradient-to-b from-transparent to-zinc-900/20">
         <div className="flex flex-col items-center gap-4 group opacity-30 hover:opacity-100 transition-all duration-1000 cursor-none">
-           <Image 
-            src="/logo.png" 
-            alt="Gudda Footer" 
-            width={48} 
-            height={48} 
-            className="rounded-full shadow-2xl grayscale group-hover:grayscale-0 transition-all duration-700 scale-90 group-hover:scale-110"
-          />
           <div className="flex flex-col items-center gap-1">
-            <span className="text-[9px] font-black text-zinc-600 uppercase tracking-[0.6em] group-hover:text-white transition-colors">Gudda OS v2.4</span>
+            <span className="text-[9px] font-black text-zinc-600 uppercase tracking-[0.6em] group-hover:text-white transition-colors">Internal OS v2.4</span>
             <span className="text-[7px] font-bold text-zinc-800 uppercase tracking-widest">End of Line</span>
           </div>
         </div>

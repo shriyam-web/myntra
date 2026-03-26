@@ -227,3 +227,18 @@ export async function updatePresence(username: string) {
     console.error('Failed to update presence:', error);
   }
 }
+
+export async function markAllAsRead(username: string) {
+  try {
+    await dbConnect();
+    await User.findOneAndUpdate(
+      { username },
+      { lastReadAt: new Date() },
+      { upsert: true, new: true }
+    );
+    revalidatePath('/');
+  } catch (error) {
+    console.error('Failed to mark as read:', error);
+    throw new Error('Failed to mark as read. Database connection error.');
+  }
+}

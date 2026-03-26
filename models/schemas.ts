@@ -32,6 +32,7 @@ const MessageSchema = new Schema({
 const UserSchema = new Schema({
   username: { type: String, required: true, unique: true },
   lastSeen: { type: Date, default: Date.now },
+  lastReadAt: { type: Date },
 });
 
 export const Ticket = models.Ticket || model('Ticket', TicketSchema);
