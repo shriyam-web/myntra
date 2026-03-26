@@ -1,14 +1,8 @@
 import mongoose from 'mongoose';
 import dns from 'dns';
 
-// Fix for querySrv ECONNREFUSED issues with some DNS servers
-try {
-  dns.setServers(['8.8.8.8', '8.8.4.4']);
-} catch (e) {
-  console.warn('⚠️ Could not set custom DNS servers, using system default');
-}
-
-console.log('🔍 Loading mongodb.ts - DNS fix applied');
+// Load environment variables for local tests
+console.log('🔍 Loading mongodb.ts');
 
 interface MongooseCache {
   conn: unknown;

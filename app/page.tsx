@@ -150,7 +150,7 @@ export default function Home() {
     if (view !== "login") {
       const interval = setInterval(() => {
         fetchInitialData(true);
-      }, 3000);
+      }, 2500);
       return () => clearInterval(interval);
     }
   }, [view]);
@@ -159,7 +159,7 @@ export default function Home() {
     if (view !== "login") {
       const presenceInterval = setInterval(() => {
         actions.updatePresence(view);
-      }, 5000);
+      }, 3000);
       actions.updatePresence(view); // Initial call
       return () => clearInterval(presenceInterval);
     }
@@ -561,7 +561,7 @@ export default function Home() {
   return (
     <div className="flex flex-col min-h-screen bg-zinc-950 text-zinc-100 font-sans pb-20 selection:bg-white selection:text-black">
       {/* Header */}
-      <header className="bg-zinc-900/80 backdrop-blur-xl border-b border-zinc-800/50 px-6 py-6 sticky top-0 z-50 shadow-2xl">
+      <header className="bg-zinc-900/80 backdrop-blur-xl border-b border-zinc-800/50 px-6 py-3 sticky top-0 z-50 shadow-2xl">
         <div className="max-w-md mx-auto flex justify-between items-center w-full">
           <div className="flex items-center gap-4">
             <div className="relative group cursor-pointer">
@@ -569,31 +569,20 @@ export default function Home() {
               <Image 
                 src="/logo.png" 
                 alt="System Logo" 
-                width={56} 
-                height={56} 
+                width={40} 
+                height={40} 
                 className="relative rounded-full border border-zinc-700 shadow-2xl object-cover grayscale hover:grayscale-0 transition-all duration-500"
                 priority
               />
             </div>
             <div className="flex flex-col">
-              <h1 className="text-xl font-bold text-white leading-none tracking-tight flex items-center gap-2">
+              <h1 className="text-lg font-bold text-white leading-none tracking-tight flex items-center gap-2">
                 Gudda Portal
                 <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
               </h1>
-              <div className="flex items-center gap-2 mt-2">
-                <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider border border-zinc-800 px-2 py-0.5 rounded-md bg-zinc-950/50">
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider border border-zinc-800 px-1.5 py-0.5 rounded-md bg-zinc-950/50">
                   {currentUser}
-                </span>
-                <span className="text-[9px] font-medium text-zinc-700 uppercase tracking-widest flex items-center gap-1.5">
-                  Secure Session
-                  {getPartnerStatus() && (
-                    <>
-                      <span className="text-zinc-800">•</span>
-                      <span className={getPartnerStatus() === "Online" ? "text-green-500 font-black animate-pulse" : "text-zinc-600"}>
-                        {getPartnerStatus()}
-                      </span>
-                    </>
-                  )}
                 </span>
               </div>
             </div>
@@ -617,7 +606,7 @@ export default function Home() {
         </div>
 
         {/* Tab Navigation */}
-        <nav className="max-w-md mx-auto flex items-center gap-2 overflow-x-auto no-scrollbar pt-6">
+        <nav className="max-w-md mx-auto flex items-center gap-2 overflow-x-auto no-scrollbar pt-3">
           {sortedTabs.map((tab) => (
             <button
               key={tab.id}
@@ -1058,7 +1047,14 @@ export default function Home() {
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-3 w-3 bg-indigo-500"></span>
                 </span>
-                Direct Messages
+                <div className="flex flex-col">
+                  <span className="leading-tight">Direct Messages</span>
+                  {getPartnerStatus() && (
+                    <span className={`text-[9px] font-bold uppercase tracking-[0.1em] mt-0.5 ${getPartnerStatus() === "Online" ? "text-green-500 animate-pulse" : "text-zinc-600"}`}>
+                      {getPartnerStatus()}
+                    </span>
+                  )}
+                </div>
               </h2>
               <div className="flex items-center gap-2">
                 <button
@@ -1262,27 +1258,6 @@ export default function Home() {
 
       {/* Footer */}
       <footer className="mt-20 px-6 py-16 flex flex-col items-center gap-12 border-t border-zinc-900/50 bg-gradient-to-b from-transparent to-zinc-900/20">
-        <div className="bg-zinc-950 border border-zinc-800/50 px-10 py-8 rounded-[2.5rem] relative overflow-hidden group shadow-2xl max-w-xs w-full">
-          <div className="absolute inset-0 bg-white/[0.02] translate-y-full group-hover:translate-y-0 transition-transform duration-1000"></div>
-          <div className="relative flex flex-col items-center gap-6">
-            <div className="flex items-center gap-4">
-              <div className="w-1 h-1 bg-zinc-800 rounded-full"></div>
-              <p className="text-[9px] text-zinc-700 font-black uppercase tracking-[0.5em]">
-                Protocol Alpha
-              </p>
-              <div className="w-1 h-1 bg-zinc-800 rounded-full"></div>
-            </div>
-            <p className="text-[11px] text-zinc-400 font-bold uppercase text-center leading-relaxed tracking-tight">
-              Established by <span className="text-white font-black italic">CGAI</span> <br/>
-              <span className="text-zinc-600 text-[8px] tracking-[0.2em] font-black mt-2 block italic">Central Governance & AI</span>
-            </p>
-            <div className="w-12 h-px bg-zinc-900"></div>
-            <p className="text-[8px] text-zinc-800 font-black uppercase tracking-widest text-center">
-              Under IT (Teddy) Act 2023 &bull; Section 69
-            </p>
-          </div>
-        </div>
-        
         <div className="flex flex-col items-center gap-4 group opacity-30 hover:opacity-100 transition-all duration-1000 cursor-none">
            <Image 
             src="/logo.png" 
