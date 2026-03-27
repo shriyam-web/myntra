@@ -465,15 +465,6 @@ export default function Home() {
     }
   };
 
-  const handleMarkAsRead = async () => {
-    try {
-      await actions.markAllAsRead(view as string);
-      fetchInitialData(true);
-    } catch (error) {
-      console.error('Failed to mark as read:', error);
-    }
-  };
-
   // Delete handlers
   const handleDeleteWish = async (id: string) => {
     try {
@@ -639,20 +630,6 @@ export default function Home() {
       default:
         return false;
     }
-  };
-
-  const hasUnreadMessages = () => {
-    const me = users.find(u => u.username.trim().toLowerCase() === currentUser.trim().toLowerCase());
-    if (!me) return false;
-    
-    // If no lastReadAt, everything from partner is unread
-    if (!me.lastReadAt) return messages.some(m => m.createdBy.trim().toLowerCase() !== currentUser.trim().toLowerCase());
-    
-    const lastRead = new Date(me.lastReadAt).getTime();
-    return messages.some(m => 
-      m.createdBy.trim().toLowerCase() !== currentUser.trim().toLowerCase() && 
-      new Date(m.createdAt).getTime() > lastRead
-    );
   };
 
   const tabs = [
