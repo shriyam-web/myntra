@@ -7,6 +7,8 @@ the goal of this telegram notification is that whenever alpha 1 texts me when i'
 
 Delete all messages this button must be below the Direct Message section and also add one more button with it, which gives the option to change chat background color and chat bubble colors, give some good options along with default and remember the choice of the partner and show him/her the same chat wallpaper everytime they use this platform. 
 
+  
+
 
 
 

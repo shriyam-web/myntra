@@ -86,6 +86,9 @@ export default function Home() {
   const [isMessageExpanded, setIsMessageExpanded] = useState(false);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [showThemeSettings, setShowThemeSettings] = useState(false);
+  const [isConnected, setIsConnected] = useState(true);
+  const [connectionStatusDisplay, setConnectionStatusDisplay] = useState(true);
+  const lastConnectionCheckRef = useRef<number>(Date.now());
   
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -124,9 +127,11 @@ export default function Home() {
       }
       
       setMessages(data.messages);
+      setIsConnected(true);
       if (!silent) setIsRefreshing(false);
     } catch (error) {
       console.error('Failed to fetch data:', error);
+      setIsConnected(false);
       if (!silent) alert('Failed to load data. Please check your database connection.');
       setIsRefreshing(false);
     }
@@ -186,7 +191,17 @@ export default function Home() {
   useEffect(() => {
     if (view !== "login") {
       const interval = setInterval(() => {
-        fetchInitialData(true);
+        const now = Date.now();
+        // Update connection status display every 30 seconds
+        if (now - lastConnectionCheckRef.current >= 30000) {
+          lastConnectionCheckRef.current = now;
+          // Set display status to whatever isConnected currently is
+          setConnectionStatusDisplay(isConnected);
+          fetchInitialData(true);
+        } else {
+          // Normal 2.5s update (silent)
+          fetchInitialData(true);
+        }
       }, 2500);
       return () => clearInterval(interval);
     }
@@ -673,6 +688,9 @@ export default function Home() {
               <div className="flex items-center gap-2 mt-1">
                 <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-wider border border-zinc-800 px-1.5 py-0.5 rounded-md bg-zinc-950/50">
                   {currentUser}
+                </span>
+                <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md ${connectionStatusDisplay ? "text-green-500 bg-green-500/10 border border-green-500/20" : "text-red-500 bg-red-500/10 border border-red-500/20"}`}>
+                  {connectionStatusDisplay ? "You're connected" : "Connection broken"}
                 </span>
               </div>
             </div>
