@@ -1188,6 +1188,15 @@ export default function Home() {
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
                   )}
                 </button>
+                <button
+                  type="button"
+                  onClick={() => fetchInitialData()}
+                  className={`p-2 bg-zinc-900 border border-zinc-800 rounded-xl text-zinc-500 hover:text-white transition-all active:scale-90 flex items-center justify-center min-w-[36px] min-h-[36px] ${isRefreshing ? "animate-spin" : ""}`}
+                  title="Refresh status and messages"
+                  disabled={isRefreshing}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.85.83 6.72 2.27L21 8"/><path d="M21 3v5h-5"/></svg>
+                </button>
                 <button 
                   onClick={handleDeleteAllMessages}
                   className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl text-red-500 hover:text-red-400 transition-all active:scale-90"
@@ -1294,9 +1303,9 @@ export default function Home() {
                                       setEditingMessageText(m.text);
                                       setActiveMessageActions(null);
                                     }}
-                                    className="p-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-500 hover:text-white transition-colors shadow-2xl"
+                                    className="p-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-indigo-400 hover:text-white transition-colors shadow-2xl"
                                   >
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828(2.828) 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
                                   </button>
                                   <button
                                     onClick={(e) => {

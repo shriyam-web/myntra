@@ -2,7 +2,6 @@ is it possible that when they press the logout button, it closes the chrome inco
 
 also ensure i don't want any local data to be saved to the phone, everything to be done over website and db only, no traces i want to leave on the website 
 
-in the main header show a small tag on the right next of Alpha 1 or Delta 1 that You're connected or Connection broken if there is some problem in connection so that the user knows when he or she is connected and when not, but update it every 30 seconds, not constantly  
 
 the goal of this telegram notification is that whenever alpha 1 texts me when i'm not online, i get a notification, but when i log in as Delta 1, then i should stop getting notification on telegram, currently i'm constantly getting notification whenever alpha 1 is messaging irrespective of I'm already reading the messages 
 
