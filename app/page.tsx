@@ -1,5 +1,8 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 import { useState, useEffect, useRef, useCallback } from "react";
 import Image from "next/image";
 import * as actions from "../lib/actions";
@@ -1415,20 +1418,20 @@ export default function Home() {
             </div>
           </section>
             {!isMessageExpanded && (
-              <div className="flex gap-3 mt-4">
+              <div className="flex flex-col sm:flex-row gap-3 mt-6">
                 <button 
                   onClick={handleDeleteAllMessages}
-                  className="flex-1 py-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-500 text-[10px] font-black uppercase tracking-[0.2em] hover:bg-red-500 hover:text-white transition-all active:scale-95 flex items-center justify-center gap-2"
+                  className="flex-1 py-4 bg-red-500/5 border border-red-500/10 rounded-2xl text-red-400 text-xs font-bold hover:bg-red-500 hover:text-white hover:border-red-500 transition-all active:scale-95 flex items-center justify-center gap-2 group shadow-lg shadow-red-500/5"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-                  Delete all messages
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="group-hover:rotate-12 transition-transform"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                  Clear History
                 </button>
                 <button 
                   onClick={() => setShowThemeSettings(true)}
-                  className="flex-1 py-4 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl text-indigo-400 text-[10px] font-black uppercase tracking-[0.2em] hover:bg-indigo-500 hover:text-white transition-all active:scale-95 flex items-center justify-center gap-2"
+                  className="flex-1 py-4 bg-indigo-500/5 border border-indigo-500/10 rounded-2xl text-indigo-400 text-xs font-bold hover:bg-indigo-500 hover:text-white hover:border-indigo-500 transition-all active:scale-95 flex items-center justify-center gap-2 group shadow-lg shadow-indigo-500/5"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>
-                  Chat Customization
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="group-hover:scale-110 transition-transform"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>
+                  Customize Interface
                 </button>
               </div>
             )}
@@ -1478,8 +1481,8 @@ export default function Home() {
 
         {showThemeSettings && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl animate-in fade-in duration-300">
-            <div className="bg-zinc-900 border border-zinc-800 rounded-[3rem] w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300">
-              <div className="p-8 border-b border-zinc-800 flex justify-between items-center">
+            <div className="bg-zinc-900 border border-zinc-800 rounded-3xl sm:rounded-[3rem] w-full max-w-lg max-h-[90vh] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300 flex flex-col">
+              <div className="p-6 sm:p-8 border-b border-zinc-800 flex justify-between items-center flex-shrink-0">
                 <h3 className="text-xl font-black text-white uppercase tracking-tighter">Customize Experience</h3>
                 <button 
                   onClick={() => setShowThemeSettings(false)}
@@ -1488,13 +1491,13 @@ export default function Home() {
                   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                 </button>
               </div>
-              <div className="p-8 space-y-8">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="p-6 sm:p-8 overflow-y-auto custom-scrollbar">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   {themes.map((theme) => (
                     <button
                       key={theme.name}
                       onClick={() => handleUpdateTheme(theme.bg, theme.bubbleMe)}
-                      className={`p-6 rounded-3xl border-2 transition-all flex flex-col gap-4 text-left group ${
+                      className={`p-4 sm:p-6 rounded-2xl sm:rounded-3xl border-2 transition-all flex flex-col gap-4 text-left group ${
                         chatBgColor === theme.bg && chatBubbleColor === theme.bubbleMe 
                           ? "border-indigo-500 bg-indigo-500/10 shadow-lg shadow-indigo-500/10" 
                           : "border-zinc-800 bg-zinc-950/50 hover:border-zinc-700"
@@ -1514,7 +1517,7 @@ export default function Home() {
                   ))}
                 </div>
               </div>
-              <div className="p-8 bg-zinc-950/50 border-t border-zinc-800">
+              <div className="p-6 sm:p-8 bg-zinc-950/50 border-t border-zinc-800 flex-shrink-0">
                 <button 
                   onClick={() => setShowThemeSettings(false)}
                   className="w-full py-5 bg-white text-black rounded-2xl font-black uppercase tracking-[0.2em] shadow-xl hover:bg-zinc-200 transition-all active:scale-95"
