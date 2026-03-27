@@ -86,6 +86,18 @@ export default function Home() {
   const [isMessageExpanded, setIsMessageExpanded] = useState(false);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [showThemeSettings, setShowThemeSettings] = useState(false);
+  const [chatBgColor, setChatBgColor] = useState<string>("bg-zinc-900/50");
+  const [chatBubbleColor, setChatBubbleColor] = useState<string>("bg-indigo-600");
+  const [chatPartnerBubbleColor, setChatPartnerBubbleColor] = useState<string>("bg-zinc-800/80");
+
+  const themes = [
+    { name: "Midnight (Default)", bg: "bg-zinc-900/50", bubbleMe: "bg-indigo-600", bubblePartner: "bg-zinc-800/80" },
+    { name: "Forest", bg: "bg-emerald-950/40", bubbleMe: "bg-emerald-700", bubblePartner: "bg-zinc-900/80" },
+    { name: "Volcano", bg: "bg-red-950/40", bubbleMe: "bg-red-700", bubblePartner: "bg-zinc-900/80" },
+    { name: "Ocean", bg: "bg-blue-950/40", bubbleMe: "bg-blue-700", bubblePartner: "bg-zinc-900/80" },
+    { name: "Purple Rain", bg: "bg-purple-950/40", bubbleMe: "bg-purple-700", bubblePartner: "bg-zinc-900/80" },
+    { name: "Cyberpunk", bg: "bg-pink-950/40", bubbleMe: "bg-pink-600", bubblePartner: "bg-zinc-900/80" },
+  ];
   const [isConnected, setIsConnected] = useState(true);
   const [connectionStatusDisplay, setConnectionStatusDisplay] = useState(true);
   const lastConnectionCheckRef = useRef<number>(Date.now());
@@ -187,6 +199,26 @@ export default function Home() {
       fetchInitialData(true);
     }
   }, [messageLimit, view]);
+
+  useEffect(() => {
+    if (view !== "login" && users.length > 0) {
+      const me = users.find(u => u.username.trim().toLowerCase() === view.trim().toLowerCase());
+      if (me) {
+        if (me.chatBackgroundColor) setChatBgColor(me.chatBackgroundColor);
+        if (me.chatBubbleColor) setChatBubbleColor(me.chatBubbleColor);
+      }
+    }
+  }, [users, view]);
+
+  const handleUpdateTheme = async (bg: string, bubble: string) => {
+    setChatBgColor(bg);
+    setChatBubbleColor(bubble);
+    try {
+      await actions.updateChatPreferences(view, { chatBackgroundColor: bg, chatBubbleColor: bubble });
+    } catch (error) {
+      console.error('Failed to update theme:', error);
+    }
+  };
 
   useEffect(() => {
     if (view !== "login") {
@@ -1220,17 +1252,10 @@ export default function Home() {
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.85.83 6.72 2.27L21 8"/><path d="M21 3v5h-5"/></svg>
                 </button>
-                <button 
-                  onClick={handleDeleteAllMessages}
-                  className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl text-red-500 hover:text-red-400 transition-all active:scale-90"
-                  title="Clear Chat"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-                </button>
               </div>
             </div>
 
-            <div className={`bg-zinc-900/50 rounded-[2.5rem] border border-zinc-800 shadow-2xl relative overflow-hidden flex flex-col backdrop-blur-sm ${isMessageExpanded ? "flex-1" : ""}`}>
+            <div className={`${chatBgColor} rounded-[2.5rem] border border-zinc-800 shadow-2xl relative overflow-hidden flex flex-col backdrop-blur-sm ${isMessageExpanded ? "flex-1" : ""}`}>
               <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 blur-[100px] -mr-32 -mt-32 rounded-full"></div>
               
               <div 
@@ -1295,8 +1320,8 @@ export default function Home() {
                               }}
                               className={`max-w-[85%] min-w-[50px] w-fit p-4 rounded-3xl text-[14.5px] leading-[1.6] relative break-words whitespace-pre-wrap shadow-xl cursor-pointer flex-shrink-0 ${
                                 isMe 
-                                  ? "bg-indigo-600 text-white rounded-tr-none shadow-indigo-900/10" 
-                                  : "bg-zinc-800/80 text-zinc-100 rounded-tl-none border border-zinc-700/30 shadow-black/20"
+                                  ? `${chatBubbleColor} text-white rounded-tr-none shadow-indigo-900/10` 
+                                  : `${themes.find(t => t.bubbleMe === chatBubbleColor)?.bubblePartner || "bg-zinc-800/80"} text-zinc-100 rounded-tl-none border border-zinc-700/30 shadow-black/20`
                               }`}
                             >
                               {editingMessage === m._id ? (
@@ -1363,7 +1388,7 @@ export default function Home() {
               </div>
 
               <div className="p-4 bg-zinc-950/50 border-t border-zinc-800/50 backdrop-blur-md">
-                <form onSubmit={handleSendMessage} className="flex gap-2 items-end">
+                <form onSubmit={handleSendMessage} className="flex gap-2 items-end mb-4">
                   <textarea 
                     value={newMessage}
                     onChange={(e) => setNewMessage(e.target.value)}
@@ -1385,6 +1410,23 @@ export default function Home() {
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform"><line x1="22" y1="2" x2="11" y2="13"/><polyline points="22 2 15 22 11 13 2 9 22 2"/></svg>
                   </button>
                 </form>
+
+                <div className="flex gap-3">
+                  <button 
+                    onClick={handleDeleteAllMessages}
+                    className="flex-1 py-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-500 text-[10px] font-black uppercase tracking-[0.2em] hover:bg-red-500 hover:text-white transition-all active:scale-95 flex items-center justify-center gap-2"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                    Delete all messages
+                  </button>
+                  <button 
+                    onClick={() => setShowThemeSettings(true)}
+                    className="flex-1 py-4 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl text-indigo-400 text-[10px] font-black uppercase tracking-[0.2em] hover:bg-indigo-500 hover:text-white transition-all active:scale-95 flex items-center justify-center gap-2"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>
+                    Chat Customization
+                  </button>
+                </div>
               </div>
             </div>
           </section>
@@ -1429,6 +1471,56 @@ export default function Home() {
               </div>
             </div>
           </section>
+        )}
+
+        {showThemeSettings && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl animate-in fade-in duration-300">
+            <div className="bg-zinc-900 border border-zinc-800 rounded-[3rem] w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300">
+              <div className="p-8 border-b border-zinc-800 flex justify-between items-center">
+                <h3 className="text-xl font-black text-white uppercase tracking-tighter">Customize Experience</h3>
+                <button 
+                  onClick={() => setShowThemeSettings(false)}
+                  className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-400 hover:text-white transition-colors"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+              </div>
+              <div className="p-8 space-y-8">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {themes.map((theme) => (
+                    <button
+                      key={theme.name}
+                      onClick={() => handleUpdateTheme(theme.bg, theme.bubbleMe)}
+                      className={`p-6 rounded-3xl border-2 transition-all flex flex-col gap-4 text-left group ${
+                        chatBgColor === theme.bg && chatBubbleColor === theme.bubbleMe 
+                          ? "border-indigo-500 bg-indigo-500/10 shadow-lg shadow-indigo-500/10" 
+                          : "border-zinc-800 bg-zinc-950/50 hover:border-zinc-700"
+                      }`}
+                    >
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400 group-hover:text-zinc-300">{theme.name}</span>
+                        {chatBgColor === theme.bg && chatBubbleColor === theme.bubbleMe && (
+                          <div className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></div>
+                        )}
+                      </div>
+                      <div className={`h-12 w-full rounded-2xl ${theme.bg} border border-white/5 overflow-hidden flex items-center justify-center relative`}>
+                        <div className={`absolute left-2 w-1/2 h-6 ${theme.bubblePartner} rounded-full rounded-tl-none opacity-40 scale-75`}></div>
+                        <div className={`absolute right-2 w-1/2 h-6 ${theme.bubbleMe} rounded-full rounded-tr-none scale-75`}></div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="p-8 bg-zinc-950/50 border-t border-zinc-800">
+                <button 
+                  onClick={() => setShowThemeSettings(false)}
+                  className="w-full py-5 bg-white text-black rounded-2xl font-black uppercase tracking-[0.2em] shadow-xl hover:bg-zinc-200 transition-all active:scale-95"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </main>
 
