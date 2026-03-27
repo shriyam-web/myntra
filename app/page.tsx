@@ -1186,7 +1186,8 @@ export default function Home() {
           </section>
         )}
         {activeTab === "messages" && (
-          <section className={`space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 ${messagingSectionWrapperClass}`}>
+          <>
+            <section className={`space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 ${messagingSectionWrapperClass}`}>
             <div className="flex items-center justify-between px-2">
               <h2 className="text-sm font-bold text-white flex items-center gap-3">
                 <span className="flex h-3 w-3 relative">
@@ -1388,7 +1389,7 @@ export default function Home() {
               </div>
 
               <div className="p-4 bg-zinc-950/50 border-t border-zinc-800/50 backdrop-blur-md">
-                <form onSubmit={handleSendMessage} className="flex gap-2 items-end mb-4">
+                <form onSubmit={handleSendMessage} className="flex gap-2 items-end">
                   <textarea 
                     value={newMessage}
                     onChange={(e) => setNewMessage(e.target.value)}
@@ -1410,26 +1411,28 @@ export default function Home() {
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform"><line x1="22" y1="2" x2="11" y2="13"/><polyline points="22 2 15 22 11 13 2 9 22 2"/></svg>
                   </button>
                 </form>
-
-                <div className="flex gap-3">
-                  <button 
-                    onClick={handleDeleteAllMessages}
-                    className="flex-1 py-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-500 text-[10px] font-black uppercase tracking-[0.2em] hover:bg-red-500 hover:text-white transition-all active:scale-95 flex items-center justify-center gap-2"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-                    Delete all messages
-                  </button>
-                  <button 
-                    onClick={() => setShowThemeSettings(true)}
-                    className="flex-1 py-4 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl text-indigo-400 text-[10px] font-black uppercase tracking-[0.2em] hover:bg-indigo-500 hover:text-white transition-all active:scale-95 flex items-center justify-center gap-2"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>
-                    Chat Customization
-                  </button>
-                </div>
               </div>
             </div>
           </section>
+            {!isMessageExpanded && (
+              <div className="flex gap-3 mt-4">
+                <button 
+                  onClick={handleDeleteAllMessages}
+                  className="flex-1 py-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-500 text-[10px] font-black uppercase tracking-[0.2em] hover:bg-red-500 hover:text-white transition-all active:scale-95 flex items-center justify-center gap-2"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                  Delete all messages
+                </button>
+                <button 
+                  onClick={() => setShowThemeSettings(true)}
+                  className="flex-1 py-4 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl text-indigo-400 text-[10px] font-black uppercase tracking-[0.2em] hover:bg-indigo-500 hover:text-white transition-all active:scale-95 flex items-center justify-center gap-2"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>
+                  Chat Customization
+                </button>
+              </div>
+            )}
+          </>
         )}
 
         {activeTab === "emergency" && (
