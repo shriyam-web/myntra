@@ -132,6 +132,29 @@ export default function Home() {
     }
   }, [messageLimit]);
 
+  const handleMarkAsRead = async () => {
+    try {
+      await actions.markAllAsRead(view as string);
+      fetchInitialData(true);
+    } catch (error) {
+      console.error('Failed to mark as read:', error);
+    }
+  };
+
+  const hasUnreadMessages = () => {
+    const me = users.find(u => u.username.trim().toLowerCase() === currentUser.trim().toLowerCase());
+    if (!me) return false;
+    
+    // If no lastReadAt, everything from partner is unread
+    if (!me.lastReadAt) return messages.some(m => m.createdBy.trim().toLowerCase() !== currentUser.trim().toLowerCase());
+    
+    const lastRead = new Date(me.lastReadAt).getTime();
+    return messages.some(m => 
+      m.createdBy.trim().toLowerCase() !== currentUser.trim().toLowerCase() && 
+      new Date(m.createdAt).getTime() > lastRead
+    );
+  };
+
   useEffect(() => {
     if (activeTab === "messages" && messages.length > 0) {
       const lastMessage = messages[messages.length - 1];
@@ -1246,22 +1269,22 @@ export default function Home() {
                       return (
                         <div 
                           key={m._id} 
-                          className={`flex flex-col ${isMe ? "items-end" : "items-start"}`}
+                          className={`flex flex-col w-full ${isMe ? "items-end" : "items-start"}`}
                         >
                           <div className={`flex items-center gap-2 mb-1.5 px-1.5 ${isMe ? "flex-row-reverse" : "flex-row"}`}>
                             <span className="text-[10px] text-zinc-600 font-medium">
-                              {m.createdAt.split(',')[1]}
+                              {new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
                             </span>
                           </div>
 
-                          <div className={`flex items-end gap-2 max-w-full ${isMe ? "flex-row-reverse" : "flex-row"}`}>
+                          <div className={`flex items-end gap-2 w-full ${isMe ? "flex-row-reverse" : "flex-row"}`}>
                             <div 
                               onClick={() => {
                                 if (isMe) {
                                   setActiveMessageActions(activeMessageActions === m._id ? null : m._id);
                                 }
                               }}
-                              className={`max-w-[85%] p-4 rounded-3xl text-[14.5px] leading-[1.6] relative break-words whitespace-pre-wrap shadow-xl cursor-pointer ${
+                              className={`max-w-[85%] min-w-[50px] w-fit p-4 rounded-3xl text-[14.5px] leading-[1.6] relative break-words whitespace-pre-wrap shadow-xl cursor-pointer flex-shrink-0 ${
                                 isMe 
                                   ? "bg-indigo-600 text-white rounded-tr-none shadow-indigo-900/10" 
                                   : "bg-zinc-800/80 text-zinc-100 rounded-tl-none border border-zinc-700/30 shadow-black/20"
