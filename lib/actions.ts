@@ -2,21 +2,40 @@
 
 import dbConnect from "./mongodb";
 import { Ticket, Wishlist, Plan, TimelineDate, Message, User } from "../models/schemas";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, unstable_noStore as noStore } from "next/cache";
 
 // FETCH ALL DATA
 export async function fetchData(messageLimit = 50) {
+  noStore();
   try {
     await dbConnect();
 
-    const [tickets, wishlist, plans, dates, messages, users] = await Promise.all([
-      Ticket.find({}).sort({ createdAt: -1 }),
-      Wishlist.find({}),
-      Plan.find({}),
-      TimelineDate.find({}),
-      Message.find({}).sort({ createdAt: -1 }).limit(messageLimit),
-      User.find({})
+    // Log the number of users found to debug
+    const userCount = await User.countDocuments();
+    console.log(`🔍 fetchData: Found ${userCount} users in database`);
+
+    const [tickets, wishlist, plans, dates, messages, rawUsers] = await Promise.all([
+      Ticket.find({}).sort({ createdAt: -1 }).lean(),
+      Wishlist.find({}).lean(),
+      Plan.find({}).lean(),
+      TimelineDate.find({}).lean(),
+      Message.find({}).sort({ createdAt: -1 }).limit(messageLimit).lean(),
+      User.find({}).lean()
     ]);
+
+    // Deduplicate users by username (lowercase)
+    const userMap = new Map();
+    rawUsers.forEach((u: any) => {
+      const uname = u.username.trim().toLowerCase();
+      const existing = userMap.get(uname);
+      if (!existing || new Date(u.lastSeen) > new Date(existing.lastSeen)) {
+        userMap.set(uname, u);
+      }
+    });
+    const users = Array.from(userMap.values());
+
+    // Debug users
+    console.log("👥 Users found:", users.map(u => ({ username: u.username, lastSeen: u.lastSeen })));
 
     // Reverse messages to show chronological order (oldest to newest)
     const sortedMessages = messages.reverse();
@@ -253,23 +272,27 @@ export async function deleteAllMessages() {
 }
 
 export async function updatePresence(username: string) {
+  noStore();
   try {
     await dbConnect();
-    await User.findOneAndUpdate(
-      { username },
+    const updatedUser = await User.findOneAndUpdate(
+      { username: username.trim().toLowerCase() },
       { lastSeen: new Date() },
       { upsert: true, new: true }
     );
+    console.log(`📡 Presence updated for: ${username.trim()} at ${updatedUser.lastSeen}`);
+    revalidatePath('/');
   } catch (error) {
     console.error('Failed to update presence:', error);
   }
 }
 
 export async function markAllAsRead(username: string) {
+  noStore();
   try {
     await dbConnect();
     await User.findOneAndUpdate(
-      { username },
+      { username: username.trim().toLowerCase() },
       { lastReadAt: new Date() },
       { upsert: true, new: true }
     );
@@ -277,5 +300,21 @@ export async function markAllAsRead(username: string) {
   } catch (error) {
     console.error('Failed to mark as read:', error);
     throw new Error('Failed to mark as read. Database connection error.');
+  }
+}
+
+export async function updateChatPreferences(username: string, updates: { chatBackgroundColor?: string; chatBubbleColor?: string }) {
+  noStore();
+  try {
+    await dbConnect();
+    await User.findOneAndUpdate(
+      { username: username.trim().toLowerCase() },
+      updates,
+      { upsert: true, new: true }
+    );
+    revalidatePath('/');
+  } catch (error) {
+    console.error('Failed to update chat preferences:', error);
+    throw new Error('Failed to update chat preferences.');
   }
 }

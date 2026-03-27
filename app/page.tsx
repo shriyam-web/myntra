@@ -24,6 +24,8 @@ interface PresenceUser {
   username: string;
   lastSeen: string;
   lastReadAt?: string;
+  chatBackgroundColor?: string;
+  chatBubbleColor?: string;
 }
 
 interface WishlistItem {
@@ -83,6 +85,8 @@ export default function Home() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isMessageExpanded, setIsMessageExpanded] = useState(false);
   const [showScrollButton, setShowScrollButton] = useState(false);
+  const [showThemeSettings, setShowThemeSettings] = useState(false);
+  
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const lastMessageIdRef = useRef<string | null>(null);
@@ -143,6 +147,12 @@ export default function Home() {
   const loadMoreMessages = () => {
     setMessageLimit(prev => prev + 50);
   };
+
+  useEffect(() => {
+    if (view !== "login" && activeTab === "messages" && hasUnreadMessages()) {
+      handleMarkAsRead();
+    }
+  }, [view, activeTab, messages, users, currentUser]);
 
   useEffect(() => {
     if (view !== "login") {
@@ -423,6 +433,15 @@ export default function Home() {
     }
   };
 
+  const handleUpdateChatPreferences = async (updates: { chatBackgroundColor?: string; chatBubbleColor?: string }) => {
+    try {
+      await actions.updateChatPreferences(view as string, updates);
+      fetchInitialData(true);
+    } catch (error) {
+      console.error('Failed to update preferences:', error);
+    }
+  };
+
   const handleMarkAsRead = async () => {
     try {
       await actions.markAllAsRead(view as string);
@@ -557,7 +576,8 @@ export default function Home() {
   }
 
   const getPartnerStatus = () => {
-    const partner = users.find(u => u.username !== currentUser);
+    const partnerUsername = currentUser.trim().toLowerCase() === "alpha 1" ? "delta 1" : "alpha 1";
+    const partner = users.find(u => u.username.trim().toLowerCase() === partnerUsername);
     if (!partner) return null;
     
     const lastSeenDate = new Date(partner.lastSeen);
@@ -599,14 +619,17 @@ export default function Home() {
   };
 
   const hasUnreadMessages = () => {
-    const me = users.find(u => u.username === currentUser);
+    const me = users.find(u => u.username.trim().toLowerCase() === currentUser.trim().toLowerCase());
     if (!me) return false;
     
-    // If no lastReadAt, everything is unread
-    if (!me.lastReadAt) return messages.some(m => m.createdBy !== currentUser);
+    // If no lastReadAt, everything from partner is unread
+    if (!me.lastReadAt) return messages.some(m => m.createdBy.trim().toLowerCase() !== currentUser.trim().toLowerCase());
     
     const lastRead = new Date(me.lastReadAt).getTime();
-    return messages.some(m => m.createdBy !== currentUser && new Date(m.createdAt).getTime() > lastRead);
+    return messages.some(m => 
+      m.createdBy.trim().toLowerCase() !== currentUser.trim().toLowerCase() && 
+      new Date(m.createdAt).getTime() > lastRead
+    );
   };
 
   const tabs = [
@@ -664,10 +687,11 @@ export default function Home() {
             </button>
             <button 
               onClick={() => setView("login")}
-              className="group p-3 bg-zinc-800/50 rounded-2xl text-zinc-500 hover:text-white hover:bg-zinc-800 transition-all active:scale-90 border border-zinc-700/50"
+              className="group p-3 bg-zinc-800/50 rounded-2xl text-zinc-500 hover:text-white hover:bg-zinc-800 transition-all active:scale-90 border border-zinc-700/50 flex items-center gap-2"
               title="Log Out"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="group-hover:rotate-12 transition-transform"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="group-hover:translate-x-0.5 transition-transform"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+              <span className="text-[10px] font-black uppercase tracking-widest pr-1 hidden sm:inline">Logout</span>
             </button>
           </div>
         </div>
@@ -1122,10 +1146,11 @@ export default function Home() {
                         {getPartnerStatus()}
                       </span>
                     )}
-                    {users.find(u => u.username !== currentUser)?.lastReadAt && (
+                    {users.find(u => u.username.trim().toLowerCase() === (currentUser.trim().toLowerCase() === "alpha 1" ? "delta 1" : "alpha 1"))?.lastReadAt && (
                       <span className="text-[8px] font-bold uppercase tracking-[0.1em] text-indigo-400">
                         {(() => {
-                          const partner = users.find(u => u.username !== currentUser)!;
+                          const partnerUsername = currentUser.trim().toLowerCase() === "alpha 1" ? "delta 1" : "alpha 1";
+                          const partner = users.find(u => u.username.trim().toLowerCase() === partnerUsername)!;
                           const readDate = new Date(partner.lastReadAt!);
                           const now = new Date();
                           const isToday = readDate.toDateString() === now.toDateString();
@@ -1162,13 +1187,6 @@ export default function Home() {
                   ) : (
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
                   )}
-                </button>
-                <button 
-                  onClick={() => fetchInitialData()}
-                  className={`p-2 bg-zinc-900 border border-zinc-800 rounded-xl text-zinc-500 hover:text-white transition-all active:scale-90 ${isRefreshing ? "animate-spin text-white" : ""}`}
-                  title="Refresh Messages"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
                 </button>
                 <button 
                   onClick={handleDeleteAllMessages}
@@ -1220,9 +1238,10 @@ export default function Home() {
                 ) : (
                   <div className="space-y-6">
                     {messages.map((m) => {
-                      const isMe = m.createdBy === currentUser;
-                      const partner = users.find(u => u.username !== currentUser);
-                      const isRead = isMe && partner?.lastReadAt && new Date(m.createdAt).getTime() <= new Date(partner.lastReadAt).getTime();
+                      const isMe = m.createdBy.trim().toLowerCase() === currentUser.trim().toLowerCase();
+                      const partnerUsername = (currentUser.trim().toLowerCase() === "alpha 1" ? "delta 1" : "alpha 1");
+                      const partner = users.find(u => u.username.trim().toLowerCase() === partnerUsername);
+                      const isRead = isMe && !!partner?.lastReadAt && (new Date(m.createdAt).getTime() <= new Date(partner.lastReadAt).getTime() + 100);
                       
                       return (
                         <div 
@@ -1233,8 +1252,66 @@ export default function Home() {
                             <span className="text-[10px] text-zinc-600 font-medium">
                               {m.createdAt.split(',')[1]}
                             </span>
+                          </div>
+
+                          <div className={`flex items-end gap-2 max-w-full ${isMe ? "flex-row-reverse" : "flex-row"}`}>
+                            <div 
+                              onClick={() => {
+                                if (isMe) {
+                                  setActiveMessageActions(activeMessageActions === m._id ? null : m._id);
+                                }
+                              }}
+                              className={`max-w-[85%] p-4 rounded-3xl text-[14.5px] leading-[1.6] relative break-words whitespace-pre-wrap shadow-xl cursor-pointer ${
+                                isMe 
+                                  ? "bg-indigo-600 text-white rounded-tr-none shadow-indigo-900/10" 
+                                  : "bg-zinc-800/80 text-zinc-100 rounded-tl-none border border-zinc-700/30 shadow-black/20"
+                              }`}
+                            >
+                              {editingMessage === m._id ? (
+                                <div className="flex flex-col gap-2 min-w-[200px]">
+                                  <textarea
+                                    value={editingMessageText}
+                                    onChange={(e) => setEditingMessageText(e.target.value)}
+                                    className="w-full bg-black/20 border border-white/20 rounded-xl px-3 py-2 text-sm font-medium outline-none text-white resize-none"
+                                    autoFocus
+                                    rows={2}
+                                  />
+                                  <div className="flex justify-end gap-2">
+                                    <button onClick={(e) => { e.stopPropagation(); handleUpdateMessage(m._id, editingMessageText); }} className="text-[10px] font-black text-white bg-green-600 px-3 py-1 rounded-lg">SAVE</button>
+                                    <button onClick={(e) => { e.stopPropagation(); setEditingMessage(null); setEditingMessageText(""); }} className="text-[10px] font-black text-white bg-zinc-700 px-3 py-1 rounded-lg">CANCEL</button>
+                                  </div>
+                                </div>
+                              ) : (
+                                m.text
+                              )}
+                              
+                              {isMe && activeMessageActions === m._id && editingMessage !== m._id && (
+                                <div className="absolute -left-12 top-1/2 -translate-y-1/2 flex flex-col gap-1 z-20">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setEditingMessage(m._id);
+                                      setEditingMessageText(m.text);
+                                      setActiveMessageActions(null);
+                                    }}
+                                    className="p-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-500 hover:text-white transition-colors shadow-2xl"
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828(2.828) 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeleteMessage(m._id);
+                                    }}
+                                    className="p-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-red-500 hover:bg-red-950 transition-colors shadow-2xl"
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                             {isMe && (
-                              <span className={`text-[10px] ${isRead ? "text-blue-500" : "text-zinc-600"}`} title={isRead ? "Read" : "Sent"}>
+                              <span className={`text-[10px] mb-2 flex-shrink-0 ${isRead ? "text-blue-500" : "text-zinc-600"}`} title={isRead ? "Read" : "Sent"}>
                                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                                   {isRead ? (
                                     <path d="M18 6 7 17l-5-5m16 0-7.5 7.5L13 16" />
@@ -1243,62 +1320,6 @@ export default function Home() {
                                   )}
                                 </svg>
                               </span>
-                            )}
-                          </div>
-
-                          <div 
-                            onClick={() => {
-                              if (isMe) {
-                                setActiveMessageActions(activeMessageActions === m._id ? null : m._id);
-                              }
-                            }}
-                            className={`max-w-[85%] p-4 rounded-3xl text-[14.5px] leading-[1.6] relative break-words whitespace-pre-wrap shadow-xl cursor-pointer ${
-                              isMe 
-                                ? "bg-indigo-600 text-white rounded-tr-none shadow-indigo-900/10" 
-                                : "bg-zinc-800/80 text-zinc-100 rounded-tl-none border border-zinc-700/30 shadow-black/20"
-                            }`}
-                          >
-                            {editingMessage === m._id ? (
-                              <div className="flex flex-col gap-2 min-w-[200px]">
-                                <textarea
-                                  value={editingMessageText}
-                                  onChange={(e) => setEditingMessageText(e.target.value)}
-                                  className="w-full bg-black/20 border border-white/20 rounded-xl px-3 py-2 text-sm font-medium outline-none text-white resize-none"
-                                  autoFocus
-                                  rows={2}
-                                />
-                                <div className="flex justify-end gap-2">
-                                  <button onClick={(e) => { e.stopPropagation(); handleUpdateMessage(m._id, editingMessageText); }} className="text-[10px] font-black text-white bg-green-600 px-3 py-1 rounded-lg">SAVE</button>
-                                  <button onClick={(e) => { e.stopPropagation(); setEditingMessage(null); setEditingMessageText(""); }} className="text-[10px] font-black text-white bg-zinc-700 px-3 py-1 rounded-lg">CANCEL</button>
-                                </div>
-                              </div>
-                            ) : (
-                              m.text
-                            )}
-                            
-                            {isMe && activeMessageActions === m._id && editingMessage !== m._id && (
-                              <div className="absolute -left-12 top-1/2 -translate-y-1/2 flex flex-col gap-1 z-20">
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setEditingMessage(m._id);
-                                    setEditingMessageText(m.text);
-                                    setActiveMessageActions(null);
-                                  }}
-                                  className="p-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-500 hover:text-white transition-colors shadow-2xl"
-                                >
-                                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
-                                </button>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleDeleteMessage(m._id);
-                                  }}
-                                  className="p-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-red-500 hover:bg-red-950 transition-colors shadow-2xl"
-                                >
-                                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-                                </button>
-                              </div>
                             )}
                           </div>
                         </div>
