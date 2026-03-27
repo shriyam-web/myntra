@@ -480,6 +480,11 @@ export default function Home() {
     }
   };
 
+  const handleLogout = () => {
+    setView("login");
+    window.location.href = "about:blank";
+  };
+
   // Delete handlers
   const handleDeleteWish = async (id: string) => {
     try {
@@ -704,7 +709,7 @@ export default function Home() {
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
             </button>
             <button 
-              onClick={() => setView("login")}
+              onClick={handleLogout}
               className="group p-3 bg-zinc-800/50 rounded-2xl text-zinc-500 hover:text-white hover:bg-zinc-800 transition-all active:scale-90 border border-zinc-700/50 flex items-center gap-2"
               title="Log Out"
             >
