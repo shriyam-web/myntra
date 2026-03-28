@@ -34,6 +34,7 @@ interface PresenceUser {
   lastReadAt?: string;
   chatBackgroundColor?: string;
   chatBubbleColor?: string;
+  themeName?: string;
 }
 
 interface WishlistItem {
@@ -99,6 +100,7 @@ export default function HomeClient() {
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [chatBgColor, setChatBgColor] = useState<string>("bg-zinc-900/50");
   const [chatBubbleColor, setChatBubbleColor] = useState<string>("bg-indigo-600");
+  const [themeName, setThemeName] = useState<string>("Midnight (Default)");
   const [chatPartnerBubbleColor, setChatPartnerBubbleColor] = useState<string>("bg-zinc-800/80");
   
   // Image handling
@@ -109,12 +111,18 @@ export default function HomeClient() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const themes = [
-    { name: "Midnight (Default)", bg: "bg-zinc-900/50", bubbleMe: "bg-indigo-600", bubblePartner: "bg-zinc-800/80" },
-    { name: "Forest", bg: "bg-emerald-950/40", bubbleMe: "bg-emerald-700", bubblePartner: "bg-zinc-900/80" },
-    { name: "Volcano", bg: "bg-red-950/40", bubbleMe: "bg-red-700", bubblePartner: "bg-zinc-900/80" },
-    { name: "Ocean", bg: "bg-blue-950/40", bubbleMe: "bg-blue-700", bubblePartner: "bg-zinc-900/80" },
-    { name: "Purple Rain", bg: "bg-purple-950/40", bubbleMe: "bg-purple-700", bubblePartner: "bg-zinc-900/80" },
-    { name: "Cyberpunk", bg: "bg-pink-950/40", bubbleMe: "bg-pink-600", bubblePartner: "bg-zinc-900/80" },
+    { name: "Midnight (Default)", bg: "bg-zinc-900/50", bubbleMe: "bg-indigo-600", bubblePartner: "bg-zinc-800/80", accent: "text-indigo-400", shadow: "shadow-indigo-500/10", glow: "bg-indigo-500/5" },
+    { name: "Forest", bg: "bg-emerald-950/40", bubbleMe: "bg-emerald-700", bubblePartner: "bg-zinc-900/80", accent: "text-emerald-400", shadow: "shadow-emerald-500/10", glow: "bg-emerald-500/5" },
+    { name: "Volcano", bg: "bg-red-950/40", bubbleMe: "bg-red-700", bubblePartner: "bg-zinc-900/80", accent: "text-red-400", shadow: "shadow-red-500/10", glow: "bg-red-500/5" },
+    { name: "Ocean", bg: "bg-blue-950/40", bubbleMe: "bg-blue-700", bubblePartner: "bg-zinc-900/80", accent: "text-blue-400", shadow: "shadow-blue-500/10", glow: "bg-blue-500/5" },
+    { name: "Purple Rain", bg: "bg-purple-950/40", bubbleMe: "bg-purple-700", bubblePartner: "bg-zinc-900/80", accent: "text-purple-400", shadow: "shadow-purple-500/10", glow: "bg-purple-500/5" },
+    { name: "Cyberpunk", bg: "bg-pink-950/40", bubbleMe: "bg-pink-600", bubblePartner: "bg-zinc-900/80", accent: "text-pink-400", shadow: "shadow-pink-500/10", glow: "bg-pink-500/5" },
+    { name: "Golden Hour", bg: "bg-amber-950/40", bubbleMe: "bg-amber-600", bubblePartner: "bg-zinc-900/80", accent: "text-amber-400", shadow: "shadow-amber-500/10", glow: "bg-amber-500/5" },
+    { name: "Nordic", bg: "bg-slate-900/50", bubbleMe: "bg-slate-700", bubblePartner: "bg-zinc-800/80", accent: "text-slate-400", shadow: "shadow-slate-500/10", glow: "bg-slate-500/5" },
+    { name: "Rose Quartz", bg: "bg-rose-950/40", bubbleMe: "bg-rose-600", bubblePartner: "bg-zinc-900/80", accent: "text-rose-400", shadow: "shadow-rose-500/10", glow: "bg-rose-500/5" },
+    { name: "Toxic", bg: "bg-lime-950/40", bubbleMe: "bg-lime-600", bubblePartner: "bg-zinc-900/80", accent: "text-lime-400", shadow: "shadow-lime-500/10", glow: "bg-lime-500/5" },
+    { name: "Sakura", bg: "bg-fuchsia-950/40", bubbleMe: "bg-fuchsia-600", bubblePartner: "bg-zinc-900/80", accent: "text-fuchsia-400", shadow: "shadow-fuchsia-500/10", glow: "bg-fuchsia-500/5" },
+    { name: "Ghost", bg: "bg-zinc-950/80", bubbleMe: "bg-white", bubblePartner: "bg-zinc-800/80", accent: "text-zinc-400", shadow: "shadow-white/5", glow: "bg-white/5", textMe: "text-black" },
   ];
   const [isConnected, setIsConnected] = useState(true);
   const [isOnline, setIsOnline] = useState(true);
@@ -124,6 +132,8 @@ export default function HomeClient() {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const lastMessageIdRef = useRef<string | null>(null);
+  
+  const activeTheme = themes.find(t => t.name === themeName) || themes[0];
 
   const scrollToBottom = (instant = false) => {
     setTimeout(() => {
@@ -237,15 +247,17 @@ export default function HomeClient() {
       if (me) {
         if (me.chatBackgroundColor) setChatBgColor(me.chatBackgroundColor);
         if (me.chatBubbleColor) setChatBubbleColor(me.chatBubbleColor);
+        if (me.themeName) setThemeName(me.themeName);
       }
     }
   }, [users, view]);
 
-  const handleUpdateTheme = async (bg: string, bubble: string) => {
+  const handleUpdateTheme = async (bg: string, bubble: string, name: string) => {
     setChatBgColor(bg);
     setChatBubbleColor(bubble);
+    setThemeName(name);
     try {
-      await actions.updateChatPreferences(view, { chatBackgroundColor: bg, chatBubbleColor: bubble });
+      await actions.updateChatPreferences(view, { chatBackgroundColor: bg, chatBubbleColor: bubble, themeName: name });
     } catch (error) {
       console.error('Failed to update theme:', error);
     }
@@ -1324,8 +1336,8 @@ export default function HomeClient() {
             <div className="flex items-center justify-between px-2">
               <h2 className="text-sm font-bold text-white flex items-center gap-3">
                 <span className="flex h-3 w-3 relative">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-3 w-3 bg-indigo-500"></span>
+                  <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${activeTheme.accent.replace('text-', 'bg-')} opacity-75`}></span>
+                  <span className={`relative inline-flex rounded-full h-3 w-3 ${activeTheme.bubbleMe}`}></span>
                 </span>
                 <div className="flex flex-col">
                   <span className="leading-tight">Direct Messages</span>
@@ -1336,7 +1348,7 @@ export default function HomeClient() {
                       </span>
                     )}
                     {users.find(u => u.username.trim().toLowerCase() === (currentUser.trim().toLowerCase() === "alpha 1" ? "delta 1" : "alpha 1"))?.lastReadAt && (
-                      <span className="text-[8px] font-bold uppercase tracking-[0.1em] text-indigo-400">
+                      <span className={`text-[8px] font-bold uppercase tracking-[0.1em] ${activeTheme.accent}`}>
                         {(() => {
                           const partnerUsername = currentUser.trim().toLowerCase() === "alpha 1" ? "delta 1" : "alpha 1";
                           const partner = users.find(u => u.username.trim().toLowerCase() === partnerUsername)!;
@@ -1359,7 +1371,7 @@ export default function HomeClient() {
                   <button
                     type="button"
                     onClick={handleMarkAsRead}
-                    className="p-2 bg-indigo-500/10 border border-indigo-500/20 rounded-xl text-indigo-400 hover:bg-indigo-500/20 transition-all active:scale-90 flex items-center justify-center min-w-[36px] min-h-[36px]"
+                    className={`p-2 ${activeTheme.glow} border ${activeTheme.accent.replace('text-', 'border-')}/20 rounded-xl ${activeTheme.accent} hover:bg-${activeTheme.accent.split('-')[1]}-500/20 transition-all active:scale-90 flex items-center justify-center min-w-[36px] min-h-[36px]`}
                     title="Mark all as read"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 7 17l-5-5"/><path d="m22 10-7.5 7.5L13 16"/></svg>
@@ -1389,8 +1401,8 @@ export default function HomeClient() {
               </div>
             </div>
 
-            <div className={`${chatBgColor} rounded-[2.5rem] border border-zinc-800 shadow-2xl relative overflow-hidden flex flex-col backdrop-blur-sm ${isMessageExpanded ? "flex-1" : ""}`}>
-              <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 blur-[100px] -mr-32 -mt-32 rounded-full"></div>
+            <div className={`${activeTheme.bg} rounded-[2.5rem] border border-zinc-800 shadow-2xl relative overflow-hidden flex flex-col backdrop-blur-sm ${isMessageExpanded ? "flex-1" : ""}`}>
+              <div className={`absolute top-0 right-0 w-64 h-64 ${activeTheme.glow.replace('/5', '/10')} blur-[100px] -mr-32 -mt-32 rounded-full`}></div>
               
               <div 
                 ref={messagesContainerRef} 
@@ -1400,7 +1412,7 @@ export default function HomeClient() {
                 {showScrollButton && (
                   <button
                     onClick={() => scrollToBottom()}
-                    className="fixed bottom-32 right-10 z-[70] p-4 bg-indigo-500 text-white rounded-full shadow-2xl animate-bounce hover:bg-indigo-400 active:scale-90 transition-all border-4 border-zinc-950"
+                    className={`fixed bottom-32 right-10 z-[70] p-4 ${activeTheme.bubbleMe} text-white rounded-full shadow-2xl animate-bounce hover:opacity-90 active:scale-90 transition-all border-4 border-zinc-950`}
                     title="Scroll to bottom"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><path d="m7 13 5 5 5-5M7 6l5 5 5-5"/></svg>
@@ -1420,7 +1432,7 @@ export default function HomeClient() {
                 {messages.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-full text-center py-20">
                     <div className="w-16 h-16 bg-zinc-950 rounded-full flex items-center justify-center mx-auto border border-zinc-800 mb-6 shadow-inner">
-                      <span className="text-xl text-indigo-500">✉</span>
+                      <span className={`text-xl ${activeTheme.accent}`}>✉</span>
                     </div>
                     <p className="text-zinc-400 font-medium text-sm tracking-tight px-4 max-w-[200px]">
                       Encrypted bridge active. Send a message to start.
@@ -1466,8 +1478,8 @@ export default function HomeClient() {
                               }}
                               className={`max-w-[85%] min-w-[50px] w-fit ${m.imageUrl && !m.text ? "p-3" : "p-4"} rounded-3xl text-[14.5px] leading-[1.6] relative break-words whitespace-pre-wrap shadow-xl cursor-pointer flex-shrink-0 ${
                                 isMe 
-                                  ? `${chatBubbleColor} text-white rounded-tr-none shadow-indigo-900/10` 
-                                  : `${themes.find(t => t.bubbleMe === chatBubbleColor)?.bubblePartner || "bg-zinc-800/80"} text-zinc-100 rounded-tl-none border border-zinc-700/30 shadow-black/20`
+                                  ? `${activeTheme.bubbleMe} ${activeTheme.textMe || 'text-white'} rounded-tr-none ${activeTheme.shadow}` 
+                                  : `${activeTheme.bubblePartner} text-zinc-100 rounded-tl-none border border-zinc-700/30 shadow-black/20`
                               }`}
                             >
                               {m.savedBy?.includes(view as string) && (
@@ -1780,16 +1792,16 @@ export default function HomeClient() {
                   {themes.map((theme) => (
                     <button
                       key={theme.name}
-                      onClick={() => handleUpdateTheme(theme.bg, theme.bubbleMe)}
+                      onClick={() => handleUpdateTheme(theme.bg, theme.bubbleMe, theme.name)}
                       className={`p-4 sm:p-6 rounded-2xl sm:rounded-3xl border-2 transition-all flex flex-col gap-4 text-left group ${
-                        chatBgColor === theme.bg && chatBubbleColor === theme.bubbleMe 
+                        themeName === theme.name 
                           ? "border-indigo-500 bg-indigo-500/10 shadow-lg shadow-indigo-500/10" 
                           : "border-zinc-800 bg-zinc-950/50 hover:border-zinc-700"
                       }`}
                     >
                       <div className="flex justify-between items-center">
                         <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400 group-hover:text-zinc-300">{theme.name}</span>
-                        {chatBgColor === theme.bg && chatBubbleColor === theme.bubbleMe && (
+                        {themeName === theme.name && (
                           <div className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></div>
                         )}
                       </div>

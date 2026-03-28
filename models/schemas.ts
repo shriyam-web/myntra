@@ -37,8 +37,9 @@ const UserSchema = new Schema({
   username: { type: String, required: true, unique: true },
   lastSeen: { type: Date, default: Date.now },
   lastReadAt: { type: Date },
-  chatBackgroundColor: { type: String, default: "zinc-950" }, // Changed to string for flexibility
-  chatBubbleColor: { type: String, default: "indigo-600" },
+  chatBackgroundColor: { type: String, default: "bg-zinc-900/50" }, // Changed to string for flexibility
+  chatBubbleColor: { type: String, default: "bg-indigo-600" },
+  themeName: { type: String, default: "Midnight (Default)" },
 });
 
 export const Ticket = models.Ticket || model('Ticket', TicketSchema);
