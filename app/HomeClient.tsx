@@ -1458,7 +1458,7 @@ export default function HomeClient() {
                                         onClick={(e) => {
                                           e.stopPropagation();
                                           setEditingMessage(m._id);
-                                          setEditingMessageText(m.text);
+                                          setEditingMessageText(m.text || "");
                                           setActiveMessageActions(null);
                                         }}
                                         className="p-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-indigo-400 hover:text-white transition-colors shadow-2xl"
