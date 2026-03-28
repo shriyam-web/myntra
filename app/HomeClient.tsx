@@ -1678,7 +1678,7 @@ export default function HomeClient() {
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
-                        className="bg-zinc-900 border border-zinc-800 text-zinc-400 w-full h-12 rounded-xl hover:text-white transition-all active:scale-95 flex items-center justify-center shadow-lg px-[2%]"
+                        className="bg-zinc-900 border border-zinc-800 text-zinc-400 w-full h-12 rounded-xl hover:text-white transition-all active:scale-95 flex items-center justify-center shadow-lg px-[10%]"
                         disabled={isUploading}
                         title="Upload Photo"
                       >
@@ -1703,7 +1703,7 @@ export default function HomeClient() {
                         ) : (
                           <>
                             <span className="hidden xs:inline">Send</span>
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="group-hover:translate-x-1 transition-transform"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="group-hover:translate-x-1 transition-transform"><path d="m3 3 3 9-3 9 19-9Z"/><path d="M6 12h16"/></svg>
                           </>
                         )}
                       </button>
