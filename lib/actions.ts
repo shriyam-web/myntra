@@ -3,6 +3,27 @@
 import dbConnect from "./mongodb";
 import { Ticket, Wishlist, Plan, TimelineDate, Message, User } from "../models/schemas";
 import { revalidatePath, unstable_noStore as noStore } from "next/cache";
+import { v2 as cloudinary } from "cloudinary";
+
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+// IMAGE UPLOAD
+export async function uploadImage(file: string) {
+  try {
+    const result = await cloudinary.uploader.upload(file, {
+      folder: "messaging",
+    });
+    return result.secure_url;
+  } catch (error) {
+    console.error("Cloudinary upload error:", error);
+    throw new Error("Failed to upload image.");
+  }
+}
 
 // FETCH ALL DATA
 export async function fetchData(messageLimit = 50) {
@@ -219,7 +240,7 @@ async function sendTelegramNotification(text: string) {
   }
 }
 
-export async function createMessage(data: { text: string; createdBy: string; repliedTo?: string }) {
+export async function createMessage(data: { text?: string; imageUrl?: string; createdBy: string; repliedTo?: string }) {
   try {
     await dbConnect();
     const message = await Message.create(data);
@@ -231,7 +252,8 @@ export async function createMessage(data: { text: string; createdBy: string; rep
       const isDelta1Online = delta1 && (Date.now() - new Date(delta1.lastSeen).getTime() < 15000);
       
       if (!isDelta1Online) {
-        sendTelegramNotification(`Alpha 1 sent a new message: ${data.text.substring(0, 100)}${data.text.length > 100 ? "..." : ""}`);
+        const notificationText = data.imageUrl ? "Sent an image" : data.text || "";
+        sendTelegramNotification(`Alpha 1 sent a new message: ${notificationText.substring(0, 100)}${notificationText.length > 100 ? "..." : ""}`);
       } else {
         console.log("Telegram notification skipped: Delta 1 is currently online.");
       }

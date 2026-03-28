@@ -14,12 +14,14 @@ interface Ticket {
 
 interface Message {
   _id: string;
-  text: string;
+  text?: string;
+  imageUrl?: string;
   createdAt: string;
   createdBy: "alpha 1" | "delta 1";
   repliedTo?: {
     _id: string;
-    text: string;
+    text?: string;
+    imageUrl?: string;
     createdBy: string;
   };
 }
@@ -95,6 +97,12 @@ export default function HomeClient() {
   const [chatBgColor, setChatBgColor] = useState<string>("bg-zinc-900/50");
   const [chatBubbleColor, setChatBubbleColor] = useState<string>("bg-indigo-600");
   const [chatPartnerBubbleColor, setChatPartnerBubbleColor] = useState<string>("bg-zinc-800/80");
+  
+  // Image handling
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const themes = [
     { name: "Midnight (Default)", bg: "bg-zinc-900/50", bubbleMe: "bg-indigo-600", bubblePartner: "bg-zinc-800/80" },
@@ -390,21 +398,41 @@ export default function HomeClient() {
     }
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) { // 5MB limit
+        alert("Image too large. Please select an image under 5MB.");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setSelectedImage(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim()) return;
+    if (!newMessage.trim() && !selectedImage) return;
     
+    setIsUploading(true);
     const messageText = newMessage;
+    const currentSelectedImage = selectedImage;
     const tempId = Date.now().toString();
+    
     const optimisticMessage: Message = {
       _id: tempId,
-      text: messageText,
+      text: messageText || undefined,
+      imageUrl: currentSelectedImage || undefined,
       createdAt: new Date().toISOString(),
       createdBy: currentUser as "alpha 1" | "delta 1",
       ...(replyingTo && {
         repliedTo: {
           _id: replyingTo._id,
           text: replyingTo.text,
+          imageUrl: replyingTo.imageUrl,
           createdBy: replyingTo.createdBy
         }
       })
@@ -413,12 +441,19 @@ export default function HomeClient() {
     // Optimistic update
     setMessages(prev => [...prev, optimisticMessage]);
     setNewMessage("");
+    setSelectedImage(null);
     setReplyingTo(null);
     scrollToBottom(true);
 
     try {
+      let imageUrl = undefined;
+      if (currentSelectedImage) {
+        imageUrl = await actions.uploadImage(currentSelectedImage);
+      }
+
       await actions.createMessage({ 
-        text: messageText, 
+        text: messageText || undefined, 
+        imageUrl,
         createdBy: currentUser as "alpha 1" | "delta 1",
         repliedTo: replyingTo?._id
       });
@@ -428,7 +463,10 @@ export default function HomeClient() {
       // Remove optimistic message on error
       setMessages(prev => prev.filter(m => m._id !== tempId));
       setNewMessage(messageText); // Restore input
-      alert('Failed to send message. Please check your database connection.');
+      setSelectedImage(currentSelectedImage);
+      alert('Failed to send message. Please try again.');
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -1363,8 +1401,24 @@ export default function HomeClient() {
                                     {m.repliedTo.createdBy}
                                   </p>
                                   <p className="text-[11px] truncate opacity-80 italic">
-                                    {m.repliedTo.text}
+                                    {m.repliedTo.imageUrl ? "Sent an image" : m.repliedTo.text}
                                   </p>
+                                </div>
+                              )}
+                              {m.imageUrl && (
+                                <div 
+                                  className="mb-2 rounded-2xl overflow-hidden cursor-zoom-in group relative"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setPreviewImage(m.imageUrl!);
+                                  }}
+                                >
+                                  <img 
+                                    src={m.imageUrl} 
+                                    alt="Message attachment" 
+                                    className="w-full max-h-[300px] object-cover hover:scale-105 transition-transform duration-500"
+                                  />
+                                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
                                 </div>
                               )}
                               {editingMessage === m._id ? (
@@ -1465,25 +1519,59 @@ export default function HomeClient() {
                   </div>
                 )}
                 <form onSubmit={handleSendMessage} className="flex gap-2 items-end">
-                  <textarea autoComplete="off" spellCheck={false} 
-                    value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        handleSendMessage(e);
-                      }
-                    }}
-                    className="flex-1 bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 text-[15px] text-white outline-none focus:border-indigo-500/40 focus:ring-4 focus:ring-indigo-500/5 placeholder:text-zinc-600 transition-all shadow-inner resize-none min-h-[58px] max-h-[120px]" 
-                    placeholder="Type a message..."
-                    rows={1}
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileChange}
+                    accept="image/*"
+                    className="hidden"
                   />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="bg-zinc-900 border border-zinc-800 text-zinc-400 p-4 rounded-2xl hover:text-white transition-all active:scale-90 h-[58px] flex items-center justify-center min-w-[58px]"
+                    disabled={isUploading}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
+                  </button>
+                  <div className="flex-1 flex flex-col gap-2">
+                    {selectedImage && (
+                      <div className="relative w-20 h-20 rounded-xl overflow-hidden border-2 border-indigo-500 shadow-xl group">
+                        <img src={selectedImage} alt="Selected" className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => setSelectedImage(null)}
+                          className="absolute top-1 right-1 bg-black/50 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        </button>
+                      </div>
+                    )}
+                    <textarea autoComplete="off" spellCheck={false} 
+                      value={newMessage}
+                      onChange={(e) => setNewMessage(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSendMessage(e);
+                        }
+                      }}
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 text-[15px] text-white outline-none focus:border-indigo-500/40 focus:ring-4 focus:ring-indigo-500/5 placeholder:text-zinc-600 transition-all shadow-inner resize-none min-h-[58px] max-h-[120px]" 
+                      placeholder={isUploading ? "Uploading..." : "Type a message..."}
+                      rows={1}
+                      disabled={isUploading}
+                    />
+                  </div>
                   <button 
                     type="submit"
                     className="bg-indigo-500 text-white min-w-[80px] px-6 h-[58px] flex items-center justify-center rounded-2xl shadow-xl active:scale-90 transition-all hover:bg-indigo-400 disabled:bg-zinc-800 disabled:text-zinc-600 disabled:shadow-none group"
-                    disabled={!newMessage.trim()}
+                    disabled={(!newMessage.trim() && !selectedImage) || isUploading}
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform"><line x1="22" y1="2" x2="11" y2="13"/><polyline points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                    {isUploading ? (
+                      <div className="w-6 h-6 border-4 border-white/30 border-t-white rounded-full animate-spin"></div>
+                    ) : (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform"><line x1="22" y1="2" x2="11" y2="13"/><polyline points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                    )}
                   </button>
                 </form>
               </div>
@@ -1610,6 +1698,31 @@ export default function HomeClient() {
             <span className="text-[7px] font-bold text-zinc-800 uppercase tracking-widest">End of Line</span>
           </div>
         </div>
+        {previewImage && (
+          <div 
+            className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/95 backdrop-blur-xl animate-in fade-in duration-300"
+            onClick={() => setPreviewImage(null)}
+          >
+            <div className="relative w-full max-w-4xl max-h-[90vh] flex flex-col items-center justify-center animate-in zoom-in-95 duration-300">
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPreviewImage(null);
+                }}
+                className="absolute -top-12 right-0 sm:-right-12 sm:top-0 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-all active:scale-90"
+                title="Close preview"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+              <img 
+                src={previewImage} 
+                alt="Full size preview" 
+                className="w-full h-full object-contain rounded-lg shadow-2xl"
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+          </div>
+        )}
       </footer>
     </div>
   );
