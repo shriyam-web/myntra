@@ -93,6 +93,7 @@ export default function HomeClient() {
   const [activeMessageActions, setActiveMessageActions] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isMessageExpanded, setIsMessageExpanded] = useState(false);
+  const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [showThemeSettings, setShowThemeSettings] = useState(false);
   const [showClearHistoryModal, setShowClearHistoryModal] = useState(false);
@@ -159,7 +160,7 @@ export default function HomeClient() {
   };
 
   const messagingSectionWrapperClass = isMessageExpanded
-    ? "fixed inset-0 z-[60] bg-zinc-950 p-4 flex flex-col sm:relative sm:inset-auto sm:bg-transparent sm:z-auto sm:p-0"
+    ? "fixed inset-0 z-[60] bg-zinc-950 p-1 flex flex-col sm:relative sm:inset-auto sm:bg-transparent sm:z-auto sm:p-0"
     : "";
 
   const fetchInitialData = useCallback(async (silent = false) => {
@@ -1332,78 +1333,104 @@ export default function HomeClient() {
         )}
         {activeTab === "messages" && (
           <>
-            <section className={`space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 ${messagingSectionWrapperClass}`}>
-            <div className="flex items-center justify-between px-2">
-              <h2 className="text-sm font-bold text-white flex items-center gap-3">
-                <span className="flex h-3 w-3 relative">
+            <section className={`${isMessageExpanded ? "space-y-1" : "space-y-6"} animate-in fade-in slide-in-from-bottom-4 duration-700 ${messagingSectionWrapperClass}`}>
+            <div className={`flex items-center justify-between px-2 ${isMessageExpanded && isHeaderCollapsed ? "h-0 overflow-hidden opacity-0" : "py-1"}`}>
+              <h2 className={`${isMessageExpanded ? "text-xs" : "text-sm"} font-bold text-white flex items-center gap-2`}>
+                <span className="flex h-2.5 w-2.5 relative">
                   <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${activeTheme.accent.replace('text-', 'bg-')} opacity-75`}></span>
-                  <span className={`relative inline-flex rounded-full h-3 w-3 ${activeTheme.bubbleMe}`}></span>
+                  <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${activeTheme.bubbleMe}`}></span>
                 </span>
                 <div className="flex flex-col">
                   <span className="leading-tight">Direct Messages</span>
-                  <div className="flex flex-col gap-0.5 mt-0.5">
-                    {getPartnerStatus() && (
-                      <span className={`text-[9px] font-bold uppercase tracking-[0.1em] ${getPartnerStatus() === "Online" ? "text-green-500 animate-pulse" : "text-zinc-600"}`}>
-                        {getPartnerStatus()}
-                      </span>
-                    )}
-                    {users.find(u => u.username.trim().toLowerCase() === (currentUser.trim().toLowerCase() === "alpha 1" ? "delta 1" : "alpha 1"))?.lastReadAt && (
-                      <span className={`text-[8px] font-bold uppercase tracking-[0.1em] ${activeTheme.accent}`}>
-                        {(() => {
-                          const partnerUsername = currentUser.trim().toLowerCase() === "alpha 1" ? "delta 1" : "alpha 1";
-                          const partner = users.find(u => u.username.trim().toLowerCase() === partnerUsername)!;
-                          const readDate = new Date(partner.lastReadAt!);
-                          const now = new Date();
-                          const isToday = readDate.toDateString() === now.toDateString();
-                          const time = readDate.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-                          if (isToday) return `Read at ${time}`;
-                          const day = readDate.getDate();
-                          const month = readDate.toLocaleString('default', { month: 'long' });
-                          return `Read ${day} ${month}, ${time}`;
-                        })()}
-                      </span>
-                    )}
-                  </div>
+                  {!isHeaderCollapsed && (
+                    <div className="flex items-center gap-2 mt-0.5">
+                      {getPartnerStatus() && (
+                        <span className={`text-[8px] font-bold uppercase tracking-[0.1em] ${getPartnerStatus() === "Online" ? "text-green-500 animate-pulse" : "text-zinc-600"}`}>
+                          {getPartnerStatus()}
+                        </span>
+                      )}
+                      {users.find(u => u.username.trim().toLowerCase() === (currentUser.trim().toLowerCase() === "alpha 1" ? "delta 1" : "alpha 1"))?.lastReadAt && (
+                        <span className={`text-[7px] font-bold uppercase tracking-[0.1em] ${activeTheme.accent} opacity-60`}>
+                          {(() => {
+                            const partnerUsername = currentUser.trim().toLowerCase() === "alpha 1" ? "delta 1" : "alpha 1";
+                            const partner = users.find(u => u.username.trim().toLowerCase() === partnerUsername)!;
+                            const readDate = new Date(partner.lastReadAt!);
+                            const now = new Date();
+                            const isToday = readDate.toDateString() === now.toDateString();
+                            const time = readDate.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+                            if (isToday) return `Read at ${time}`;
+                            const day = readDate.getDate();
+                            const month = readDate.toLocaleString('default', { month: 'long' });
+                            return `Read ${day} ${month}, ${time}`;
+                          })()}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               </h2>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
+                {isMessageExpanded && (
+                  <button
+                    type="button"
+                    onClick={() => setIsHeaderCollapsed(prev => !prev)}
+                    className="p-1.5 bg-zinc-900/50 border border-zinc-800 rounded-lg text-zinc-500 hover:text-white transition-all active:scale-90 flex items-center justify-center min-w-[32px] min-h-[32px]"
+                    title={isHeaderCollapsed ? "Expand header" : "Collapse header"}
+                  >
+                    {isHeaderCollapsed ? (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
+                    ) : (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m17 9-5-5-5 5"/><path d="m17 15-5 5-5-5"/></svg>
+                    )}
+                  </button>
+                )}
                 {hasUnreadMessages() && (
                   <button
                     type="button"
                     onClick={handleMarkAsRead}
-                    className={`p-2 ${activeTheme.glow} border ${activeTheme.accent.replace('text-', 'border-')}/20 rounded-xl ${activeTheme.accent} hover:bg-${activeTheme.accent.split('-')[1]}-500/20 transition-all active:scale-90 flex items-center justify-center min-w-[36px] min-h-[36px]`}
+                    className={`p-1.5 ${activeTheme.glow} border ${activeTheme.accent.replace('text-', 'border-')}/20 rounded-lg ${activeTheme.accent} hover:bg-${activeTheme.accent.split('-')[1]}-500/20 transition-all active:scale-90 flex items-center justify-center min-w-[32px] min-h-[32px]`}
                     title="Mark all as read"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 7 17l-5-5"/><path d="m22 10-7.5 7.5L13 16"/></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 7 17l-5-5"/><path d="m22 10-7.5 7.5L13 16"/></svg>
                   </button>
                 )}
                 <button
                   type="button"
                   onClick={() => setIsMessageExpanded(prev => !prev)}
-                  className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl text-zinc-500 hover:text-white transition-all active:scale-90 flex items-center justify-center min-w-[36px] min-h-[36px]"
+                  className="p-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-500 hover:text-white transition-all active:scale-90 flex items-center justify-center min-w-[32px] min-h-[32px]"
                   title={isMessageExpanded ? "Minimize messages" : "Maximize messages"}
                 >
                   {isMessageExpanded ? (
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3v5H3M21 8h-5V3M3 16h5v5M16 21v-5h5"/></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3v5H3M21 8h-5V3M3 16h5v5M16 21v-5h5"/></svg>
                   ) : (
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
                   )}
                 </button>
                 <button
                   type="button"
                   onClick={() => fetchInitialData()}
-                  className={`p-2 bg-zinc-900 border border-zinc-800 rounded-xl text-zinc-500 hover:text-white transition-all active:scale-90 flex items-center justify-center min-w-[36px] min-h-[36px] ${isRefreshing ? "animate-spin" : ""}`}
+                  className={`p-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-500 hover:text-white transition-all active:scale-90 flex items-center justify-center min-w-[32px] min-h-[32px] ${isRefreshing ? "animate-spin" : ""}`}
                   title="Refresh status and messages"
                   disabled={isRefreshing}
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.85.83 6.72 2.27L21 8"/><path d="M21 3v5h-5"/></svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.85.83 6.72 2.27L21 8"/><path d="M21 3v5h-5"/></svg>
                 </button>
               </div>
             </div>
 
-            <div className={`${activeTheme.bg} rounded-[2.5rem] border border-zinc-800 shadow-2xl relative overflow-hidden flex flex-col backdrop-blur-sm ${isMessageExpanded ? "flex-1" : ""}`}>
+            <div className={`${activeTheme.bg} ${isMessageExpanded ? "rounded-2xl" : "rounded-[2.5rem]"} border border-zinc-800 shadow-2xl relative overflow-hidden flex flex-col backdrop-blur-sm ${isMessageExpanded ? "flex-1" : ""}`}>
               <div className={`absolute top-0 right-0 w-64 h-64 ${activeTheme.glow.replace('/5', '/10')} blur-[100px] -mr-32 -mt-32 rounded-full`}></div>
               
+              {isHeaderCollapsed && isMessageExpanded && (
+                <button 
+                  onClick={() => setIsHeaderCollapsed(false)}
+                  className="absolute top-2 left-1/2 -translate-x-1/2 z-[70] p-1 bg-zinc-900/40 hover:bg-zinc-900/80 border border-zinc-800 rounded-full text-zinc-500 hover:text-white transition-all active:scale-95"
+                  title="Expand header"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
+                </button>
+              )}
+
               <div 
                 ref={messagesContainerRef} 
                 onScroll={handleScroll}
