@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, Fragment } from "react";
 import Image from "next/image";
 import * as actions from "../lib/actions";
 
@@ -135,6 +135,24 @@ export default function HomeClient() {
   const lastMessageIdRef = useRef<string | null>(null);
   
   const activeTheme = themes.find(t => t.name === themeName) || themes[0];
+
+  const formatDateLabel = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    
+    const msgDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    
+    if (msgDate.getTime() === today.getTime()) {
+      return "Today";
+    } else if (msgDate.getTime() === yesterday.getTime()) {
+      return "Yesterday";
+    } else {
+      return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+    }
+  };
 
   const scrollToBottom = (instant = false) => {
     setTimeout(() => {
@@ -1467,17 +1485,29 @@ export default function HomeClient() {
                   </div>
                 ) : (
                   <div className="space-y-6">
-                    {messages.map((m) => {
+                    {messages.map((m, index) => {
                       const isMe = m.createdBy.trim().toLowerCase() === currentUser.trim().toLowerCase();
                       const partnerUsername = (currentUser.trim().toLowerCase() === "alpha 1" ? "delta 1" : "alpha 1");
                       const partner = users.find(u => u.username.trim().toLowerCase() === partnerUsername);
                       const isRead = isMe && !!partner?.lastReadAt && (new Date(m.createdAt).getTime() <= new Date(partner.lastReadAt).getTime() + 100);
                       
+                      const messageDate = new Date(m.createdAt).toLocaleDateString('en-GB');
+                      const prevMessage = index > 0 ? messages[index - 1] : null;
+                      const prevMessageDate = prevMessage ? new Date(prevMessage.createdAt).toLocaleDateString('en-GB') : null;
+                      const showDateSeparator = messageDate !== prevMessageDate;
+
                       return (
-                        <div 
-                          key={m._id} 
-                          id={`message-${m._id}`}
-                          className={`flex flex-col w-full transition-all duration-200 rounded-3xl ${isMe ? "items-end" : "items-start"}`}
+                        <Fragment key={m._id}>
+                          {showDateSeparator && (
+                            <div className="flex justify-center my-6">
+                              <div className="bg-zinc-800/80 text-zinc-400 text-[11px] font-bold uppercase tracking-widest px-4 py-1.5 rounded-full border border-zinc-700/50 shadow-sm backdrop-blur-sm">
+                                {formatDateLabel(m.createdAt)}
+                              </div>
+                            </div>
+                          )}
+                          <div 
+                            id={`message-${m._id}`}
+                            className={`flex flex-col w-full transition-all duration-200 rounded-3xl ${isMe ? "items-end" : "items-start"}`}
                           onTouchStart={(e) => setTouchStart(e.targetTouches[0].clientX)}
                           onTouchEnd={(e) => {
                             if (touchStart === null) return;
@@ -1638,6 +1668,7 @@ export default function HomeClient() {
                             )}
                           </div>
                         </div>
+                        </Fragment>
                       );
                     })}
                     <div ref={messagesEndRef} />
