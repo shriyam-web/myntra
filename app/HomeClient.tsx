@@ -124,6 +124,18 @@ export default function HomeClient() {
     }, 100);
   };
 
+  const scrollToMessage = (id: string) => {
+    const element = document.getElementById(`message-${id}`);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // Visual feedback: highlight effect
+      element.classList.add('ring-2', 'ring-indigo-500', 'ring-offset-4', 'ring-offset-zinc-900');
+      setTimeout(() => {
+        element.classList.remove('ring-2', 'ring-indigo-500', 'ring-offset-4', 'ring-offset-zinc-900');
+      }, 2000);
+    }
+  };
+
   const messagingSectionWrapperClass = isMessageExpanded
     ? "fixed inset-0 z-[60] bg-zinc-950 p-4 flex flex-col sm:relative sm:inset-auto sm:bg-transparent sm:z-auto sm:p-0"
     : "";
@@ -1306,7 +1318,8 @@ export default function HomeClient() {
                       return (
                         <div 
                           key={m._id} 
-                          className={`flex flex-col w-full transition-transform duration-200 ${isMe ? "items-end" : "items-start"}`}
+                          id={`message-${m._id}`}
+                          className={`flex flex-col w-full transition-all duration-200 rounded-3xl ${isMe ? "items-end" : "items-start"}`}
                           onTouchStart={(e) => setTouchStart(e.targetTouches[0].clientX)}
                           onTouchEnd={(e) => {
                             if (touchStart === null) return;
@@ -1339,7 +1352,13 @@ export default function HomeClient() {
                               }`}
                             >
                               {m.repliedTo && (
-                                <div className={`mb-2 p-2 border-l-2 bg-black/10 rounded-r-lg max-w-full overflow-hidden ${isMe ? "border-white/50" : "border-indigo-500/50"}`}>
+                                <div 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    scrollToMessage(m.repliedTo!._id);
+                                  }}
+                                  className={`mb-2 p-2 border-l-2 bg-black/10 rounded-r-lg max-w-full overflow-hidden cursor-pointer hover:bg-black/20 transition-colors ${isMe ? "border-white/50" : "border-indigo-500/50"}`}
+                                >
                                   <p className="text-[10px] font-black uppercase tracking-wider opacity-60 mb-0.5">
                                     {m.repliedTo.createdBy}
                                   </p>
