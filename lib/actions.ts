@@ -226,7 +226,15 @@ export async function createMessage(data: { text: string; createdBy: string }) {
 
     // Send Telegram notification if alpha 1 sends a message
     if (data.createdBy === "alpha 1") {
-      sendTelegramNotification(`Alpha 1 sent a new message: ${data.text.substring(0, 100)}${data.text.length > 100 ? "..." : ""}`);
+      // Check if delta 1 is online (last seen within 15 seconds)
+      const delta1 = await User.findOne({ username: "delta 1" }).lean() as any;
+      const isDelta1Online = delta1 && (Date.now() - new Date(delta1.lastSeen).getTime() < 15000);
+      
+      if (!isDelta1Online) {
+        sendTelegramNotification(`Alpha 1 sent a new message: ${data.text.substring(0, 100)}${data.text.length > 100 ? "..." : ""}`);
+      } else {
+        console.log("Telegram notification skipped: Delta 1 is currently online.");
+      }
     }
 
     revalidatePath('/');

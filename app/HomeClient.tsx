@@ -51,7 +51,6 @@ export default function HomeClient() {
   const [isIncognito, setIsIncognito] = useState<boolean | null>(null);
   const [password, setPassword] = useState("");
   const [view, setView] = useState<"login" | "alpha 1" | "delta 1">("login");
-  const [error, setError] = useState("");
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [newTicket, setNewTicket] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
@@ -316,6 +315,17 @@ export default function HomeClient() {
     };
   }, []);
 
+  useEffect(() => {
+    if (view === "login" && password.length > 0) {
+      const lowerPassword = password.toLowerCase().trim();
+      if (lowerPassword === "icai") {
+        setView("alpha 1");
+      } else if (lowerPassword === "gamma2") {
+        setView("delta 1");
+      }
+    }
+  }, [password, view]);
+
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     const lowerPassword = password.toLowerCase().trim();
@@ -325,8 +335,6 @@ export default function HomeClient() {
     } else if (lowerPassword === "gamma2") {
       setView("delta 1");
       setError("");
-    } else {
-      setError("Unauthorized access. Check credentials.");
     }
   };
 
@@ -594,48 +602,19 @@ export default function HomeClient() {
   if (view === "login") {
     return (
       <div className="flex flex-col min-h-screen items-center justify-center bg-zinc-950 font-sans p-6">
-        <div className="bg-zinc-900 p-10 rounded-[40px] border border-zinc-800 w-full max-w-sm flex flex-col items-center shadow-2xl relative overflow-hidden group">
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-zinc-700 to-transparent"></div>
-          
-          <h1 className="text-2xl font-bold text-white mb-2 uppercase tracking-[0.1em] text-center">
-            Internal Terminal
-          </h1>
-          <p className="text-[10px] text-zinc-600 font-bold uppercase tracking-widest mb-10">Sign in to continue</p>
-
-          <form onSubmit={handleLogin} className="flex flex-col gap-6 w-full">
-            <div className="space-y-3">
-              <label htmlFor="password" title="Password" className="block text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">
-                Password
-              </label>
-              <input
-                type="password"
-                id="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-6 py-4 bg-zinc-950 border border-zinc-800 rounded-2xl text-white focus:border-white focus:ring-1 focus:ring-white/20 outline-none transition-all font-mono text-sm placeholder:text-zinc-800"
-                placeholder="••••••••"
-                required
-              />
-            </div>
-
-            {error && (
-              <div className="bg-red-950/20 border border-red-900/50 p-4 rounded-xl">
-                <p className="text-red-500 text-[10px] font-black uppercase tracking-widest text-center">{error}</p>
-              </div>
-            )}
-
-            <button
-              type="submit"
-              className="group relative bg-white text-black py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] hover:bg-zinc-200 transition-all active:scale-[0.98] shadow-xl shadow-white/5 overflow-hidden"
-            >
-              <span className="relative z-10">Log In</span>
-              <div className="absolute inset-0 bg-zinc-200 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
-            </button>
-          </form>
-          
-          <p className="mt-10 text-[9px] text-zinc-700 font-black uppercase tracking-[0.2em]">
-            Authorized Personnel Only
-          </p>
+        <div className="w-full max-w-xs flex flex-col items-center">
+          <input
+            type="password"
+            id="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="off"
+            spellCheck={false}
+            className="w-full px-6 py-4 bg-zinc-900 border border-zinc-800 rounded-2xl text-white focus:border-white focus:ring-1 focus:ring-white/20 outline-none transition-all font-mono text-center text-sm placeholder:text-zinc-600"
+            placeholder="enter your web token here"
+            required
+            autoFocus
+          />
         </div>
       </div>
     );
@@ -790,7 +769,7 @@ export default function HomeClient() {
               <div className="bg-zinc-900 p-6 sm:p-8 rounded-[2.5rem] border border-zinc-800/50 shadow-2xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 blur-[80px] -mr-16 -mt-16 rounded-full"></div>
                 <form onSubmit={(e) => handleCreateTicket(e, currentUser as "alpha 1" | "delta 1")} className="flex flex-col gap-6 relative z-10">
-                  <textarea
+                  <textarea autoComplete="off" spellCheck={false}
                     value={newTicket}
                     onChange={(e) => setNewTicket(e.target.value)}
                     className="w-full p-6 bg-zinc-950 border border-zinc-800 rounded-3xl focus:border-zinc-600 outline-none text-white font-bold text-sm min-h-[140px] placeholder:text-zinc-800 transition-all shadow-inner resize-none"
@@ -901,7 +880,7 @@ export default function HomeClient() {
             <div className="bg-zinc-900 p-6 sm:p-8 rounded-[2.5rem] sm:rounded-[3rem] border border-zinc-800/50 shadow-2xl space-y-8 relative overflow-hidden">
                <div className="absolute top-0 right-0 w-32 h-32 bg-pink-500/5 blur-[80px] -mr-16 -mt-16 rounded-full"></div>
               <div className="flex flex-col sm:flex-row gap-4 relative z-10">
-                <input 
+                <input autoComplete="off" spellCheck={false} 
                   value={newWish}
                   onChange={(e) => setNewWish(e.target.value)}
                   className="flex-1 bg-zinc-950 border border-zinc-800 rounded-2xl px-6 py-5 text-sm font-bold text-white outline-none focus:border-zinc-600 placeholder:text-zinc-800 transition-all shadow-inner" 
@@ -994,7 +973,7 @@ export default function HomeClient() {
             <div className="bg-zinc-900 p-8 rounded-[3rem] border border-zinc-800 shadow-2xl space-y-8 relative overflow-hidden">
                <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 blur-[80px] -mr-16 -mt-16 rounded-full"></div>
               <div className="flex flex-col sm:flex-row gap-4 relative z-10">
-                <input 
+                <input autoComplete="off" spellCheck={false} 
                   value={newPlan}
                   onChange={(e) => setNewPlan(e.target.value)}
                   className="flex-1 bg-zinc-950 border border-zinc-800 rounded-2xl px-6 py-5 text-sm font-bold text-white outline-none focus:border-zinc-600 placeholder:text-zinc-800" 
@@ -1087,13 +1066,13 @@ export default function HomeClient() {
             <div className="bg-zinc-900 p-6 sm:p-8 rounded-[2.5rem] sm:rounded-[3rem] border border-zinc-800/50 shadow-2xl space-y-8 relative overflow-hidden">
                <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/5 blur-[80px] -mr-16 -mt-16 rounded-full"></div>
               <div className="flex flex-col sm:flex-row gap-4 relative z-10">
-                <input 
+                <input autoComplete="off" spellCheck={false} 
                   value={newEvent}
                   onChange={(e) => setNewEvent(e.target.value)}
                   className="flex-1 bg-zinc-950 border border-zinc-800 rounded-2xl px-6 py-5 text-sm font-bold text-white outline-none focus:border-zinc-600 placeholder:text-zinc-800 transition-all shadow-inner" 
                   placeholder="Event description..."
                 />
-                <input 
+                <input autoComplete="off" spellCheck={false} 
                   value={newDate}
                   onChange={(e) => setNewDate(e.target.value)}
                   className="bg-zinc-950 border border-zinc-800 rounded-2xl px-6 py-5 text-sm font-bold text-white outline-none focus:border-zinc-600 placeholder:text-zinc-800 transition-all shadow-inner" 
@@ -1390,7 +1369,7 @@ export default function HomeClient() {
 
               <div className="p-4 bg-zinc-950/50 border-t border-zinc-800/50 backdrop-blur-md">
                 <form onSubmit={handleSendMessage} className="flex gap-2 items-end">
-                  <textarea 
+                  <textarea autoComplete="off" spellCheck={false} 
                     value={newMessage}
                     onChange={(e) => setNewMessage(e.target.value)}
                     onKeyDown={(e) => {
