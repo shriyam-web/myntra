@@ -326,18 +326,6 @@ export default function HomeClient() {
     }
   }, [password, view]);
 
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    const lowerPassword = password.toLowerCase().trim();
-    if (lowerPassword === "icai") {
-      setView("alpha 1");
-      setError("");
-    } else if (lowerPassword === "gamma2") {
-      setView("delta 1");
-      setError("");
-    }
-  };
-
   const handleCreateTicket = async (e: React.FormEvent, user: "alpha 1" | "delta 1") => {
     e.preventDefault();
     if (!newTicket.trim()) return;
