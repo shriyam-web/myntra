@@ -1523,38 +1523,38 @@ export default function HomeClient() {
                   </div>
                 )}
                 <form onSubmit={handleSendMessage} className="flex flex-col gap-3">
-                  <div className="flex-1 flex flex-col gap-2">
-                    {selectedImage && (
-                      <div className="relative w-24 sm:w-32 aspect-square rounded-xl overflow-hidden border-2 border-indigo-500 shadow-xl animate-in zoom-in-90 duration-200 group">
-                        <img src={selectedImage} alt="Selected" className="w-full h-full object-cover" />
-                        <button
-                          type="button"
-                          onClick={() => setSelectedImage(null)}
-                          className="absolute top-1.5 right-1.5 bg-black/70 text-white rounded-full p-1.5 hover:bg-black transition-colors shadow-lg"
-                          title="Remove image"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                        </button>
-                      </div>
-                    )}
-                    <textarea autoComplete="off" spellCheck={false} 
-                      value={newMessage}
-                      onChange={(e) => setNewMessage(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey) {
-                          e.preventDefault();
-                          handleSendMessage(e);
-                        }
-                      }}
-                      className="w-full bg-zinc-900/80 border border-zinc-800 rounded-2xl px-5 py-4 text-[15px] text-white outline-none focus:border-indigo-500/40 focus:ring-4 focus:ring-indigo-500/5 placeholder:text-zinc-600 transition-all shadow-inner resize-none min-h-[80px] max-h-[200px]" 
-                      placeholder={isUploading ? "Uploading..." : "Type a message..."}
-                      rows={2}
-                      disabled={isUploading}
-                    />
-                  </div>
-                  
-                  <div className="flex justify-between items-center gap-2">
-                    <div className="flex gap-2">
+                  {selectedImage && (
+                    <div className="relative w-24 sm:w-32 aspect-square rounded-xl overflow-hidden border-2 border-indigo-500 shadow-xl animate-in zoom-in-90 duration-200 group">
+                      <img src={selectedImage} alt="Selected" className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => setSelectedImage(null)}
+                        className="absolute top-1.5 right-1.5 bg-black/70 text-white rounded-full p-1.5 hover:bg-black transition-colors shadow-lg"
+                        title="Remove image"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                      </button>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <div className="w-[65%]">
+                      <textarea autoComplete="off" spellCheck={false} 
+                        value={newMessage}
+                        onChange={(e) => setNewMessage(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            handleSendMessage(e);
+                          }
+                        }}
+                        className="w-full bg-zinc-900/80 border border-zinc-800 rounded-2xl px-4 py-3 text-[15px] text-white outline-none focus:border-indigo-500/40 focus:ring-4 focus:ring-indigo-500/5 placeholder:text-zinc-600 transition-all shadow-inner resize-none min-h-[48px] max-h-[200px]" 
+                        placeholder={isUploading ? "Uploading..." : "Type a message..."}
+                        rows={1}
+                        disabled={isUploading}
+                      />
+                    </div>
+                    
+                    <div className="w-[10%] flex justify-center">
                       <input
                         type="file"
                         ref={fileInputRef}
@@ -1565,28 +1565,30 @@ export default function HomeClient() {
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
-                        className="bg-zinc-900 border border-zinc-800 text-zinc-400 p-3 rounded-xl hover:text-white transition-all active:scale-95 flex items-center gap-2 px-4 text-xs font-bold uppercase tracking-wider"
+                        className="bg-zinc-900 border border-zinc-800 text-zinc-400 w-full h-12 rounded-xl hover:text-white transition-all active:scale-95 flex items-center justify-center shadow-lg"
                         disabled={isUploading}
+                        title="Upload Photo"
                       >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
-                        <span>Photo</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
                       </button>
                     </div>
 
-                    <button 
-                      type="submit"
-                      className="bg-indigo-500 text-white px-8 h-12 flex items-center justify-center rounded-xl shadow-xl active:scale-95 transition-all hover:bg-indigo-400 disabled:bg-zinc-800 disabled:text-zinc-600 disabled:shadow-none group gap-2 text-xs font-bold uppercase tracking-widest"
-                      disabled={(!newMessage.trim() && !selectedImage) || isUploading}
-                    >
-                      {isUploading ? (
-                        <div className="w-5 h-5 border-3 border-white/30 border-t-white rounded-full animate-spin"></div>
-                      ) : (
-                        <>
-                          <span>Send</span>
-                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform"><line x1="22" y1="2" x2="11" y2="13"/><polyline points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                        </>
-                      )}
-                    </button>
+                    <div className="w-[25%]">
+                      <button 
+                        type="submit"
+                        className="w-full bg-indigo-500 text-white h-12 flex items-center justify-center rounded-xl shadow-xl active:scale-95 transition-all hover:bg-indigo-400 disabled:bg-zinc-800 disabled:text-zinc-600 disabled:shadow-none group gap-2 text-[10px] font-bold uppercase tracking-wider"
+                        disabled={(!newMessage.trim() && !selectedImage) || isUploading}
+                      >
+                        {isUploading ? (
+                          <div className="w-5 h-5 border-3 border-white/30 border-t-white rounded-full animate-spin"></div>
+                        ) : (
+                          <>
+                            <span className="hidden xs:inline">Send</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform"><line x1="22" y1="2" x2="11" y2="13"/><polyline points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
                 </form>
               </div>
