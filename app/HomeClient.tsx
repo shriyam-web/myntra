@@ -18,6 +18,7 @@ interface Message {
   imageUrl?: string;
   createdAt: string;
   createdBy: "alpha 1" | "delta 1";
+  savedBy?: string[];
   repliedTo?: {
     _id: string;
     text?: string;
@@ -93,6 +94,8 @@ export default function HomeClient() {
   const [isMessageExpanded, setIsMessageExpanded] = useState(false);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [showThemeSettings, setShowThemeSettings] = useState(false);
+  const [showClearHistoryModal, setShowClearHistoryModal] = useState(false);
+  const [includeSavedInDelete, setIncludeSavedInDelete] = useState(false);
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [chatBgColor, setChatBgColor] = useState<string>("bg-zinc-900/50");
   const [chatBubbleColor, setChatBubbleColor] = useState<string>("bg-indigo-600");
@@ -152,7 +155,7 @@ export default function HomeClient() {
   const fetchInitialData = useCallback(async (silent = false) => {
     try {
       if (!silent) setIsRefreshing(true);
-      const data = await actions.fetchData(messageLimit);
+      const data = await actions.fetchData(messageLimit, view as string);
       setTickets(data.tickets);
       setWishlist(data.wishlist);
       setPlans(data.plans);
@@ -175,7 +178,7 @@ export default function HomeClient() {
       if (!silent) alert('Failed to load data. Please check your database connection.');
       setIsRefreshing(false);
     }
-  }, [messageLimit]);
+  }, [messageLimit, view]);
 
   const handleMarkAsRead = async () => {
     try {
@@ -506,6 +509,15 @@ export default function HomeClient() {
   };
 
   const handleDeleteMessage = async (id: string) => {
+    const message = messages.find(m => m._id === id);
+    const isSaved = message?.savedBy?.includes(view as string);
+    
+    if (isSaved) {
+      if (!confirm("This message is saved. Do you want to delete it too?")) {
+        return;
+      }
+    }
+
     try {
       await actions.deleteMessage(id);
       fetchInitialData();
@@ -515,12 +527,22 @@ export default function HomeClient() {
     }
   };
 
-  const handleDeleteAllMessages = async () => {
-    if (!confirm("Are you sure you want to clear all messages?")) return;
+  const handleToggleSaveMessage = async (id: string) => {
     try {
-      await actions.deleteAllMessages();
+      await actions.toggleSaveMessage(id, view as string);
+      fetchInitialData(true);
+    } catch (error) {
+      console.error('Failed to save message:', error);
+    }
+  };
+
+  const handleDeleteAllMessages = async (deleteForEveryone = false) => {
+    try {
+      await actions.deleteAllMessages(deleteForEveryone, view as string, includeSavedInDelete);
       setMessages([]);
       fetchInitialData();
+      setShowClearHistoryModal(false);
+      setIncludeSavedInDelete(false);
     } catch (error) {
       console.error('Failed to clear chat:', error);
       alert('Failed to clear chat. Please check your database connection.');
@@ -1424,6 +1446,13 @@ export default function HomeClient() {
                                   : `${themes.find(t => t.bubbleMe === chatBubbleColor)?.bubblePartner || "bg-zinc-800/80"} text-zinc-100 rounded-tl-none border border-zinc-700/30 shadow-black/20`
                               }`}
                             >
+                              {m.savedBy?.includes(view as string) && (
+                                <div className={`absolute top-1 ${isMe ? "right-2" : "right-2"} z-10 text-yellow-400 opacity-80`}>
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+                                  </svg>
+                                </div>
+                              )}
                               {m.repliedTo && (
                                 <div 
                                   onClick={(e) => {
@@ -1490,6 +1519,20 @@ export default function HomeClient() {
                                     title="Reply"
                                   >
                                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleToggleSaveMessage(m._id);
+                                    }}
+                                    className={`p-1.5 bg-zinc-900 border border-zinc-800 rounded-lg transition-colors shadow-2xl ${
+                                      m.savedBy?.includes(view as string) ? "text-yellow-400" : "text-indigo-400 hover:text-white"
+                                    }`}
+                                    title={m.savedBy?.includes(view as string) ? "Unsave" : "Save"}
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill={m.savedBy?.includes(view as string) ? "currentColor" : "none"} stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                      <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+                                    </svg>
                                   </button>
                                   {isMe && (
                                     <>
@@ -1638,7 +1681,7 @@ export default function HomeClient() {
             {!isMessageExpanded && (
               <div className="flex flex-col sm:flex-row gap-3 mt-6">
                 <button 
-                  onClick={handleDeleteAllMessages}
+                  onClick={() => setShowClearHistoryModal(true)}
                   className="flex-1 py-4 bg-red-500/5 border border-red-500/10 rounded-2xl text-red-400 text-xs font-bold hover:bg-red-500 hover:text-white hover:border-red-500 transition-all active:scale-95 flex items-center justify-center gap-2 group shadow-lg shadow-red-500/5"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="group-hover:rotate-12 transition-transform"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
@@ -1741,6 +1784,74 @@ export default function HomeClient() {
                   className="w-full py-5 bg-white text-black rounded-2xl font-black uppercase tracking-[0.2em] shadow-xl hover:bg-zinc-200 transition-all active:scale-95"
                 >
                   Done
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {showClearHistoryModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl animate-in fade-in duration-300">
+            <div className="bg-zinc-900 border border-zinc-800 rounded-3xl sm:rounded-[3rem] w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300 flex flex-col">
+              <div className="p-6 sm:p-8 border-b border-zinc-800 flex justify-between items-center flex-shrink-0">
+                <h3 className="text-xl font-black text-white uppercase tracking-tighter italic">Clear History</h3>
+                <button 
+                  onClick={() => setShowClearHistoryModal(false)}
+                  className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-400 hover:text-white transition-colors"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+              </div>
+              <div className="p-6 sm:p-8 space-y-4">
+                <p className="text-zinc-400 text-sm leading-relaxed">
+                  How do you want to clear the chat history? This action cannot be undone.
+                </p>
+                <div 
+                  className="flex items-center gap-3 p-4 bg-zinc-950/50 rounded-2xl border border-zinc-800/50 mb-2 cursor-pointer group hover:border-yellow-500/30 transition-all" 
+                  onClick={() => setIncludeSavedInDelete(!includeSavedInDelete)}
+                >
+                  <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${includeSavedInDelete ? "bg-yellow-500 border-yellow-500 shadow-lg shadow-yellow-500/20" : "border-zinc-700 group-hover:border-zinc-500"}`}>
+                    {includeSavedInDelete && <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" className="text-zinc-900"><polyline points="20 6 9 17 4 12"/></svg>}
+                  </div>
+                  <div className="flex flex-col">
+                    <span className={`text-sm font-bold transition-colors ${includeSavedInDelete ? "text-yellow-400" : "text-zinc-400 group-hover:text-zinc-300"}`}>Delete saved messages too</span>
+                    <span className="text-[10px] text-zinc-600 uppercase font-black tracking-tighter italic">Recommended: False (Default)</span>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-3">
+                  <button
+                    onClick={() => handleDeleteAllMessages(false)}
+                    className="w-full p-6 rounded-2xl bg-zinc-800 border border-zinc-700 hover:border-indigo-500/50 hover:bg-zinc-800/80 transition-all text-left group"
+                  >
+                    <div className="flex flex-col">
+                      <span className="text-xs font-black uppercase tracking-widest text-indigo-400 mb-1">Option 01</span>
+                      <span className="text-white font-bold group-hover:translate-x-1 transition-transform inline-flex items-center gap-2">
+                        Delete for me
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="opacity-0 group-hover:opacity-100 transition-opacity"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+                      </span>
+                      <span className="text-[10px] text-zinc-500 mt-1">Hide all messages from your view only.</span>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => handleDeleteAllMessages(true)}
+                    className="w-full p-6 rounded-2xl bg-red-500/5 border border-red-500/10 hover:border-red-500/50 hover:bg-red-500/10 transition-all text-left group"
+                  >
+                    <div className="flex flex-col">
+                      <span className="text-xs font-black uppercase tracking-widest text-red-500 mb-1">Option 02</span>
+                      <span className="text-white font-bold group-hover:translate-x-1 transition-transform inline-flex items-center gap-2">
+                        Delete for everyone
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="opacity-0 group-hover:opacity-100 transition-opacity"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+                      </span>
+                      <span className="text-[10px] text-red-500/50 mt-1">Permanently remove all messages from the database.</span>
+                    </div>
+                  </button>
+                </div>
+              </div>
+              <div className="p-6 sm:p-8 bg-zinc-950/50 border-t border-zinc-800 flex-shrink-0">
+                <button 
+                  onClick={() => setShowClearHistoryModal(false)}
+                  className="w-full py-5 bg-zinc-800 text-zinc-400 rounded-2xl font-black uppercase tracking-[0.2em] hover:bg-zinc-700 hover:text-white transition-all active:scale-95"
+                >
+                  Cancel
                 </button>
               </div>
             </div>

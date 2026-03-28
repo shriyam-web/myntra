@@ -53,7 +53,7 @@ export async function uploadImage(file: string) {
 }
 
 // FETCH ALL DATA
-export async function fetchData(messageLimit = 50) {
+export async function fetchData(messageLimit = 50, currentUser?: string) {
   noStore();
   try {
     await dbConnect();
@@ -62,12 +62,17 @@ export async function fetchData(messageLimit = 50) {
     const userCount = await User.countDocuments();
     console.log(`🔍 fetchData: Found ${userCount} users in database`);
 
+    const messageQuery: Record<string, unknown> = {};
+    if (currentUser) {
+      messageQuery.deletedFor = { $ne: currentUser };
+    }
+
     const [tickets, wishlist, plans, dates, messages, rawUsers] = await Promise.all([
       Ticket.find({}).sort({ createdAt: -1 }).lean(),
       Wishlist.find({}).lean(),
       Plan.find({}).lean(),
       TimelineDate.find({}).lean(),
-      Message.find({}).sort({ createdAt: -1 }).limit(messageLimit).populate('repliedTo').lean(),
+      Message.find(messageQuery).sort({ createdAt: -1 }).limit(messageLimit).populate('repliedTo').lean(),
       User.find({}).lean()
     ]);
 
@@ -317,10 +322,53 @@ export async function deleteMessage(id: string) {
   }
 }
 
-export async function deleteAllMessages() {
+export async function toggleSaveMessage(id: string, username: string) {
   try {
     await dbConnect();
-    await Message.deleteMany({});
+    const message = await Message.findById(id);
+    if (!message) throw new Error("Message not found");
+
+    const isSaved = message.savedBy.includes(username);
+    if (isSaved) {
+      await Message.findByIdAndUpdate(id, { $pull: { savedBy: username } });
+    } else {
+      await Message.findByIdAndUpdate(id, { $addToSet: { savedBy: username } });
+    }
+    revalidatePath('/');
+    return { saved: !isSaved };
+  } catch (error) {
+    console.error('Failed to toggle save message:', error);
+    throw new Error('Failed to toggle save message.');
+  }
+}
+
+export async function deleteAllMessages(deleteForEveryone = false, username?: string, includeSaved = false) {
+  try {
+    await dbConnect();
+    if (deleteForEveryone) {
+      if (includeSaved) {
+        await Message.deleteMany({});
+      } else {
+        // Only delete messages that are NOT saved by anyone
+        await Message.deleteMany({ savedBy: { $size: 0 } });
+      }
+    } else if (username) {
+      if (includeSaved) {
+        await Message.updateMany(
+          { deletedFor: { $ne: username } },
+          { $addToSet: { deletedFor: username } }
+        );
+      } else {
+        // Only mark as deleted for me if NOT saved by me
+        await Message.updateMany(
+          { 
+            deletedFor: { $ne: username },
+            savedBy: { $ne: username }
+          },
+          { $addToSet: { deletedFor: username } }
+        );
+      }
+    }
     revalidatePath('/');
   } catch (error) {
     console.error('Failed to clear chat:', error);

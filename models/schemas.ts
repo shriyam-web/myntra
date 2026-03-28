@@ -29,6 +29,8 @@ const MessageSchema = new Schema({
   createdBy: { type: String, required: true },
   createdAt: { type: Date, default: Date.now },
   repliedTo: { type: Schema.Types.ObjectId, ref: 'Message' },
+  deletedFor: [{ type: String }],
+  savedBy: [{ type: String }],
 });
 
 const UserSchema = new Schema({
