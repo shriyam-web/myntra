@@ -14,14 +14,41 @@ cloudinary.config({
 
 // IMAGE UPLOAD
 export async function uploadImage(file: string) {
+  const start = Date.now();
   try {
-    const result = await cloudinary.uploader.upload(file, {
-      folder: "messaging",
+    console.log(`📸 Starting Cloudinary upload (file size: ${Math.round(file.length / 1024)}KB)`);
+    
+    // Cloudinary upload with timeout and better options
+    const result = await new Promise((resolve, reject) => {
+      const uploadTimeout = setTimeout(() => {
+        reject(new Error("Cloudinary upload timed out after 30 seconds"));
+      }, 30000);
+
+      cloudinary.uploader.upload(file, {
+        folder: "messaging",
+        resource_type: "auto",
+        timeout: 60000, // internal cloudinary timeout
+      }, (error, result) => {
+        clearTimeout(uploadTimeout);
+        if (error) {
+          console.error("❌ Cloudinary callback error:", error);
+          reject(error);
+        } else {
+          resolve(result);
+        }
+      });
     });
-    return result.secure_url;
+
+    const duration = Date.now() - start;
+    console.log(`✅ Cloudinary upload successful in ${duration}ms: ${(result as any).secure_url}`);
+    return (result as any).secure_url;
   } catch (error) {
-    console.error("Cloudinary upload error:", error);
-    throw new Error("Failed to upload image.");
+    const duration = Date.now() - start;
+    console.error(`❌ Cloudinary upload failed after ${duration}ms:`, error);
+    if (error instanceof Error) {
+      throw new Error(`Upload failed: ${error.message}`);
+    }
+    throw new Error("Failed to upload image. Please try a smaller image or check your connection.");
   }
 }
 

@@ -101,6 +101,7 @@ export default function HomeClient() {
   // Image handling
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -401,8 +402,8 @@ export default function HomeClient() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 5 * 1024 * 1024) { // 5MB limit
-        alert("Image too large. Please select an image under 5MB.");
+      if (file.size > 15 * 1024 * 1024) { // 15MB limit
+        alert("Image too large. Please select an image under 15MB.");
         return;
       }
       const reader = new FileReader();
@@ -418,8 +419,10 @@ export default function HomeClient() {
     if (!newMessage.trim() && !selectedImage) return;
     
     setIsUploading(true);
+    setUploadProgress(0);
     const messageText = newMessage;
     const currentSelectedImage = selectedImage;
+    const currentReplyingTo = replyingTo;
     const tempId = Date.now().toString();
     
     const optimisticMessage: Message = {
@@ -428,12 +431,12 @@ export default function HomeClient() {
       imageUrl: currentSelectedImage || undefined,
       createdAt: new Date().toISOString(),
       createdBy: currentUser as "alpha 1" | "delta 1",
-      ...(replyingTo && {
+      ...(currentReplyingTo && {
         repliedTo: {
-          _id: replyingTo._id,
-          text: replyingTo.text,
-          imageUrl: replyingTo.imageUrl,
-          createdBy: replyingTo.createdBy
+          _id: currentReplyingTo._id,
+          text: currentReplyingTo.text,
+          imageUrl: currentReplyingTo.imageUrl,
+          createdBy: currentReplyingTo.createdBy
         }
       })
     };
@@ -448,14 +451,42 @@ export default function HomeClient() {
     try {
       let imageUrl = undefined;
       if (currentSelectedImage) {
-        imageUrl = await actions.uploadImage(currentSelectedImage);
+        // Simple retry logic for image upload (max 2 attempts)
+        let uploadSuccess = false;
+        let attempts = 0;
+        
+        // Progress simulation for large files
+        const progressInterval = setInterval(() => {
+          setUploadProgress(prev => {
+            if (prev < 90) return prev + Math.random() * 5;
+            return prev;
+          });
+        }, 800);
+
+        while (!uploadSuccess && attempts < 2) {
+          try {
+            attempts++;
+            imageUrl = await actions.uploadImage(currentSelectedImage);
+            uploadSuccess = true;
+            setUploadProgress(100);
+            clearInterval(progressInterval);
+          } catch (uploadError) {
+            console.warn(`Upload attempt ${attempts} failed:`, uploadError);
+            if (attempts >= 2) {
+              clearInterval(progressInterval);
+              throw uploadError;
+            }
+            // Short delay before retry
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+        }
       }
 
       await actions.createMessage({ 
         text: messageText || undefined, 
         imageUrl,
         createdBy: currentUser as "alpha 1" | "delta 1",
-        repliedTo: replyingTo?._id
+        repliedTo: currentReplyingTo?._id
       });
       fetchInitialData(true);
     } catch (error) {
@@ -464,9 +495,13 @@ export default function HomeClient() {
       setMessages(prev => prev.filter(m => m._id !== tempId));
       setNewMessage(messageText); // Restore input
       setSelectedImage(currentSelectedImage);
-      alert('Failed to send message. Please try again.');
+      setReplyingTo(currentReplyingTo);
+      
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      alert(`Failed to send message (${errorMessage}). Please try again.`);
     } finally {
       setIsUploading(false);
+      setUploadProgress(0);
     }
   };
 
@@ -1548,7 +1583,7 @@ export default function HomeClient() {
                           }
                         }}
                         className="w-full bg-zinc-900/80 border border-zinc-800 rounded-2xl px-4 py-3 text-[15px] text-white outline-none focus:border-indigo-500/40 focus:ring-4 focus:ring-indigo-500/5 placeholder:text-zinc-600 transition-all shadow-inner resize-none min-h-[48px] max-h-[200px]" 
-                        placeholder={isUploading ? "Uploading..." : "Type a message..."}
+                        placeholder={isUploading ? `Uploading... ${Math.round(uploadProgress)}%` : "Type a message..."}
                         rows={1}
                         disabled={isUploading}
                       />
@@ -1576,11 +1611,17 @@ export default function HomeClient() {
                     <div className="w-[25%]">
                       <button 
                         type="submit"
-                        className="w-full bg-indigo-500 text-white h-12 flex items-center justify-center rounded-xl shadow-xl active:scale-95 transition-all hover:bg-indigo-400 disabled:bg-zinc-800 disabled:text-zinc-600 disabled:shadow-none group gap-2 text-[10px] font-bold uppercase tracking-wider"
+                        className="w-full bg-indigo-500 text-white h-12 flex items-center justify-center rounded-xl shadow-xl active:scale-95 transition-all hover:bg-indigo-400 disabled:bg-zinc-800 disabled:text-zinc-600 disabled:shadow-none group gap-2 text-[10px] font-bold uppercase tracking-wider overflow-hidden relative"
                         disabled={(!newMessage.trim() && !selectedImage) || isUploading}
                       >
                         {isUploading ? (
-                          <div className="w-5 h-5 border-3 border-white/30 border-t-white rounded-full animate-spin"></div>
+                          <>
+                            <div 
+                              className="absolute inset-0 bg-indigo-600/50 transition-all duration-300" 
+                              style={{ width: `${uploadProgress}%` }}
+                            />
+                            <span className="relative z-10">{Math.round(uploadProgress)}%</span>
+                          </>
                         ) : (
                           <>
                             <span className="hidden xs:inline">Send</span>
