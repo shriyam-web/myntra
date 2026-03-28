@@ -1694,7 +1694,7 @@ export default function HomeClient() {
                       />
                     </div>
                     
-                    <div className="w-[10%] flex justify-center">
+                    <div className="w-[14%] flex justify-center">
                       <input
                         type="file"
                         ref={fileInputRef}
@@ -1705,7 +1705,7 @@ export default function HomeClient() {
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
-                        className="bg-zinc-900 border border-zinc-800 text-zinc-400 w-full h-12 rounded-xl hover:text-white transition-all active:scale-95 flex items-center justify-center shadow-lg p-3"
+                        className="bg-zinc-900 border border-zinc-800 text-zinc-400 w-full h-12 rounded-xl hover:text-white transition-all active:scale-95 flex items-center justify-center shadow-lg p-1"
                         disabled={isUploading}
                         title="Upload Photo"
                       >
@@ -1713,7 +1713,7 @@ export default function HomeClient() {
                       </button>
                     </div>
 
-                    <div className="w-[25%]">
+                    <div className="w-[22%]">
                       <button 
                         type="submit"
                         className={`w-full ${activeTheme.bubbleMe} text-white h-12 flex items-center justify-center rounded-xl ${activeTheme.shadow} active:scale-95 transition-all hover:opacity-90 disabled:bg-zinc-800 disabled:text-zinc-600 disabled:shadow-none group gap-2 text-[10px] font-bold uppercase tracking-wider overflow-hidden relative`}
