@@ -105,7 +105,7 @@ export default function HomeClient() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [previewMessage, setPreviewMessage] = useState<Message | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const themes = [
@@ -633,6 +633,30 @@ export default function HomeClient() {
     } catch (error) {
       console.error('Failed to update message:', error);
       alert('Failed to update message. Please check your database connection.');
+    }
+  };
+
+  const handleDownloadImage = async (url: string) => {
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = `image-${Date.now()}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      console.error('Failed to download image:', error);
+      // Fallback for data URLs or if fetch fails
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `image-${Date.now()}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     }
   };
 
@@ -1440,7 +1464,7 @@ export default function HomeClient() {
                               onClick={() => {
                                 setActiveMessageActions(activeMessageActions === m._id ? null : m._id);
                               }}
-                              className={`max-w-[85%] min-w-[50px] w-fit ${m.imageUrl && !m.text ? "p-1.5" : "p-4"} rounded-3xl text-[14.5px] leading-[1.6] relative break-words whitespace-pre-wrap shadow-xl cursor-pointer flex-shrink-0 ${
+                              className={`max-w-[85%] min-w-[50px] w-fit ${m.imageUrl && !m.text ? "p-3" : "p-4"} rounded-3xl text-[14.5px] leading-[1.6] relative break-words whitespace-pre-wrap shadow-xl cursor-pointer flex-shrink-0 ${
                                 isMe 
                                   ? `${chatBubbleColor} text-white rounded-tr-none shadow-indigo-900/10` 
                                   : `${themes.find(t => t.bubbleMe === chatBubbleColor)?.bubblePartner || "bg-zinc-800/80"} text-zinc-100 rounded-tl-none border border-zinc-700/30 shadow-black/20`
@@ -1472,9 +1496,8 @@ export default function HomeClient() {
                               {m.imageUrl && (
                                 <div 
                                   className={`${m.text ? "mb-1.5" : ""} rounded-2xl overflow-hidden cursor-zoom-in group relative`}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setPreviewImage(m.imageUrl!);
+                                  onClick={() => {
+                                    setPreviewMessage(m);
                                   }}
                                 >
                                   <img 
@@ -1867,16 +1890,16 @@ export default function HomeClient() {
             <span className="text-[7px] font-bold text-zinc-800 uppercase tracking-widest">End of Line</span>
           </div>
         </div>
-        {previewImage && (
+        {previewMessage && (
           <div 
             className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/95 backdrop-blur-xl animate-in fade-in duration-300"
-            onClick={() => setPreviewImage(null)}
+            onClick={() => setPreviewMessage(null)}
           >
             <div className="relative w-full max-w-4xl max-h-[90vh] flex flex-col items-center justify-center animate-in zoom-in-95 duration-300">
               <button 
                 onClick={(e) => {
                   e.stopPropagation();
-                  setPreviewImage(null);
+                  setPreviewMessage(null);
                 }}
                 className="fixed top-6 right-6 w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-md flex items-center justify-center text-white transition-all active:scale-90 z-[120]"
                 title="Close preview"
@@ -1884,11 +1907,37 @@ export default function HomeClient() {
                 <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               </button>
               <img 
-                src={previewImage} 
+                src={previewMessage.imageUrl} 
                 alt="Full size preview" 
                 className="w-full h-full object-contain rounded-lg shadow-2xl animate-in zoom-in-95 duration-300"
                 onClick={(e) => e.stopPropagation()}
               />
+              <div 
+                className="fixed bottom-10 flex gap-4 animate-in slide-in-from-bottom-4 duration-500 z-[120]"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button 
+                  onClick={() => handleDownloadImage(previewMessage.imageUrl!)}
+                  className="px-6 py-3 bg-white text-black rounded-full font-black uppercase tracking-widest text-[10px] shadow-2xl hover:bg-zinc-200 transition-all active:scale-95 flex items-center gap-2"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  Save Image
+                </button>
+                {previewMessage.createdBy.trim().toLowerCase() === currentUser.trim().toLowerCase() && (
+                  <button 
+                    onClick={async () => {
+                      if (confirm("Delete this image message?")) {
+                        await handleDeleteMessage(previewMessage._id);
+                        setPreviewMessage(null);
+                      }
+                    }}
+                    className="px-6 py-3 bg-red-600 text-white rounded-full font-black uppercase tracking-widest text-[10px] shadow-2xl hover:bg-red-500 transition-all active:scale-95 flex items-center gap-2"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                    Delete
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )}
