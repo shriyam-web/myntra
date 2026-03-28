@@ -1383,7 +1383,7 @@ export default function HomeClient() {
                               onClick={() => {
                                 setActiveMessageActions(activeMessageActions === m._id ? null : m._id);
                               }}
-                              className={`max-w-[85%] min-w-[50px] w-fit p-4 rounded-3xl text-[14.5px] leading-[1.6] relative break-words whitespace-pre-wrap shadow-xl cursor-pointer flex-shrink-0 ${
+                              className={`max-w-[85%] min-w-[50px] w-fit ${m.imageUrl && !m.text ? "p-1.5" : "p-4"} rounded-3xl text-[14.5px] leading-[1.6] relative break-words whitespace-pre-wrap shadow-xl cursor-pointer flex-shrink-0 ${
                                 isMe 
                                   ? `${chatBubbleColor} text-white rounded-tr-none shadow-indigo-900/10` 
                                   : `${themes.find(t => t.bubbleMe === chatBubbleColor)?.bubblePartner || "bg-zinc-800/80"} text-zinc-100 rounded-tl-none border border-zinc-700/30 shadow-black/20`
@@ -1407,7 +1407,7 @@ export default function HomeClient() {
                               )}
                               {m.imageUrl && (
                                 <div 
-                                  className="mb-2 rounded-2xl overflow-hidden cursor-zoom-in group relative"
+                                  className={`${m.text ? "mb-1.5" : ""} rounded-2xl overflow-hidden cursor-zoom-in group relative`}
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     setPreviewImage(m.imageUrl!);
@@ -1416,27 +1416,31 @@ export default function HomeClient() {
                                   <img 
                                     src={m.imageUrl} 
                                     alt="Message attachment" 
-                                    className="w-full max-h-[300px] object-cover hover:scale-105 transition-transform duration-500"
+                                    className="w-full max-h-[400px] object-cover hover:scale-105 transition-transform duration-500"
                                   />
                                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
                                 </div>
                               )}
-                              {editingMessage === m._id ? (
-                                <div className="flex flex-col gap-2 min-w-[200px]">
-                                  <textarea
-                                    value={editingMessageText}
-                                    onChange={(e) => setEditingMessageText(e.target.value)}
-                                    className="w-full bg-black/20 border border-white/20 rounded-xl px-3 py-2 text-sm font-medium outline-none text-white resize-none"
-                                    autoFocus
-                                    rows={2}
-                                  />
-                                  <div className="flex justify-end gap-2">
-                                    <button onClick={(e) => { e.stopPropagation(); handleUpdateMessage(m._id, editingMessageText); }} className="text-[10px] font-black text-white bg-green-600 px-3 py-1 rounded-lg">SAVE</button>
-                                    <button onClick={(e) => { e.stopPropagation(); setEditingMessage(null); setEditingMessageText(""); }} className="text-[10px] font-black text-white bg-zinc-700 px-3 py-1 rounded-lg">CANCEL</button>
-                                  </div>
+                              {m.text && (
+                                <div className={m.imageUrl ? "px-2.5 pb-2.5 pt-0.5" : ""}>
+                                  {editingMessage === m._id ? (
+                                    <div className="flex flex-col gap-2 min-w-[200px]">
+                                      <textarea
+                                        value={editingMessageText}
+                                        onChange={(e) => setEditingMessageText(e.target.value)}
+                                        className="w-full bg-black/20 border border-white/20 rounded-xl px-3 py-2 text-sm font-medium outline-none text-white resize-none"
+                                        autoFocus
+                                        rows={2}
+                                      />
+                                      <div className="flex justify-end gap-2">
+                                        <button onClick={(e) => { e.stopPropagation(); handleUpdateMessage(m._id, editingMessageText); }} className="text-[10px] font-black text-white bg-green-600 px-3 py-1 rounded-lg">SAVE</button>
+                                        <button onClick={(e) => { e.stopPropagation(); setEditingMessage(null); setEditingMessageText(""); }} className="text-[10px] font-black text-white bg-zinc-700 px-3 py-1 rounded-lg">CANCEL</button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    m.text
+                                  )}
                                 </div>
-                              ) : (
-                                m.text
                               )}
                               
                               {activeMessageActions === m._id && editingMessage !== m._id && (
@@ -1536,14 +1540,15 @@ export default function HomeClient() {
                   </button>
                   <div className="flex-1 flex flex-col gap-2">
                     {selectedImage && (
-                      <div className="relative w-20 h-20 rounded-xl overflow-hidden border-2 border-indigo-500 shadow-xl group">
+                      <div className="relative w-24 sm:w-32 aspect-square rounded-xl overflow-hidden border-2 border-indigo-500 shadow-xl animate-in zoom-in-90 duration-200 group">
                         <img src={selectedImage} alt="Selected" className="w-full h-full object-cover" />
                         <button
                           type="button"
                           onClick={() => setSelectedImage(null)}
-                          className="absolute top-1 right-1 bg-black/50 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="absolute top-1.5 right-1.5 bg-black/70 text-white rounded-full p-1.5 hover:bg-black transition-colors shadow-lg"
+                          title="Remove image"
                         >
-                          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                         </button>
                       </div>
                     )}
@@ -1709,15 +1714,15 @@ export default function HomeClient() {
                   e.stopPropagation();
                   setPreviewImage(null);
                 }}
-                className="absolute -top-12 right-0 sm:-right-12 sm:top-0 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-all active:scale-90"
+                className="fixed top-6 right-6 w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-md flex items-center justify-center text-white transition-all active:scale-90 z-[120]"
                 title="Close preview"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               </button>
               <img 
                 src={previewImage} 
                 alt="Full size preview" 
-                className="w-full h-full object-contain rounded-lg shadow-2xl"
+                className="w-full h-full object-contain rounded-lg shadow-2xl animate-in zoom-in-95 duration-300"
                 onClick={(e) => e.stopPropagation()}
               />
             </div>
