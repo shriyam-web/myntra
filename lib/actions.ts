@@ -19,7 +19,7 @@ export async function fetchData(messageLimit = 50) {
       Wishlist.find({}).lean(),
       Plan.find({}).lean(),
       TimelineDate.find({}).lean(),
-      Message.find({}).sort({ createdAt: -1 }).limit(messageLimit).lean(),
+      Message.find({}).sort({ createdAt: -1 }).limit(messageLimit).populate('repliedTo').lean(),
       User.find({}).lean()
     ]);
 
@@ -219,7 +219,7 @@ async function sendTelegramNotification(text: string) {
   }
 }
 
-export async function createMessage(data: { text: string; createdBy: string }) {
+export async function createMessage(data: { text: string; createdBy: string; repliedTo?: string }) {
   try {
     await dbConnect();
     const message = await Message.create(data);

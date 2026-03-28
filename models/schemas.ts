@@ -27,6 +27,7 @@ const MessageSchema = new Schema({
   text: { type: String, required: true },
   createdBy: { type: String, required: true },
   createdAt: { type: Date, default: Date.now },
+  repliedTo: { type: Schema.Types.ObjectId, ref: 'Message' },
 });
 
 const UserSchema = new Schema({
