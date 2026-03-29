@@ -154,25 +154,28 @@ export default function HomeClient() {
   const playSound = useCallback(() => {
     if (!isSoundEnabled) return;
     
-    if (!audioRef.current) {
-      audioRef.current = new Audio("/notification.mp3");
-    }
+    const play = async (retryCount = 0) => {
+      try {
+        if (!audioRef.current) {
+          audioRef.current = new Audio("/notification1.mp3");
+          audioRef.current.preload = "auto";
+        }
+        
+        audioRef.current.muted = false;
+        audioRef.current.volume = 1.0;
+        audioRef.current.currentTime = 0;
+        
+        await audioRef.current.play();
+      } catch (e) {
+        console.warn(`Sound play attempt ${retryCount + 1} failed:`, e);
+        if (retryCount < 2) {
+          // Retry with a small delay
+          setTimeout(() => play(retryCount + 1), 500);
+        }
+      }
+    };
     
-    // Ensure it's not muted and volume is up
-    audioRef.current.muted = false;
-    audioRef.current.volume = 1.0;
-    
-    // Reset and play
-    audioRef.current.currentTime = 0;
-    const playPromise = audioRef.current.play();
-    if (playPromise !== undefined) {
-      playPromise.catch(e => {
-        console.warn("Sound play failed:", e);
-        // Fallback: try to re-initialize if it failed
-        audioRef.current = new Audio("/notification.mp3");
-        audioRef.current.play().catch(e2 => console.error("Sound play retry failed:", e2));
-      });
-    }
+    play();
   }, [isSoundEnabled]);
 
   const activeTheme = themes.find(t => t.name === themeName) || themes[0];
@@ -285,8 +288,8 @@ export default function HomeClient() {
       ) {
         lastSoundMessageIdRef.current = lastMessage._id;
         if (isSoundEnabled) {
-          playSound();
           showNotification(`New message from ${lastMessage.createdBy}`, lastMessage.text || (lastMessage.imageUrl ? "Sent an image" : ""));
+          playSound();
         }
       }
       
@@ -464,9 +467,11 @@ export default function HomeClient() {
       const lowerPassword = password.toLowerCase().trim();
       if (lowerPassword === "icai") {
         setView("alpha 1");
+        setIsSoundEnabled(false);
         setShowSoundPrompt(true);
       } else if (lowerPassword === "gamma2") {
         setView("delta 1");
+        setIsSoundEnabled(true);
         setShowSoundPrompt(true);
       }
     }
@@ -2101,45 +2106,69 @@ export default function HomeClient() {
           </div>
         )}
         {showSoundPrompt && (
-          <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/90 backdrop-blur-2xl animate-in fade-in duration-500">
-            <div className="bg-zinc-900 border border-zinc-800 rounded-[3rem] w-full max-w-sm overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] animate-in zoom-in-95 duration-500 border-t-white/10">
-              <div className="p-10 flex flex-col items-center text-center space-y-8">
-                <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(255,255,255,0.1)]">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+          <div className="fixed inset-0 z-[150] flex items-center justify-center p-6 bg-black/95 backdrop-blur-3xl animate-in fade-in duration-700">
+            <div className="relative bg-zinc-900 border border-white/10 rounded-[3.5rem] w-full max-w-sm overflow-hidden shadow-[0_0_80px_rgba(0,0,0,0.8)] animate-in zoom-in-95 slide-in-from-bottom-10 duration-700">
+              {/* Decorative elements */}
+              <div className="absolute -top-24 -right-24 w-48 h-48 bg-white/5 blur-[60px] rounded-full"></div>
+              <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-white/5 blur-[60px] rounded-full"></div>
+              
+              <div className="p-12 flex flex-col items-center text-center space-y-10 relative z-10">
+                <div className="relative">
+                  <div className="absolute inset-0 bg-white/20 blur-2xl rounded-full scale-150 animate-pulse"></div>
+                  <div className="w-24 h-24 bg-white rounded-[2.5rem] flex items-center justify-center shadow-2xl relative rotate-3 hover:rotate-0 transition-transform duration-500">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+                  </div>
                 </div>
-                <div className="space-y-3">
-                  <h3 className="text-2xl font-black text-white uppercase tracking-tighter italic">Audio System</h3>
-                  <p className="text-zinc-500 text-sm font-bold leading-relaxed px-4">
-                    Would you like to enable notification sounds for incoming messages?
+
+                <div className="space-y-4">
+                  <h3 className="text-3xl font-black text-white uppercase tracking-tighter italic leading-none">
+                    Audio <br/> Preference
+                  </h3>
+                  <div className="h-1 w-12 bg-white/20 mx-auto rounded-full"></div>
+                  <p className="text-zinc-400 text-[11px] font-black uppercase tracking-[0.2em] leading-relaxed max-w-[200px] mx-auto">
+                    Configure your notification system for real-time alerts.
                   </p>
                 </div>
-                <div className="flex flex-col w-full gap-3">
+
+                <div className="flex flex-col w-full gap-4 pt-4">
                   <button
                     onClick={() => {
                       setIsSoundEnabled(true);
                       setShowSoundPrompt(false);
-                      // Request notification permission
                       if ("Notification" in window) {
                         Notification.requestPermission();
                       }
-                      // Play a test sound to unlock audio
-                      const audio = new Audio("/notification.mp3");
+                      const audio = new Audio("/notification1.mp3");
                       audio.play().catch(() => {});
                     }}
-                    className="w-full py-5 bg-white text-black rounded-2xl font-black uppercase tracking-[0.2em] text-[10px] hover:bg-zinc-200 transition-all active:scale-95 shadow-xl shadow-white/5"
+                    className={`group w-full py-6 rounded-3xl font-black uppercase tracking-[0.25em] text-[10px] transition-all active:scale-95 flex items-center justify-center gap-3 ${
+                      isSoundEnabled 
+                        ? "bg-white text-black shadow-[0_20px_40px_rgba(255,255,255,0.15)] hover:bg-zinc-100" 
+                        : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white"
+                    }`}
                   >
-                    Enable Sound
+                    <span>Enable Audio</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="opacity-50 group-hover:translate-x-1 transition-transform"><polyline points="9 18 15 12 9 6"/></svg>
                   </button>
+                  
                   <button
                     onClick={() => {
                       setIsSoundEnabled(false);
                       setShowSoundPrompt(false);
                     }}
-                    className="w-full py-5 bg-zinc-800 text-zinc-500 rounded-2xl font-black uppercase tracking-[0.2em] text-[10px] hover:bg-zinc-700 hover:text-white transition-all active:scale-95"
+                    className={`w-full py-6 rounded-3xl font-black uppercase tracking-[0.25em] text-[10px] transition-all active:scale-95 border border-white/5 ${
+                      !isSoundEnabled 
+                        ? "bg-white text-black" 
+                        : "bg-transparent text-zinc-600 hover:text-zinc-400 hover:bg-white/5"
+                    }`}
                   >
-                    Keep Muted
+                    Stay Muted
                   </button>
                 </div>
+
+                <p className="text-[9px] font-bold text-zinc-700 uppercase tracking-widest pt-4">
+                  Current Session: {currentUser}
+                </p>
               </div>
             </div>
           </div>
