@@ -254,9 +254,9 @@ export default function HomeClient() {
       
       // If it's a new message from partner and sound is enabled, play sound
       if (
+        currentUser !== "login" &&
         lastMessage._id !== lastSoundMessageIdRef.current && 
-        lastMessage.createdBy !== currentUser &&
-        lastMessage.createdBy !== "login" // Avoid playing sound for old messages during initial load
+        lastMessage.createdBy !== currentUser
       ) {
         lastSoundMessageIdRef.current = lastMessage._id;
         if (isSoundEnabled) {
