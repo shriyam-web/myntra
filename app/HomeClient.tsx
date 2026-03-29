@@ -137,8 +137,66 @@ export default function HomeClient() {
   const lastMessageIdRef = useRef<string | null>(null);
   const lastSoundMessageIdRef = useRef<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const audioBufferRef = useRef<AudioBuffer | null>(null);
   const pollingWorkerRef = useRef<Worker | null>(null);
-  
+
+  // Initialize Audio Context and load sound
+  useEffect(() => {
+    if (isSoundEnabled && !audioContextRef.current) {
+      const initAudio = async () => {
+        try {
+          const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+          audioContextRef.current = new AudioContextClass();
+          
+          const response = await fetch("/notification1.mp3");
+          const arrayBuffer = await response.arrayBuffer();
+          audioBufferRef.current = await audioContextRef.current.decodeAudioData(arrayBuffer);
+        } catch (e) {
+          console.error("Failed to initialize Web Audio API:", e);
+        }
+      };
+      initAudio();
+    }
+  }, [isSoundEnabled]);
+
+  const playSound = useCallback(() => {
+    if (!isSoundEnabled) return;
+
+    const play = async (retryCount = 0) => {
+      try {
+        // Fallback to standard Audio if Web Audio API is not ready
+        if (audioContextRef.current && audioBufferRef.current) {
+          if (audioContextRef.current.state === 'suspended') {
+            await audioContextRef.current.resume();
+          }
+          const source = audioContextRef.current.createBufferSource();
+          source.buffer = audioBufferRef.current;
+          source.connect(audioContextRef.current.destination);
+          source.start(0);
+          return;
+        }
+
+        // Standard Audio fallback
+        if (!audioRef.current) {
+          audioRef.current = new Audio("/notification1.mp3");
+          audioRef.current.preload = "auto";
+        }
+        audioRef.current.muted = false;
+        audioRef.current.volume = 1.0;
+        audioRef.current.currentTime = 0;
+        await audioRef.current.play();
+      } catch (e) {
+        console.warn(`Sound play attempt ${retryCount + 1} failed:`, e);
+        if (retryCount < 3) {
+          setTimeout(() => play(retryCount + 1), 1000);
+        }
+      }
+    };
+
+    play();
+  }, [isSoundEnabled]);
+
   const showNotification = useCallback((title: string, body: string) => {
     if (!("Notification" in window)) return;
     
@@ -146,37 +204,11 @@ export default function HomeClient() {
       new Notification(title, {
         body,
         icon: "/logo.png",
-        silent: false // Let the browser handle sound if it wants, but we have our own
+        silent: false,
+        vibrate: [200, 100, 200]
       });
     }
   }, []);
-
-  const playSound = useCallback(() => {
-    if (!isSoundEnabled) return;
-    
-    const play = async (retryCount = 0) => {
-      try {
-        if (!audioRef.current) {
-          audioRef.current = new Audio("/notification1.mp3");
-          audioRef.current.preload = "auto";
-        }
-        
-        audioRef.current.muted = false;
-        audioRef.current.volume = 1.0;
-        audioRef.current.currentTime = 0;
-        
-        await audioRef.current.play();
-      } catch (e) {
-        console.warn(`Sound play attempt ${retryCount + 1} failed:`, e);
-        if (retryCount < 2) {
-          // Retry with a small delay
-          setTimeout(() => play(retryCount + 1), 500);
-        }
-      }
-    };
-    
-    play();
-  }, [isSoundEnabled]);
 
   const activeTheme = themes.find(t => t.name === themeName) || themes[0];
 
@@ -2132,14 +2164,34 @@ export default function HomeClient() {
 
                 <div className="flex flex-col w-full gap-4 pt-4">
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       setIsSoundEnabled(true);
                       setShowSoundPrompt(false);
                       if ("Notification" in window) {
                         Notification.requestPermission();
                       }
-                      const audio = new Audio("/notification1.mp3");
-                      audio.play().catch(() => {});
+                      
+                      // Initialize Web Audio API on user gesture
+                      try {
+                        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+                        const ctx = new AudioContextClass();
+                        audioContextRef.current = ctx;
+                        
+                        const response = await fetch("/notification1.mp3");
+                        const arrayBuffer = await response.arrayBuffer();
+                        audioBufferRef.current = await ctx.decodeAudioData(arrayBuffer);
+                        
+                        // Play a test sound to confirm and unlock
+                        const source = ctx.createBufferSource();
+                        source.buffer = audioBufferRef.current;
+                        source.connect(ctx.destination);
+                        source.start(0);
+                      } catch (e) {
+                        console.error("Gesture-based audio init failed:", e);
+                        // Fallback
+                        const audio = new Audio("/notification1.mp3");
+                        audio.play().catch(() => {});
+                      }
                     }}
                     className={`group w-full py-6 rounded-3xl font-black uppercase tracking-[0.25em] text-[10px] transition-all active:scale-95 flex items-center justify-center gap-3 ${
                       isSoundEnabled 
