@@ -1519,7 +1519,7 @@ export default function HomeClient() {
         )}
         {activeTab === "messages" && (
           <>
-            <section className={`${isMessageExpanded ? "space-y-1" : "space-y-6"} animate-in fade-in slide-in-from-bottom-4 duration-700 ${messagingSectionWrapperClass}`}>
+            <section className={`${isMessageExpanded ? "space-y-1" : "space-y-3"} animate-in fade-in slide-in-from-bottom-4 duration-700 ${messagingSectionWrapperClass}`}>
             <div className={`flex items-center justify-between px-2 ${isMessageExpanded && isHeaderCollapsed ? "h-0 overflow-hidden opacity-0" : "py-1"}`}>
               <h2 className={`${isMessageExpanded ? "text-xs" : "text-sm"} font-bold text-white flex items-center gap-2`}>
                 <span className="flex h-2.5 w-2.5 relative">
@@ -1636,7 +1636,7 @@ export default function HomeClient() {
               <div 
                 ref={messagesContainerRef} 
                 onScroll={handleScroll}
-                className={`flex-1 overflow-y-auto no-scrollbar scroll-smooth px-4 py-6 ${isMessageExpanded ? "h-full" : "max-h-[60vh] min-h-[400px]"}`}
+                className={`flex-1 overflow-y-auto no-scrollbar scroll-smooth px-4 ${isMessageExpanded ? "py-6 h-full" : "py-4 max-h-[35vh] min-h-[250px]"}`}
               >
                 {showScrollButton && (
                   <button
@@ -1957,7 +1957,7 @@ export default function HomeClient() {
             </div>
           </section>
             {!isMessageExpanded && (
-              <div className="flex flex-row gap-2 mt-4 px-2">
+              <div className="flex flex-row gap-2 mt-2 px-2">
                 <button 
                   onClick={() => setShowClearHistoryModal(true)}
                   className="flex-1 py-2 bg-red-500/5 border border-red-500/10 rounded-xl text-red-400 text-[10px] font-bold hover:bg-red-500 hover:text-white hover:border-red-500 transition-all active:scale-95 flex items-center justify-center gap-1.5 group"
