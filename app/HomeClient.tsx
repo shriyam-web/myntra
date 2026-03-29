@@ -214,7 +214,7 @@ export default function HomeClient() {
         icon: "/logo.png",
         silent: false,
         vibrate: [200, 100, 200]
-      });
+      } as any);
     }
   }, []);
 
