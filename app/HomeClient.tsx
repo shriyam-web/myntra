@@ -112,6 +112,7 @@ export default function HomeClient() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [previewMessage, setPreviewMessage] = useState<Message | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const messageInputRef = useRef<HTMLTextAreaElement>(null);
 
   const themes = [
     { name: "Midnight (Default)", bg: "bg-zinc-900/50", bubbleMe: "bg-indigo-600", bubblePartner: "bg-zinc-800/80", accent: "text-indigo-400", shadow: "shadow-indigo-500/10", glow: "bg-indigo-500/5" },
@@ -346,6 +347,14 @@ export default function HomeClient() {
   const loadMoreMessages = () => {
     setMessageLimit(prev => prev + 50);
   };
+
+  useEffect(() => {
+    if (view !== "login" && activeTab === "messages") {
+      setTimeout(() => {
+        messageInputRef.current?.focus();
+      }, 300);
+    }
+  }, [activeTab, view, isMessageExpanded]);
 
   useEffect(() => {
     if (view !== "login" && activeTab === "messages" && hasUnreadMessages()) {
@@ -585,6 +594,11 @@ export default function HomeClient() {
     setSelectedImage(null);
     setReplyingTo(null);
     scrollToBottom(true);
+    
+    // Auto-focus back to input
+    setTimeout(() => {
+      messageInputRef.current?.focus();
+    }, 100);
 
     try {
       let imageUrl = undefined;
@@ -1654,7 +1668,7 @@ export default function HomeClient() {
                     </p>
                   </div>
                 ) : (
-                  <div className="space-y-6">
+                  <div className="flex flex-col">
                     {messages.map((m, index) => {
                       const isMe = m.createdBy.trim().toLowerCase() === currentUser.trim().toLowerCase();
                       const partnerUsername = (currentUser.trim().toLowerCase() === "alpha 1" ? "delta 1" : "alpha 1");
@@ -1669,15 +1683,15 @@ export default function HomeClient() {
                       return (
                         <Fragment key={m._id}>
                           {showDateSeparator && (
-                            <div className="flex justify-center my-6">
-                              <div className="bg-zinc-800/80 text-zinc-400 text-[11px] font-bold uppercase tracking-widest px-4 py-1.5 rounded-full border border-zinc-700/50 shadow-sm backdrop-blur-sm">
+                            <div className="flex justify-center mb-4 sticky top-0 z-[40] -mx-4 py-2 pointer-events-none">
+                              <div className="bg-zinc-800/80 text-zinc-400 text-[11px] font-bold uppercase tracking-widest px-4 py-1.5 rounded-full border border-zinc-700/50 shadow-sm backdrop-blur-sm pointer-events-auto">
                                 {formatDateLabel(m.createdAt)}
                               </div>
                             </div>
                           )}
                           <div 
                             id={`message-${m._id}`}
-                            className={`flex flex-col w-full transition-all duration-200 rounded-3xl ${isMe ? "items-end" : "items-start"}`}
+                            className={`flex flex-col w-full transition-all duration-200 rounded-3xl mb-6 ${isMe ? "items-end" : "items-start"}`}
                           onTouchStart={(e) => setTouchStart(e.targetTouches[0].clientX)}
                           onTouchEnd={(e) => {
                             if (touchStart === null) return;
@@ -1880,6 +1894,7 @@ export default function HomeClient() {
                   <div className="flex items-center gap-2">
                     <div className="w-[65%]">
                       <textarea autoComplete="off" spellCheck={false} 
+                        ref={messageInputRef}
                         value={newMessage}
                         onChange={(e) => setNewMessage(e.target.value)}
                         onKeyDown={(e) => {
