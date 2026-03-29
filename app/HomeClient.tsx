@@ -565,8 +565,12 @@ export default function HomeClient() {
     e.preventDefault();
     if (!newMessage.trim() && !selectedImage) return;
     
-    setIsUploading(true);
-    setUploadProgress(0);
+    const isImageUpload = !!selectedImage;
+    if (isImageUpload) {
+      setIsUploading(true);
+      setUploadProgress(0);
+    }
+    
     const messageText = newMessage;
     const currentSelectedImage = selectedImage;
     const currentReplyingTo = replyingTo;
@@ -595,11 +599,16 @@ export default function HomeClient() {
     setReplyingTo(null);
     scrollToBottom(true);
     
-    // Auto-focus back to input
+    // Auto-focus back to input - immediate focus helps on some mobile browsers
+    messageInputRef.current?.focus();
+    // Second focus call after a short delay to ensure it sticks after re-renders
     setTimeout(() => {
       messageInputRef.current?.focus();
-    }, 100);
-
+    }, 50);
+    setTimeout(() => {
+      messageInputRef.current?.focus();
+    }, 150);
+    
     try {
       let imageUrl = undefined;
       if (currentSelectedImage) {
@@ -652,8 +661,12 @@ export default function HomeClient() {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       alert(`Failed to send message (${errorMessage}). Please try again.`);
     } finally {
-      setIsUploading(false);
-      setUploadProgress(0);
+      if (isImageUpload) {
+        setIsUploading(false);
+        setUploadProgress(0);
+      }
+      // Final focus attempt after any potential state-driven disable cycles
+      messageInputRef.current?.focus();
     }
   };
 
@@ -1906,7 +1919,6 @@ export default function HomeClient() {
                         className="w-full bg-zinc-900/80 border border-zinc-800 rounded-2xl px-4 py-3 text-[15px] text-white outline-none focus:border-indigo-500/40 focus:ring-4 focus:ring-indigo-500/5 placeholder:text-zinc-600 transition-all shadow-inner resize-none min-h-[48px] max-h-[200px]" 
                         placeholder={isUploading ? `Uploading... ${Math.round(uploadProgress)}%` : "Type a message..."}
                         rows={1}
-                        disabled={isUploading}
                       />
                     </div>
                     
