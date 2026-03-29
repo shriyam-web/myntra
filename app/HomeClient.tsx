@@ -105,7 +105,7 @@ export default function HomeClient() {
   const [chatPartnerBubbleColor, setChatPartnerBubbleColor] = useState<string>("bg-zinc-800/80");
   const [isSoundEnabled, setIsSoundEnabled] = useState(false);
   const [showSoundPrompt, setShowSoundPrompt] = useState(false);
-  
+
   // Image handling
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -165,7 +165,7 @@ export default function HomeClient() {
 
     const play = async (retryCount = 0) => {
       try {
-        // Fallback to standard Audio if Web Audio API is not ready
+        // Try Web Audio API first
         if (audioContextRef.current && audioBufferRef.current) {
           if (audioContextRef.current.state === 'suspended') {
             await audioContextRef.current.resume();
@@ -177,19 +177,27 @@ export default function HomeClient() {
           return;
         }
 
-        // Standard Audio fallback
+        // Fallback to standard Audio object
         if (!audioRef.current) {
           audioRef.current = new Audio("/notification1.mp3");
           audioRef.current.preload = "auto";
         }
+        
+        // Ensure properties are set every time for background playback
         audioRef.current.muted = false;
         audioRef.current.volume = 1.0;
         audioRef.current.currentTime = 0;
-        await audioRef.current.play();
+        
+        const playPromise = audioRef.current.play();
+        if (playPromise !== undefined) {
+          await playPromise;
+        }
       } catch (e) {
         console.warn(`Sound play attempt ${retryCount + 1} failed:`, e);
+        // If it failed because of lack of interaction, we can't do much more than wait for one
+        // but if it's another error, retry might help
         if (retryCount < 3) {
-          setTimeout(() => play(retryCount + 1), 1000);
+          setTimeout(() => play(retryCount + 1), 500);
         }
       }
     };
@@ -494,20 +502,6 @@ export default function HomeClient() {
     };
   }, []);
 
-  useEffect(() => {
-    if (view === "login" && password.length > 0) {
-      const lowerPassword = password.toLowerCase().trim();
-      if (lowerPassword === "icai") {
-        setView("alpha 1");
-        setIsSoundEnabled(false);
-        setShowSoundPrompt(true);
-      } else if (lowerPassword === "gamma2") {
-        setView("delta 1");
-        setIsSoundEnabled(true);
-        setShowSoundPrompt(true);
-      }
-    }
-  }, [password, view]);
 
   const handleCreateTicket = async (e: React.FormEvent, user: "alpha 1" | "delta 1") => {
     e.preventDefault();
@@ -889,10 +883,22 @@ export default function HomeClient() {
     );
   }
 
+  const handleLogin = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const lowerPassword = password.toLowerCase().trim();
+    if (lowerPassword === "icai") {
+      setView("alpha 1");
+      setShowSoundPrompt(true);
+    } else if (lowerPassword === "gamma2") {
+      setView("delta 1");
+      setShowSoundPrompt(true);
+    }
+  };
+
   if (view === "login") {
     return (
       <div className="flex flex-col min-h-screen items-center justify-center bg-zinc-950 font-sans p-6">
-        <div className="w-full max-w-xs flex flex-col items-center">
+        <form onSubmit={handleLogin} className="w-full max-w-xs flex flex-col items-center gap-4">
           <input
             type="password"
             id="password"
@@ -905,7 +911,13 @@ export default function HomeClient() {
             required
             autoFocus
           />
-        </div>
+          <button 
+            type="submit"
+            className="w-full py-4 bg-white text-black rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-zinc-200 transition-all active:scale-95 shadow-lg shadow-white/5"
+          >
+            Access System
+          </button>
+        </form>
       </div>
     );
   }
@@ -1007,6 +1019,38 @@ export default function HomeClient() {
             </div>
           </div>
           <div className="flex gap-2">
+            <button 
+              onClick={() => {
+                const newSoundState = !isSoundEnabled;
+                setIsSoundEnabled(newSoundState);
+                if (newSoundState) {
+                  // Re-initialize AudioContext on user gesture
+                  try {
+                    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+                    if (!audioContextRef.current) {
+                      audioContextRef.current = new AudioContextClass();
+                    }
+                    if (audioContextRef.current.state === 'suspended') {
+                      audioContextRef.current.resume();
+                    }
+                  } catch (e) {
+                    console.error("Manual audio init failed:", e);
+                  }
+                }
+              }}
+              className={`p-3 rounded-2xl transition-all active:scale-90 border flex items-center gap-2 ${
+                isSoundEnabled 
+                  ? "bg-white text-black border-white shadow-lg shadow-white/5" 
+                  : "bg-zinc-800/50 text-zinc-500 border-zinc-700/50"
+              }`}
+              title={isSoundEnabled ? "Disable Sound" : "Enable Sound"}
+            >
+              {isSoundEnabled ? (
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+              )}
+            </button>
             <button 
               onClick={() => fetchInitialData()}
               className={`group p-3 bg-zinc-800/50 rounded-2xl text-zinc-500 hover:text-white hover:bg-zinc-800 transition-all active:scale-90 border border-zinc-700/50 ${isRefreshing ? "animate-spin" : ""}`}
