@@ -137,7 +137,20 @@ export default function HomeClient() {
   const lastMessageIdRef = useRef<string | null>(null);
   const lastSoundMessageIdRef = useRef<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const pollingWorkerRef = useRef<Worker | null>(null);
   
+  const showNotification = useCallback((title: string, body: string) => {
+    if (!("Notification" in window)) return;
+    
+    if (Notification.permission === "granted") {
+      new Notification(title, {
+        body,
+        icon: "/logo.png",
+        silent: false // Let the browser handle sound if it wants, but we have our own
+      });
+    }
+  }, []);
+
   const playSound = useCallback(() => {
     if (!isSoundEnabled) return;
     
@@ -145,9 +158,21 @@ export default function HomeClient() {
       audioRef.current = new Audio("/notification.mp3");
     }
     
+    // Ensure it's not muted and volume is up
+    audioRef.current.muted = false;
+    audioRef.current.volume = 1.0;
+    
     // Reset and play
     audioRef.current.currentTime = 0;
-    audioRef.current.play().catch(e => console.warn("Sound play failed:", e));
+    const playPromise = audioRef.current.play();
+    if (playPromise !== undefined) {
+      playPromise.catch(e => {
+        console.warn("Sound play failed:", e);
+        // Fallback: try to re-initialize if it failed
+        audioRef.current = new Audio("/notification.mp3");
+        audioRef.current.play().catch(e2 => console.error("Sound play retry failed:", e2));
+      });
+    }
   }, [isSoundEnabled]);
 
   const activeTheme = themes.find(t => t.name === themeName) || themes[0];
@@ -261,6 +286,7 @@ export default function HomeClient() {
         lastSoundMessageIdRef.current = lastMessage._id;
         if (isSoundEnabled) {
           playSound();
+          showNotification(`New message from ${lastMessage.createdBy}`, lastMessage.text || (lastMessage.imageUrl ? "Sent an image" : ""));
         }
       }
       
@@ -272,7 +298,7 @@ export default function HomeClient() {
         }
       }
     }
-  }, [messages, activeTab, currentUser, isSoundEnabled, playSound]);
+  }, [messages, activeTab, currentUser, isSoundEnabled, playSound, showNotification]);
 
   const loadMoreMessages = () => {
     setMessageLimit(prev => prev + 50);
@@ -314,10 +340,25 @@ export default function HomeClient() {
 
   useEffect(() => {
     if (view !== "login") {
-      const interval = setInterval(() => {
-        fetchInitialData(true);
-      }, 2500);
-      return () => clearInterval(interval);
+      // Use Web Worker for polling to avoid background throttling
+      if (!pollingWorkerRef.current) {
+        pollingWorkerRef.current = new Worker("/polling-worker.js");
+        pollingWorkerRef.current.onmessage = (e) => {
+          if (e.data.action === "tick") {
+            fetchInitialData(true);
+          }
+        };
+      }
+      
+      pollingWorkerRef.current.postMessage({ action: "start", interval: 2500 });
+      
+      return () => {
+        if (pollingWorkerRef.current) {
+          pollingWorkerRef.current.postMessage({ action: "stop" });
+          pollingWorkerRef.current.terminate();
+          pollingWorkerRef.current = null;
+        }
+      };
     }
   }, [view, fetchInitialData]);
 
@@ -2077,6 +2118,10 @@ export default function HomeClient() {
                     onClick={() => {
                       setIsSoundEnabled(true);
                       setShowSoundPrompt(false);
+                      // Request notification permission
+                      if ("Notification" in window) {
+                        Notification.requestPermission();
+                      }
                       // Play a test sound to unlock audio
                       const audio = new Audio("/notification.mp3");
                       audio.play().catch(() => {});
