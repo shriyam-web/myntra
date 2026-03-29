@@ -103,6 +103,8 @@ export default function HomeClient() {
   const [chatBubbleColor, setChatBubbleColor] = useState<string>("bg-indigo-600");
   const [themeName, setThemeName] = useState<string>("Midnight (Default)");
   const [chatPartnerBubbleColor, setChatPartnerBubbleColor] = useState<string>("bg-zinc-800/80");
+  const [isSoundEnabled, setIsSoundEnabled] = useState(false);
+  const [showSoundPrompt, setShowSoundPrompt] = useState(false);
   
   // Image handling
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -133,7 +135,21 @@ export default function HomeClient() {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const lastMessageIdRef = useRef<string | null>(null);
+  const lastSoundMessageIdRef = useRef<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   
+  const playSound = useCallback(() => {
+    if (!isSoundEnabled) return;
+    
+    if (!audioRef.current) {
+      audioRef.current = new Audio("/notification.mp3");
+    }
+    
+    // Reset and play
+    audioRef.current.currentTime = 0;
+    audioRef.current.play().catch(e => console.warn("Sound play failed:", e));
+  }, [isSoundEnabled]);
+
   const activeTheme = themes.find(t => t.name === themeName) || themes[0];
 
   const formatDateLabel = (dateString: string) => {
@@ -233,16 +249,30 @@ export default function HomeClient() {
   };
 
   useEffect(() => {
-    if (activeTab === "messages" && messages.length > 0) {
+    if (messages.length > 0) {
       const lastMessage = messages[messages.length - 1];
       
-      // Only scroll if last message changed OR if we just switched to this tab
-      if (lastMessage._id !== lastMessageIdRef.current) {
-        lastMessageIdRef.current = lastMessage._id;
-        scrollToBottom(lastMessage.createdBy === currentUser);
+      // If it's a new message from partner and sound is enabled, play sound
+      if (
+        lastMessage._id !== lastSoundMessageIdRef.current && 
+        lastMessage.createdBy !== currentUser &&
+        lastMessage.createdBy !== "login" // Avoid playing sound for old messages during initial load
+      ) {
+        lastSoundMessageIdRef.current = lastMessage._id;
+        if (isSoundEnabled) {
+          playSound();
+        }
+      }
+      
+      // Also update the scrolling ref if we're in messages tab
+      if (activeTab === "messages") {
+        if (lastMessage._id !== lastMessageIdRef.current) {
+          lastMessageIdRef.current = lastMessage._id;
+          scrollToBottom(lastMessage.createdBy === currentUser);
+        }
       }
     }
-  }, [messages, activeTab, currentUser]);
+  }, [messages, activeTab, currentUser, isSoundEnabled, playSound]);
 
   const loadMoreMessages = () => {
     setMessageLimit(prev => prev + 50);
@@ -393,8 +423,10 @@ export default function HomeClient() {
       const lowerPassword = password.toLowerCase().trim();
       if (lowerPassword === "icai") {
         setView("alpha 1");
+        setShowSoundPrompt(true);
       } else if (lowerPassword === "gamma2") {
         setView("delta 1");
+        setShowSoundPrompt(true);
       }
     }
   }, [password, view]);
@@ -1388,6 +1420,22 @@ export default function HomeClient() {
                 </div>
               </h2>
               <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setIsSoundEnabled(prev => !prev)}
+                  className={`p-1.5 border rounded-lg transition-all active:scale-90 flex items-center justify-center min-w-[32px] min-h-[32px] ${
+                    isSoundEnabled 
+                      ? "bg-zinc-100 border-white text-black" 
+                      : "bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-white"
+                  }`}
+                  title={isSoundEnabled ? "Mute notifications" : "Enable notifications"}
+                >
+                  {isSoundEnabled ? (
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+                  ) : (
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+                  )}
+                </button>
                 {isMessageExpanded && (
                   <button
                     type="button"
@@ -2007,6 +2055,46 @@ export default function HomeClient() {
                     Delete
                   </button>
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+        {showSoundPrompt && (
+          <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/90 backdrop-blur-2xl animate-in fade-in duration-500">
+            <div className="bg-zinc-900 border border-zinc-800 rounded-[3rem] w-full max-w-sm overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] animate-in zoom-in-95 duration-500 border-t-white/10">
+              <div className="p-10 flex flex-col items-center text-center space-y-8">
+                <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(255,255,255,0.1)]">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+                </div>
+                <div className="space-y-3">
+                  <h3 className="text-2xl font-black text-white uppercase tracking-tighter italic">Audio System</h3>
+                  <p className="text-zinc-500 text-sm font-bold leading-relaxed px-4">
+                    Would you like to enable notification sounds for incoming messages?
+                  </p>
+                </div>
+                <div className="flex flex-col w-full gap-3">
+                  <button
+                    onClick={() => {
+                      setIsSoundEnabled(true);
+                      setShowSoundPrompt(false);
+                      // Play a test sound to unlock audio
+                      const audio = new Audio("/notification.mp3");
+                      audio.play().catch(() => {});
+                    }}
+                    className="w-full py-5 bg-white text-black rounded-2xl font-black uppercase tracking-[0.2em] text-[10px] hover:bg-zinc-200 transition-all active:scale-95 shadow-xl shadow-white/5"
+                  >
+                    Enable Sound
+                  </button>
+                  <button
+                    onClick={() => {
+                      setIsSoundEnabled(false);
+                      setShowSoundPrompt(false);
+                    }}
+                    className="w-full py-5 bg-zinc-800 text-zinc-500 rounded-2xl font-black uppercase tracking-[0.2em] text-[10px] hover:bg-zinc-700 hover:text-white transition-all active:scale-95"
+                  >
+                    Keep Muted
+                  </button>
+                </div>
               </div>
             </div>
           </div>
