@@ -62,7 +62,8 @@ body {
 }
 
 .animate-progress {
-  animation: progress 2s infinite ease-in-out;
+  animation: progress 2s infinite linear;
+  will-change: transform;
 }
 
 @keyframes fade-in {

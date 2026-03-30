@@ -86,7 +86,7 @@ export async function fetchData(messageLimit = 50, currentUser?: string) {
       Plan.find({}).lean(),
       TimelineDate.find({}).lean(),
       Message.find(messageQuery).sort({ createdAt: -1 }).limit(messageLimit).populate('repliedTo').lean(),
-      User.find({}).lean()
+      User.find({}).select('username lastSeen lastReadAt chatBackgroundColor chatBubbleColor themeName chatWallpaper').lean()
     ]);
 
     // Deduplicate users by username (lowercase)
@@ -132,7 +132,7 @@ export async function fetchMessages(messageLimit = 50, currentUser?: string) {
 
     const [messages, rawUsers] = await Promise.all([
       Message.find(messageQuery).sort({ createdAt: -1 }).limit(messageLimit).populate('repliedTo').lean(),
-      User.find({}).lean()
+      User.find({}).select('username lastSeen lastReadAt chatBackgroundColor chatBubbleColor themeName chatWallpaper').lean()
     ]);
 
     const userMap = new Map<string, UserDocument>();
@@ -339,7 +339,6 @@ export async function createMessage(data: { text?: string; imageUrl?: string; cr
       }
     }
 
-    revalidatePath('/');
     return JSON.parse(JSON.stringify(message));
   } catch (error) {
     console.error('Failed to create message:', error);
@@ -434,7 +433,6 @@ export async function updatePresence(username: string) {
       { upsert: true, new: true }
     );
     console.log(`📡 Presence updated for: ${username.trim()} at ${updatedUser.lastSeen}`);
-    revalidatePath('/');
   } catch (error) {
     console.error('Failed to update presence:', error);
   }
@@ -449,7 +447,6 @@ export async function markAllAsRead(username: string) {
       { lastReadAt: new Date() },
       { upsert: true, new: true }
     );
-    revalidatePath('/');
   } catch (error) {
     console.error('Failed to mark as read:', error);
     throw new Error('Failed to mark as read. Database connection error.');
@@ -465,7 +462,6 @@ export async function updateChatPreferences(username: string, updates: { chatBac
       updates,
       { upsert: true, new: true }
     );
-    revalidatePath('/');
   } catch (error) {
     console.error('Failed to update chat preferences:', error);
     throw new Error('Failed to update chat preferences.');

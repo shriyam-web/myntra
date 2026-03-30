@@ -164,6 +164,7 @@ export default function HomeClient() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioBufferRef = useRef<AudioBuffer | null>(null);
   const pollingWorkerRef = useRef<Worker | null>(null);
+  const isMarkingReadRef = useRef(false);
 
   // Keep-alive silent audio loop to prevent background throttling
   useEffect(() => {
@@ -353,8 +354,9 @@ export default function HomeClient() {
     ? "fixed inset-0 z-[60] bg-zinc-950 flex flex-col sm:relative sm:inset-auto sm:bg-transparent sm:z-auto sm:p-0"
     : "";
 
-  const fetchMessagesOnly = useCallback(async () => {
+  const fetchMessagesOnly = useCallback(async (silent = true) => {
     try {
+      if (!silent) setIsRefreshing(true);
       const data = await actions.fetchMessages(messageLimit, view as string);
       setUsers(data.users || []);
       
@@ -367,9 +369,11 @@ export default function HomeClient() {
       
       setMessages(data.messages);
       setIsConnected(true);
+      if (!silent) setIsRefreshing(false);
     } catch (error) {
       console.error('Failed to fetch messages:', error);
       setIsConnected(false);
+      if (!silent) setIsRefreshing(false);
     }
   }, [messageLimit, view]);
 
@@ -402,11 +406,23 @@ export default function HomeClient() {
   }, [messageLimit, view]);
 
   const handleMarkAsRead = async () => {
+    if (isMarkingReadRef.current) return;
+    
     try {
+      isMarkingReadRef.current = true;
       await actions.markAllAsRead(view as string);
-      fetchInitialData(true);
+      
+      // Update local state to reflect read status immediately
+      const now = new Date().toISOString();
+      setUsers(prev => prev.map(u => 
+        u.username.trim().toLowerCase() === view.trim().toLowerCase() 
+          ? { ...u, lastReadAt: now } 
+          : u
+      ));
     } catch (error) {
       console.error('Failed to mark as read:', error);
+    } finally {
+      isMarkingReadRef.current = false;
     }
   };
 
@@ -531,7 +547,7 @@ export default function HomeClient() {
         };
       }
       
-      pollingWorkerRef.current.postMessage({ action: "start", interval: 1000 });
+      pollingWorkerRef.current.postMessage({ action: "start", interval: 2500 });
       
       return () => {
         if (pollingWorkerRef.current) {
@@ -547,7 +563,7 @@ export default function HomeClient() {
     if (view !== "login") {
       const presenceInterval = setInterval(() => {
         actions.updatePresence(view);
-      }, 2000);
+      }, 15000);
       actions.updatePresence(view); // Initial call
       return () => clearInterval(presenceInterval);
     }
@@ -580,16 +596,6 @@ export default function HomeClient() {
       window.removeEventListener('offline', handleOffline);
       window.removeEventListener('focus', handleFocus);
     };
-  }, [view, fetchInitialData]);
-
-  useEffect(() => {
-    if (view !== "login") {
-      const timer = setTimeout(() => {
-        fetchInitialData();
-      }, 0);
-      return () => clearTimeout(timer);
-    }
-    return undefined;
   }, [view, fetchInitialData]);
 
   useEffect(() => {

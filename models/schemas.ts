@@ -33,6 +33,8 @@ const MessageSchema = new Schema({
   savedBy: [{ type: String }],
 });
 
+MessageSchema.index({ createdAt: -1 });
+
 const UserSchema = new Schema({
   username: { type: String, required: true, unique: true },
   lastSeen: { type: Date, default: Date.now },
