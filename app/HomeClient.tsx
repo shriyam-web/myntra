@@ -35,6 +35,7 @@ interface PresenceUser {
   chatBubbleColor?: string;
   themeName?: string;
   chatWallpaper?: string;
+  isSoundEnabled?: boolean;
 }
 
 interface WishlistItem {

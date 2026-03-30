@@ -43,6 +43,7 @@ const UserSchema = new Schema({
   chatBubbleColor: { type: String, default: "bg-indigo-600" },
   chatWallpaper: { type: String, default: "" },
   themeName: { type: String, default: "Midnight (Default)" },
+  isSoundEnabled: { type: Boolean, default: true },
 });
 
 export const Ticket = models.Ticket || model('Ticket', TicketSchema);
