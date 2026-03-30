@@ -329,7 +329,7 @@ export default function HomeClient() {
   };
 
   const messagingSectionWrapperClass = isMessageExpanded
-    ? "fixed inset-0 z-[60] bg-zinc-950 p-1 flex flex-col sm:relative sm:inset-auto sm:bg-transparent sm:z-auto sm:p-0"
+    ? "fixed inset-0 z-[60] bg-zinc-950 flex flex-col sm:relative sm:inset-auto sm:bg-transparent sm:z-auto sm:p-0"
     : "";
 
   const fetchInitialData = useCallback(async (silent = false) => {
@@ -1589,7 +1589,7 @@ export default function HomeClient() {
         {activeTab === "messages" && (
           <>
             <section className={`${isMessageExpanded ? "space-y-1" : "space-y-3"} animate-in fade-in slide-in-from-bottom-4 duration-700 ${messagingSectionWrapperClass}`}>
-            <div className={`sticky top-[72px] z-[45] bg-zinc-950/95 backdrop-blur-md flex items-center justify-between px-2 ${isMessageExpanded && isHeaderCollapsed ? "h-0 overflow-hidden opacity-0" : "py-2 mb-1"}`}>
+            <div className={`bg-zinc-950/95 backdrop-blur-md flex items-center justify-between px-2 ${isMessageExpanded && isHeaderCollapsed ? "h-0 overflow-hidden opacity-0" : "py-2 mb-1"}`}>
               <h2 className={`${isMessageExpanded ? "text-xs" : "text-sm"} font-bold text-white flex items-center gap-2`}>
                 <span className="flex h-2.5 w-2.5 relative">
                   <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${activeTheme.accent.replace('text-', 'bg-')} opacity-75`}></span>
