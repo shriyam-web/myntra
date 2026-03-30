@@ -1663,7 +1663,7 @@ export default function HomeClient() {
         {activeTab === "messages" && (
           <>
             <section className={`${isMessageExpanded ? "space-y-1" : "space-y-3"} animate-in fade-in slide-in-from-bottom-4 duration-700 ${messagingSectionWrapperClass}`}>
-            <div className={`bg-zinc-950/95 backdrop-blur-md flex items-center justify-between px-3 border-b border-zinc-800/50 ${isMessageExpanded && isHeaderCollapsed ? "h-0 overflow-hidden opacity-0" : "py-3"}`}>
+            <div className={`relative bg-zinc-950/95 backdrop-blur-md flex items-center justify-between px-3 border-b border-zinc-800/50 ${isMessageExpanded && isHeaderCollapsed ? "h-0 overflow-hidden opacity-0" : "py-3"}`}>
               <div className="flex items-center gap-3">
                 <div className="relative">
                   <div className={`w-10 h-10 rounded-2xl ${activeTheme.bubbleMe} flex items-center justify-center text-white shadow-lg`}>
@@ -1772,6 +1772,11 @@ export default function HomeClient() {
                   </button>
                 </div>
               </div>
+              {isRefreshing && (
+                <div className="absolute bottom-0 left-0 w-full h-[1px] overflow-hidden">
+                  <div className={`h-full w-full ${activeTheme.bubbleMe} animate-progress opacity-80`}></div>
+                </div>
+              )}
             </div>
 
             <div className={`${activeTheme.bg} ${isMessageExpanded ? "rounded-2xl" : "rounded-[2.5rem]"} border border-zinc-800 shadow-2xl relative overflow-hidden flex flex-col backdrop-blur-sm ${isMessageExpanded ? "flex-1" : ""}`}>
