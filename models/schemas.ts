@@ -39,6 +39,7 @@ const UserSchema = new Schema({
   lastReadAt: { type: Date },
   chatBackgroundColor: { type: String, default: "bg-zinc-900/50" }, // Changed to string for flexibility
   chatBubbleColor: { type: String, default: "bg-indigo-600" },
+  chatWallpaper: { type: String, default: "" },
   themeName: { type: String, default: "Midnight (Default)" },
 });
 

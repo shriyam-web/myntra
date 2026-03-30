@@ -408,7 +408,7 @@ export async function markAllAsRead(username: string) {
   }
 }
 
-export async function updateChatPreferences(username: string, updates: { chatBackgroundColor?: string; chatBubbleColor?: string; themeName?: string }) {
+export async function updateChatPreferences(username: string, updates: { chatBackgroundColor?: string; chatBubbleColor?: string; themeName?: string; chatWallpaper?: string }) {
   noStore();
   try {
     await dbConnect();

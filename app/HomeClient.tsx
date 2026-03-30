@@ -101,6 +101,7 @@ export default function HomeClient() {
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [chatBgColor, setChatBgColor] = useState<string>("bg-zinc-900/50");
   const [chatBubbleColor, setChatBubbleColor] = useState<string>("bg-indigo-600");
+  const [chatWallpaper, setChatWallpaper] = useState<string>("");
   const [themeName, setThemeName] = useState<string>("Midnight (Default)");
   const [chatPartnerBubbleColor, setChatPartnerBubbleColor] = useState<string>("bg-zinc-800/80");
   const [isSoundEnabled, setIsSoundEnabled] = useState(false);
@@ -113,6 +114,21 @@ export default function HomeClient() {
   const [previewMessage, setPreviewMessage] = useState<Message | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messageInputRef = useRef<HTMLTextAreaElement>(null);
+
+  const wallpapers = [
+    { id: "none", name: "None", value: "" },
+    { id: "bubbles", name: "Bubbles", value: "🫧", type: "emoji" },
+    { id: "stars", name: "Stars", value: "✨", type: "emoji" },
+    { id: "hearts", name: "Hearts", value: "💖", type: "emoji" },
+    { id: "flowers", name: "Sakura", value: "🌸", type: "emoji" },
+    { id: "butterflies", name: "Butterflies", value: "🦋", type: "emoji" },
+    { id: "nature", name: "Nature", value: "🌴", type: "emoji" },
+    { id: "snow", name: "Snow", value: "❄️", type: "emoji" },
+    { id: "scenery-1", name: "Night Sky", value: "https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?auto=format&fit=crop&w=1200&q=80", type: "image" },
+    { id: "scenery-2", name: "Forest Path", value: "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=1200&q=80", type: "image" },
+    { id: "scenery-3", name: "Ocean Waves", value: "https://images.unsplash.com/photo-1505118380757-91f5f45d8de4?auto=format&fit=crop&w=1200&q=80", type: "image" },
+    { id: "scenery-4", name: "Mountain Peak", value: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=1200&q=80", type: "image" },
+  ];
 
   const themes = [
     { name: "Midnight (Default)", bg: "bg-zinc-900/50", bubbleMe: "bg-indigo-600", bubblePartner: "bg-zinc-800/80", accent: "text-indigo-400", shadow: "shadow-indigo-500/10", glow: "bg-indigo-500/5" },
@@ -447,6 +463,7 @@ export default function HomeClient() {
       if (me) {
         if (me.chatBackgroundColor) setChatBgColor(me.chatBackgroundColor);
         if (me.chatBubbleColor) setChatBubbleColor(me.chatBubbleColor);
+        if (me.chatWallpaper) setChatWallpaper(me.chatWallpaper);
         if (me.themeName) setThemeName(me.themeName);
       }
     }
@@ -457,9 +474,18 @@ export default function HomeClient() {
     setChatBubbleColor(bubble);
     setThemeName(name);
     try {
-      await actions.updateChatPreferences(view, { chatBackgroundColor: bg, chatBubbleColor: bubble, themeName: name });
+      await actions.updateChatPreferences(view, { chatBackgroundColor: bg, chatBubbleColor: bubble, themeName: name, chatWallpaper: chatWallpaper });
     } catch (error) {
       console.error('Failed to update theme:', error);
+    }
+  };
+
+  const handleUpdateWallpaper = async (wallpaper: string) => {
+    setChatWallpaper(wallpaper);
+    try {
+      await actions.updateChatPreferences(view, { chatBackgroundColor: chatBgColor, chatBubbleColor: chatBubbleColor, themeName: themeName, chatWallpaper: wallpaper });
+    } catch (error) {
+      console.error('Failed to update wallpaper:', error);
     }
   };
 
@@ -1702,6 +1728,27 @@ export default function HomeClient() {
             </div>
 
             <div className={`${activeTheme.bg} ${isMessageExpanded ? "rounded-2xl" : "rounded-[2.5rem]"} border border-zinc-800 shadow-2xl relative overflow-hidden flex flex-col backdrop-blur-sm ${isMessageExpanded ? "flex-1" : ""}`}>
+              {/* Wallpaper Layer */}
+              {chatWallpaper && (
+                <div 
+                  className="absolute inset-0 pointer-events-none z-0"
+                  style={
+                    chatWallpaper.startsWith('http') 
+                      ? { 
+                          backgroundImage: `url(${chatWallpaper})`, 
+                          backgroundSize: 'cover', 
+                          backgroundPosition: 'center', 
+                          opacity: 0.15 
+                        } 
+                      : { 
+                          backgroundImage: `url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Ctext x='50%25' y='50%25' font-size='24' text-anchor='middle' dominant-baseline='middle' opacity='0.08'%3E${encodeURIComponent(chatWallpaper)}%3C/text%3E%3C/svg%3E")`, 
+                          backgroundRepeat: 'repeat',
+                          opacity: 1
+                        }
+                  }
+                ></div>
+              )}
+
               <div className={`absolute top-0 right-0 w-64 h-64 ${activeTheme.glow.replace('/5', '/10')} blur-[100px] -mr-32 -mt-32 rounded-full`}></div>
               
               {isHeaderCollapsed && isMessageExpanded && (
@@ -2140,6 +2187,43 @@ export default function HomeClient() {
                         <div className={`absolute left-2 w-1/2 h-6 ${theme.bubblePartner} rounded-full rounded-tl-none opacity-40 scale-75`}></div>
                         <div className={`absolute right-2 w-1/2 h-6 ${theme.bubbleMe} rounded-full rounded-tr-none scale-75`}></div>
                       </div>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="mt-10 mb-6 flex items-center gap-4">
+                  <div className="h-px flex-1 bg-zinc-800"></div>
+                  <h4 className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.4em] italic whitespace-nowrap">Chat Wallpapers</h4>
+                  <div className="h-px flex-1 bg-zinc-800"></div>
+                </div>
+
+                <div className="grid grid-cols-4 sm:grid-cols-6 gap-3 sm:gap-4 pb-4">
+                  {wallpapers.map((wp) => (
+                    <button
+                      key={wp.id}
+                      onClick={() => handleUpdateWallpaper(wp.value)}
+                      className={`aspect-square rounded-2xl border-2 transition-all flex items-center justify-center relative overflow-hidden group ${
+                        chatWallpaper === wp.value 
+                          ? "border-indigo-500 bg-indigo-500/10 shadow-lg shadow-indigo-500/10" 
+                          : "border-zinc-800 bg-zinc-950/50 hover:border-zinc-700"
+                      }`}
+                      title={wp.name}
+                    >
+                      {wp.type === "emoji" ? (
+                        <span className="text-2xl group-hover:scale-110 transition-transform">{wp.value}</span>
+                      ) : wp.type === "image" ? (
+                        <>
+                          <img src={wp.value} alt={wp.name} className="w-full h-full object-cover opacity-50 group-hover:opacity-70 transition-opacity" />
+                          <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-all"></div>
+                        </>
+                      ) : (
+                        <div className="w-full h-full bg-zinc-900 flex items-center justify-center">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-zinc-600"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+                        </div>
+                      )}
+                      {chatWallpaper === wp.value && (
+                        <div className="absolute top-1 right-1 w-2 h-2 bg-indigo-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(99,102,241,0.8)]"></div>
+                      )}
                     </button>
                   ))}
                 </div>
