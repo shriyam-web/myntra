@@ -1191,8 +1191,6 @@ export default function HomeClient() {
     { id: "plans", label: "Plans", icon: <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg> },
     { id: "dates", label: "Timeline", icon: <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> },
     { id: "messages", label: "Message", icon: <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> },
-    { id: "emergency", label: "Emergency", icon: <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg> },
-    { id: "news", label: "What's New", icon: <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg> },
   ] as const;
 
   const sortedTabs = [...tabs].sort((a, b) => {
@@ -2214,46 +2212,6 @@ export default function HomeClient() {
           </>
         )}
 
-        {activeTab === "emergency" && (
-          <section className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-            <h2 className="text-sm font-black text-white px-1 uppercase tracking-[0.3em] flex items-center gap-3">
-              <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
-              Emergency Protocols
-            </h2>
-            <div className="bg-zinc-900 p-10 rounded-[3rem] border border-red-900/10 shadow-2xl relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/5 blur-[80px] -mr-16 -mt-16 rounded-full"></div>
-              <div className="relative z-10 space-y-6">
-                <div className="p-6 bg-zinc-950 border border-red-900/20 rounded-3xl group hover:border-red-900/50 transition-all">
-                  <p className="text-[10px] text-red-900 font-black uppercase tracking-[0.3em] mb-2">Priority 01</p>
-                  <p className="text-lg font-black text-white mb-1">Primary Response</p>
-                  <p className="text-sm text-zinc-500 font-bold">{currentUser === "alpha 1" ? "9648974867" : "+91 **********"}</p>
-                </div>
-                <div className="p-6 bg-zinc-950 border border-zinc-800 rounded-3xl group hover:border-zinc-700 transition-all">
-                  <p className="text-[10px] text-zinc-700 font-black uppercase tracking-[0.3em] mb-2">Backup 02</p>
-                  <p className="text-lg font-black text-white mb-1">Secondary Channel</p>
-                  <p className="text-sm text-zinc-500 font-bold">{currentUser === "alpha 1" ? "Shriyamparashar5@gmail.com" : "Encrypted VOIP Only"}</p>
-                </div>
-              </div>
-            </div>
-          </section>
-        )}
-
-        {activeTab === "news" && (
-          <section className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-            <h2 className="text-sm font-black text-white px-1 uppercase tracking-[0.3em] flex items-center gap-3">
-              <span className="w-2 h-2 bg-cyan-500 rounded-full"></span>
-              System Updates
-            </h2>
-            <div className="bg-zinc-900 p-8 rounded-[3rem] border border-zinc-800 shadow-2xl space-y-6 relative overflow-hidden flex items-center justify-center min-h-[200px]">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/5 blur-[80px] -mr-16 -mt-16 rounded-full"></div>
-              <div className="relative z-10">
-                <p className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.4em] italic text-center">
-                  nothing new here
-                </p>
-              </div>
-            </div>
-          </section>
-        )}
 
         {showThemeSettings && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl animate-in fade-in duration-300">
@@ -2412,13 +2370,7 @@ export default function HomeClient() {
       </main>
 
       {/* Footer */}
-      <footer className="mt-2 px-6 py-4 flex flex-col items-center gap-12 border-t border-zinc-900/50 bg-gradient-to-b from-transparent to-zinc-900/20">
-        <div className="flex flex-col items-center gap-4 group opacity-30 hover:opacity-100 transition-all duration-1000 cursor-none">
-          <div className="flex flex-col items-center gap-1">
-            <span className="text-[9px] font-black text-zinc-600 uppercase tracking-[0.6em] group-hover:text-white transition-colors">Internal OS v2.4</span>
-            <span className="text-[7px] font-bold text-zinc-800 uppercase tracking-widest">End of Line</span>
-          </div>
-        </div>
+      <footer className="mt-0 px-6 py-0 flex flex-col items-center">
         {previewMessage && (
           <div 
             className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/95 backdrop-blur-xl animate-in fade-in duration-300"
