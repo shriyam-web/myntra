@@ -34,6 +34,7 @@ interface PresenceUser {
   chatBackgroundColor?: string;
   chatBubbleColor?: string;
   themeName?: string;
+  chatWallpaper?: string;
 }
 
 interface WishlistItem {
