@@ -747,13 +747,21 @@ export default function HomeClient() {
         }
       }
 
-      await actions.createMessage({ 
+      const savedMessage = await actions.createMessage({ 
         text: messageText || undefined, 
         imageUrl,
         createdBy: currentUser as "alpha 1" | "delta 1",
         repliedTo: currentReplyingTo?._id
       });
-      fetchInitialData(true);
+      
+      // Update optimistic message with the real one from server
+      setMessages(prev => prev.map(m => m._id === tempId ? savedMessage : m));
+      
+      // Only do a full fetch if it was an image (to ensure everything is synced)
+      // For text, the local update is enough until the next poll
+      if (isImageUpload) {
+        fetchInitialData(true);
+      }
     } catch (error) {
       console.error('Failed to send message:', error);
       // Remove optimistic message on error
