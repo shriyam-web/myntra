@@ -123,10 +123,17 @@ export default function HomeClient() {
     { id: "butterflies", name: "Butterflies", value: "🦋", type: "emoji" },
     { id: "nature", name: "Nature", value: "🌴", type: "emoji" },
     { id: "snow", name: "Snow", value: "❄️", type: "emoji" },
+    { id: "abstract-1", name: "Nebula", value: "🌌", type: "emoji" },
+    { id: "abstract-2", name: "Cloud", value: "☁️", type: "emoji" },
+    { id: "abstract-3", name: "Moon", value: "🌙", type: "emoji" },
     { id: "scenery-1", name: "Night Sky", value: "https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?auto=format&fit=crop&w=1200&q=80", type: "image" },
     { id: "scenery-2", name: "Forest Path", value: "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=1200&q=80", type: "image" },
-    { id: "scenery-3", name: "Ocean Waves", value: "https://images.unsplash.com/photo-1505118380757-91f5f45d8de4?auto=format&fit=crop&w=1200&q=80", type: "image" },
+    { id: "scenery-3", name: "Ocean Waves", value: "https://images.unsplash.com/photo-1439405326854-014607f694d7?auto=format&fit=crop&w=1200&q=80", type: "image" },
     { id: "scenery-4", name: "Mountain Peak", value: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=1200&q=80", type: "image" },
+    { id: "scenery-5", name: "Desert Dunes", value: "https://images.unsplash.com/photo-1473580044384-7ba9967e16a0?auto=format&fit=crop&w=1200&q=80", type: "image" },
+    { id: "scenery-6", name: "Sunset Beach", value: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1200&q=80", type: "image" },
+    { id: "scenery-7", name: "City Lights", value: "https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?auto=format&fit=crop&w=1200&q=80", type: "image" },
+    { id: "scenery-8", name: "Aurora", value: "https://images.unsplash.com/photo-1531366930477-4f1f27f3c30b?auto=format&fit=crop&w=1200&q=80", type: "image" },
   ];
 
   const themes = [
@@ -1736,10 +1743,10 @@ export default function HomeClient() {
                           backgroundImage: `url(${chatWallpaper})`, 
                           backgroundSize: 'cover', 
                           backgroundPosition: 'center', 
-                          opacity: 0.15 
+                          opacity: 0.3 
                         } 
                       : { 
-                          backgroundImage: `url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Ctext x='50%25' y='50%25' font-size='24' text-anchor='middle' dominant-baseline='middle' opacity='0.08'%3E${encodeURIComponent(chatWallpaper)}%3C/text%3E%3C/svg%3E")`, 
+                          backgroundImage: `url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Ctext x='50%25' y='50%25' font-size='24' text-anchor='middle' dominant-baseline='middle' opacity='0.15'%3E${encodeURIComponent(chatWallpaper)}%3C/text%3E%3C/svg%3E")`, 
                           backgroundRepeat: 'repeat',
                           opacity: 1
                         }
