@@ -137,10 +137,40 @@ export default function HomeClient() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const lastMessageIdRef = useRef<string | null>(null);
   const lastSoundMessageIdRef = useRef<string | null>(null);
+  const lastSoundTimeRef = useRef<number>(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const silentAudioRef = useRef<HTMLAudioElement | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioBufferRef = useRef<AudioBuffer | null>(null);
   const pollingWorkerRef = useRef<Worker | null>(null);
+
+  // Keep-alive silent audio loop to prevent background throttling
+  useEffect(() => {
+    if (isSoundEnabled && view !== "login") {
+      if (!silentAudioRef.current) {
+        // 1-second silent WAV base64
+        const silentSrc = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+        silentAudioRef.current = new Audio(silentSrc);
+        silentAudioRef.current.loop = true;
+        silentAudioRef.current.volume = 0.01; // Nearly silent
+      }
+      
+      const playSilent = async () => {
+        try {
+          await silentAudioRef.current?.play();
+          console.log("🔊 Keep-alive silent audio started");
+        } catch (e) {
+          console.warn("Silent audio failed (interaction required):", e);
+        }
+      };
+      
+      playSilent();
+      
+      return () => {
+        silentAudioRef.current?.pause();
+      };
+    }
+  }, [isSoundEnabled, view]);
 
   // Initialize Audio Context and load sound
   useEffect(() => {
@@ -163,6 +193,14 @@ export default function HomeClient() {
 
   const playSound = useCallback(() => {
     if (!isSoundEnabled) return;
+
+    // Prevent "sound burst" by throttling playSound calls (max once every 2 seconds)
+    const now = Date.now();
+    if (now - lastSoundTimeRef.current < 2000) {
+      console.log("🔊 Sound throttled to prevent burst");
+      return;
+    }
+    lastSoundTimeRef.current = now;
 
     const play = async (retryCount = 0) => {
       try {
@@ -195,8 +233,6 @@ export default function HomeClient() {
         }
       } catch (e) {
         console.warn(`Sound play attempt ${retryCount + 1} failed:`, e);
-        // If it failed because of lack of interaction, we can't do much more than wait for one
-        // but if it's another error, retry might help
         if (retryCount < 3) {
           setTimeout(() => play(retryCount + 1), 500);
         }
@@ -204,6 +240,36 @@ export default function HomeClient() {
     };
 
     play();
+  }, [isSoundEnabled]);
+
+  const handleToggleSound = useCallback(() => {
+    const newSoundState = !isSoundEnabled;
+    setIsSoundEnabled(newSoundState);
+    
+    if (newSoundState) {
+      // Re-initialize AudioContext and Silent Loop on user gesture
+      try {
+        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+        if (!audioContextRef.current) {
+          audioContextRef.current = new AudioContextClass();
+        }
+        if (audioContextRef.current.state === 'suspended') {
+          audioContextRef.current.resume();
+        }
+        
+        // Start silent loop immediately
+        if (silentAudioRef.current) {
+          silentAudioRef.current.play().catch(e => console.warn("Silent audio failed to start on toggle:", e));
+        }
+      } catch (e) {
+        console.error("Manual audio init failed:", e);
+      }
+    } else {
+      // Pause silent loop if turning off
+      if (silentAudioRef.current) {
+        silentAudioRef.current.pause();
+      }
+    }
   }, [isSoundEnabled]);
 
   const showNotification = useCallback((title: string, body: string) => {
@@ -328,7 +394,14 @@ export default function HomeClient() {
         lastMessage.createdBy !== currentUser
       ) {
         lastSoundMessageIdRef.current = lastMessage._id;
-        if (isSoundEnabled) {
+        
+        // Only play sound if the message is relatively new (within last 2 minutes)
+        // This prevents the "burst" of sounds when returning to a tab that was suspended
+        const messageTime = new Date(lastMessage.createdAt).getTime();
+        const now = Date.now();
+        const isRecent = now - messageTime < 120000; // 2 minutes
+
+        if (isSoundEnabled && isRecent) {
           showNotification(`New message from ${lastMessage.createdBy}`, lastMessage.text || (lastMessage.imageUrl ? "Sent an image" : ""));
           playSound();
         }
@@ -1047,24 +1120,7 @@ export default function HomeClient() {
           </div>
           <div className="flex gap-2">
             <button 
-              onClick={() => {
-                const newSoundState = !isSoundEnabled;
-                setIsSoundEnabled(newSoundState);
-                if (newSoundState) {
-                  // Re-initialize AudioContext on user gesture
-                  try {
-                    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-                    if (!audioContextRef.current) {
-                      audioContextRef.current = new AudioContextClass();
-                    }
-                    if (audioContextRef.current.state === 'suspended') {
-                      audioContextRef.current.resume();
-                    }
-                  } catch (e) {
-                    console.error("Manual audio init failed:", e);
-                  }
-                }
-              }}
+              onClick={handleToggleSound}
               className={`p-3 rounded-2xl transition-all active:scale-90 border flex items-center gap-2 ${
                 isSoundEnabled 
                   ? "bg-white text-black border-white shadow-lg shadow-white/5" 
@@ -1571,7 +1627,7 @@ export default function HomeClient() {
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
-                  onClick={() => setIsSoundEnabled(prev => !prev)}
+                  onClick={handleToggleSound}
                   className={`p-1.5 border rounded-lg transition-all active:scale-90 flex items-center justify-center min-w-[32px] min-h-[32px] ${
                     isSoundEnabled 
                       ? "bg-zinc-100 border-white text-black" 
@@ -2257,6 +2313,11 @@ export default function HomeClient() {
                         source.buffer = audioBufferRef.current;
                         source.connect(ctx.destination);
                         source.start(0);
+
+                        // Start silent loop to keep background active
+                        if (silentAudioRef.current) {
+                          silentAudioRef.current.play().catch(() => {});
+                        }
                       } catch (e) {
                         console.error("Gesture-based audio init failed:", e);
                         // Fallback
