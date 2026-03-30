@@ -1589,103 +1589,114 @@ export default function HomeClient() {
         {activeTab === "messages" && (
           <>
             <section className={`${isMessageExpanded ? "space-y-1" : "space-y-3"} animate-in fade-in slide-in-from-bottom-4 duration-700 ${messagingSectionWrapperClass}`}>
-            <div className={`bg-zinc-950/95 backdrop-blur-md flex items-center justify-between px-2 ${isMessageExpanded && isHeaderCollapsed ? "h-0 overflow-hidden opacity-0" : "py-2 mb-1"}`}>
-              <h2 className={`${isMessageExpanded ? "text-xs" : "text-sm"} font-bold text-white flex items-center gap-2`}>
-                <span className="flex h-2.5 w-2.5 relative">
-                  <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${activeTheme.accent.replace('text-', 'bg-')} opacity-75`}></span>
-                  <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${activeTheme.bubbleMe}`}></span>
-                </span>
+            <div className={`bg-zinc-950/95 backdrop-blur-md flex items-center justify-between px-3 border-b border-zinc-800/50 ${isMessageExpanded && isHeaderCollapsed ? "h-0 overflow-hidden opacity-0" : "py-3"}`}>
+              <div className="flex items-center gap-3">
+                <div className="relative">
+                  <div className={`w-10 h-10 rounded-2xl ${activeTheme.bubbleMe} flex items-center justify-center text-white shadow-lg`}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                  </div>
+                  <span className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-zinc-950 ${getPartnerStatus() === "Online" ? "bg-green-500 animate-pulse" : "bg-zinc-600"}`}></span>
+                </div>
+                
                 <div className="flex flex-col">
-                  <span className="leading-tight">Direct Messages</span>
+                  <h2 className="text-sm font-bold text-white leading-none mb-1 flex items-center gap-2">
+                    Direct Messages
+                    {hasUnreadMessages() && <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>}
+                  </h2>
                   {!isHeaderCollapsed && (
-                    <div className="flex items-center gap-2 mt-0.5">
-                      {getPartnerStatus() && (
-                        <span className={`text-[8px] font-bold uppercase tracking-[0.1em] ${getPartnerStatus() === "Online" ? "text-green-500 animate-pulse" : "text-zinc-600"}`}>
-                          {getPartnerStatus()}
-                        </span>
-                      )}
+                    <div className="flex items-center gap-2">
+                      <span className={`text-[10px] font-bold uppercase tracking-wider ${getPartnerStatus() === "Online" ? "text-green-500/80" : "text-zinc-500"}`}>
+                        {getPartnerStatus() || "Offline"}
+                      </span>
                       {users.find(u => u.username.trim().toLowerCase() === (currentUser.trim().toLowerCase() === "alpha 1" ? "delta 1" : "alpha 1"))?.lastReadAt && (
-                        <span className={`text-[7px] font-bold uppercase tracking-[0.1em] ${activeTheme.accent} opacity-60`}>
-                          {(() => {
-                            const partnerUsername = currentUser.trim().toLowerCase() === "alpha 1" ? "delta 1" : "alpha 1";
-                            const partner = users.find(u => u.username.trim().toLowerCase() === partnerUsername)!;
-                            const readDate = new Date(partner.lastReadAt!);
-                            const now = new Date();
-                            const isToday = readDate.toDateString() === now.toDateString();
-                            const time = readDate.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-                            if (isToday) return `Read at ${time}`;
-                            const day = readDate.getDate();
-                            const month = readDate.toLocaleString('default', { month: 'long' });
-                            return `Read ${day} ${month}, ${time}`;
-                          })()}
-                        </span>
+                        <>
+                          <span className="w-1 h-1 bg-zinc-800 rounded-full"></span>
+                          <span className={`text-[9px] font-medium text-zinc-600 italic`}>
+                            {(() => {
+                              const partnerUsername = currentUser.trim().toLowerCase() === "alpha 1" ? "delta 1" : "alpha 1";
+                              const partner = users.find(u => u.username.trim().toLowerCase() === partnerUsername)!;
+                              const readDate = new Date(partner.lastReadAt!);
+                              const now = new Date();
+                              const isToday = readDate.toDateString() === now.toDateString();
+                              const time = readDate.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+                              if (isToday) return `Read ${time}`;
+                              return `Read ${readDate.getDate()} ${readDate.toLocaleString('default', { month: 'short' })}`;
+                            })()}
+                          </span>
+                        </>
                       )}
                     </div>
                   )}
                 </div>
-              </h2>
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={handleToggleSound}
-                  className={`p-1.5 border rounded-lg transition-all active:scale-90 flex items-center justify-center min-w-[32px] min-h-[32px] ${
-                    isSoundEnabled 
-                      ? "bg-zinc-100 border-white text-black" 
-                      : "bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-white"
-                  }`}
-                  title={isSoundEnabled ? "Mute notifications" : "Enable notifications"}
-                >
-                  {isSoundEnabled ? (
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
-                  ) : (
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
-                  )}
-                </button>
-                {isMessageExpanded && (
+              </div>
+
+              <div className="flex items-center gap-1 bg-zinc-900/50 p-1 rounded-xl border border-zinc-800/50">
+                <div className="flex items-center gap-1 pr-1 mr-1 border-r border-zinc-800/50">
                   <button
                     type="button"
-                    onClick={() => setIsHeaderCollapsed(prev => !prev)}
-                    className="p-1.5 bg-zinc-900/50 border border-zinc-800 rounded-lg text-zinc-500 hover:text-white transition-all active:scale-90 flex items-center justify-center min-w-[32px] min-h-[32px]"
-                    title={isHeaderCollapsed ? "Expand header" : "Collapse header"}
+                    onClick={handleToggleSound}
+                    className={`p-1.5 rounded-lg transition-all active:scale-90 flex items-center justify-center min-w-[30px] min-h-[30px] ${
+                      isSoundEnabled 
+                        ? "bg-white text-black shadow-md" 
+                        : "text-zinc-500 hover:text-white hover:bg-zinc-800"
+                    }`}
+                    title={isSoundEnabled ? "Mute" : "Unmute"}
                   >
-                    {isHeaderCollapsed ? (
-                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
+                    {isSoundEnabled ? (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
                     ) : (
-                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m17 9-5-5-5 5"/><path d="m17 15-5 5-5-5"/></svg>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
                     )}
                   </button>
-                )}
-                {hasUnreadMessages() && (
                   <button
                     type="button"
-                    onClick={handleMarkAsRead}
-                    className={`p-1.5 ${activeTheme.glow} border ${activeTheme.accent.replace('text-', 'border-')}/20 rounded-lg ${activeTheme.accent} hover:bg-${activeTheme.accent.split('-')[1]}-500/20 transition-all active:scale-90 flex items-center justify-center min-w-[32px] min-h-[32px]`}
-                    title="Mark all as read"
+                    onClick={() => fetchInitialData()}
+                    className={`p-1.5 text-zinc-500 hover:text-white hover:bg-zinc-800 rounded-lg transition-all active:scale-90 flex items-center justify-center min-w-[30px] min-h-[30px] ${isRefreshing ? "animate-spin text-white" : ""}`}
+                    title="Refresh"
+                    disabled={isRefreshing}
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 7 17l-5-5"/><path d="m22 10-7.5 7.5L13 16"/></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.85.83 6.72 2.27L21 8"/><path d="M21 3v5h-5"/></svg>
                   </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setIsMessageExpanded(prev => !prev)}
-                  className="p-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-500 hover:text-white transition-all active:scale-90 flex items-center justify-center min-w-[32px] min-h-[32px]"
-                  title={isMessageExpanded ? "Minimize messages" : "Maximize messages"}
-                >
-                  {isMessageExpanded ? (
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3v5H3M21 8h-5V3M3 16h5v5M16 21v-5h5"/></svg>
-                  ) : (
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+                </div>
+
+                <div className="flex items-center gap-1">
+                  {hasUnreadMessages() && (
+                    <button
+                      type="button"
+                      onClick={handleMarkAsRead}
+                      className={`p-1.5 rounded-lg ${activeTheme.accent} hover:bg-white/10 transition-all active:scale-90 flex items-center justify-center min-w-[30px] min-h-[30px]`}
+                      title="Mark Read"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 7 17l-5-5"/><path d="m22 10-7.5 7.5L13 16"/></svg>
+                    </button>
                   )}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => fetchInitialData()}
-                  className={`p-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-500 hover:text-white transition-all active:scale-90 flex items-center justify-center min-w-[32px] min-h-[32px] ${isRefreshing ? "animate-spin" : ""}`}
-                  title="Refresh status and messages"
-                  disabled={isRefreshing}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.85.83 6.72 2.27L21 8"/><path d="M21 3v5h-5"/></svg>
-                </button>
+                  {isMessageExpanded && (
+                    <button
+                      type="button"
+                      onClick={() => setIsHeaderCollapsed(prev => !prev)}
+                      className="p-1.5 text-zinc-500 hover:text-white hover:bg-zinc-800 rounded-lg transition-all active:scale-90 flex items-center justify-center min-w-[30px] min-h-[30px]"
+                      title={isHeaderCollapsed ? "Expand" : "Collapse"}
+                    >
+                      {isHeaderCollapsed ? (
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
+                      ) : (
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m17 9-5-5-5 5"/><path d="m17 15-5 5-5-5"/></svg>
+                      )}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setIsMessageExpanded(prev => !prev)}
+                    className="p-1.5 text-zinc-500 hover:text-white hover:bg-zinc-800 rounded-lg transition-all active:scale-90 flex items-center justify-center min-w-[30px] min-h-[30px]"
+                    title={isMessageExpanded ? "Minimize" : "Maximize"}
+                  >
+                    {isMessageExpanded ? (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3v5H3M21 8h-5V3M3 16h5v5M16 21v-5h5"/></svg>
+                    ) : (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
 
