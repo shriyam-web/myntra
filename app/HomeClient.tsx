@@ -353,6 +353,26 @@ export default function HomeClient() {
     ? "fixed inset-0 z-[60] bg-zinc-950 flex flex-col sm:relative sm:inset-auto sm:bg-transparent sm:z-auto sm:p-0"
     : "";
 
+  const fetchMessagesOnly = useCallback(async () => {
+    try {
+      const data = await actions.fetchMessages(messageLimit, view as string);
+      setUsers(data.users || []);
+      
+      // Update messages and check if there are more
+      if (data.messages.length < messageLimit) {
+        setHasMoreMessages(false);
+      } else {
+        setHasMoreMessages(true);
+      }
+      
+      setMessages(data.messages);
+      setIsConnected(true);
+    } catch (error) {
+      console.error('Failed to fetch messages:', error);
+      setIsConnected(false);
+    }
+  }, [messageLimit, view]);
+
   const fetchInitialData = useCallback(async (silent = false) => {
     try {
       if (!silent) setIsRefreshing(true);
@@ -501,12 +521,17 @@ export default function HomeClient() {
         pollingWorkerRef.current = new Worker("/polling-worker.js");
         pollingWorkerRef.current.onmessage = (e) => {
           if (e.data.action === "tick") {
-            fetchInitialData(true);
+            // If we are on messages tab, only fetch messages to be fast
+            if (activeTab === "messages") {
+              fetchMessagesOnly();
+            } else {
+              fetchInitialData(true);
+            }
           }
         };
       }
       
-      pollingWorkerRef.current.postMessage({ action: "start", interval: 2500 });
+      pollingWorkerRef.current.postMessage({ action: "start", interval: 1000 });
       
       return () => {
         if (pollingWorkerRef.current) {
@@ -516,13 +541,13 @@ export default function HomeClient() {
         }
       };
     }
-  }, [view, fetchInitialData]);
+  }, [view, fetchInitialData, fetchMessagesOnly, activeTab]);
 
   useEffect(() => {
     if (view !== "login") {
       const presenceInterval = setInterval(() => {
         actions.updatePresence(view);
-      }, 3000);
+      }, 2000);
       actions.updatePresence(view); // Initial call
       return () => clearInterval(presenceInterval);
     }
@@ -539,14 +564,23 @@ export default function HomeClient() {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
+    // Refresh when tab becomes active
+    const handleFocus = () => {
+      if (view !== "login") {
+        fetchInitialData(true);
+      }
+    };
+    window.addEventListener('focus', handleFocus);
+
     // Set initial state
     setIsOnline(navigator.onLine);
 
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('focus', handleFocus);
     };
-  }, []);
+  }, [view, fetchInitialData]);
 
   useEffect(() => {
     if (view !== "login") {

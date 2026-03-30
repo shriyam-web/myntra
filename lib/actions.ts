@@ -120,6 +120,41 @@ export async function fetchData(messageLimit = 50, currentUser?: string) {
   }
 }
 
+// FETCH ONLY MESSAGES (for faster polling)
+export async function fetchMessages(messageLimit = 50, currentUser?: string) {
+  noStore();
+  try {
+    await dbConnect();
+    const messageQuery: Record<string, unknown> = {};
+    if (currentUser) {
+      messageQuery.deletedFor = { $ne: currentUser };
+    }
+
+    const [messages, rawUsers] = await Promise.all([
+      Message.find(messageQuery).sort({ createdAt: -1 }).limit(messageLimit).populate('repliedTo').lean(),
+      User.find({}).lean()
+    ]);
+
+    const userMap = new Map<string, UserDocument>();
+    (rawUsers as UserDocument[]).forEach((u: UserDocument) => {
+      const uname = u.username.trim().toLowerCase();
+      const existing = userMap.get(uname);
+      if (!existing || new Date(u.lastSeen) > new Date(existing.lastSeen)) {
+        userMap.set(uname, u);
+      }
+    });
+    const users = Array.from(userMap.values());
+
+    return {
+      messages: JSON.parse(JSON.stringify(messages.reverse())),
+      users: JSON.parse(JSON.stringify(users))
+    };
+  } catch (error) {
+    console.error('Fetch messages error:', error);
+    throw new Error('Unable to fetch messages.');
+  }
+}
+
 // TICKETS (Complaints)
 export async function createTicket(data: { description: string; createdBy: string }) {
   try {
