@@ -148,7 +148,7 @@ export default function HomeClient() {
     { name: "Rose Quartz", bg: "bg-rose-950/40", bubbleMe: "bg-rose-600", bubblePartner: "bg-zinc-900/80", accent: "text-rose-400", shadow: "shadow-rose-500/10", glow: "bg-rose-500/5" },
     { name: "Toxic", bg: "bg-lime-950/40", bubbleMe: "bg-lime-600", bubblePartner: "bg-zinc-900/80", accent: "text-lime-400", shadow: "shadow-lime-500/10", glow: "bg-lime-500/5" },
     { name: "Sakura", bg: "bg-fuchsia-950/40", bubbleMe: "bg-fuchsia-600", bubblePartner: "bg-zinc-900/80", accent: "text-fuchsia-400", shadow: "shadow-fuchsia-500/10", glow: "bg-fuchsia-500/5" },
-    { name: "Ghost", bg: "bg-zinc-950/80", bubbleMe: "bg-white", bubblePartner: "bg-zinc-800/80", accent: "text-zinc-400", shadow: "shadow-white/5", glow: "bg-white/5", textMe: "text-black" },
+    { name: "Ghost", bg: "bg-zinc-950/80", bubbleMe: "bg-white", bubblePartner: "bg-zinc-800/80", accent: "text-white", shadow: "shadow-white/5", glow: "bg-white/5", textMe: "text-black" },
   ];
   const [isConnected, setIsConnected] = useState(true);
   const [isOnline, setIsOnline] = useState(true);
