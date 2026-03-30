@@ -1750,192 +1750,200 @@ export default function HomeClient() {
                   </div>
                 ) : (
                   <div className="flex flex-col">
-                    {messages.map((m, index) => {
-                      const isMe = m.createdBy.trim().toLowerCase() === currentUser.trim().toLowerCase();
-                      const partnerUsername = (currentUser.trim().toLowerCase() === "alpha 1" ? "delta 1" : "alpha 1");
-                      const partner = users.find(u => u.username.trim().toLowerCase() === partnerUsername);
-                      const isRead = isMe && !!partner?.lastReadAt && (new Date(m.createdAt).getTime() <= new Date(partner.lastReadAt).getTime() + 100);
-                      
-                      const messageDate = new Date(m.createdAt).toLocaleDateString('en-GB');
-                      const prevMessage = index > 0 ? messages[index - 1] : null;
-                      const prevMessageDate = prevMessage ? new Date(prevMessage.createdAt).toLocaleDateString('en-GB') : null;
-                      const showDateSeparator = messageDate !== prevMessageDate;
+                    {(() => {
+                      const groups: { date: string; label: string; messages: Message[] }[] = [];
+                      messages.forEach(m => {
+                        const dateObj = new Date(m.createdAt);
+                        const dateKey = dateObj.toLocaleDateString('en-GB');
+                        const lastGroup = groups[groups.length - 1];
+                        if (lastGroup && lastGroup.date === dateKey) {
+                          lastGroup.messages.push(m);
+                        } else {
+                          groups.push({ date: dateKey, label: formatDateLabel(m.createdAt), messages: [m] });
+                        }
+                      });
 
-                      return (
-                        <Fragment key={m._id}>
-                          {showDateSeparator && (
-                            <div className="flex justify-center mb-4 sticky top-0 z-[40] -mx-4 py-2 pointer-events-none">
-                              <div className="bg-zinc-800/80 text-zinc-400 text-[11px] font-bold uppercase tracking-widest px-4 py-1.5 rounded-full border border-zinc-700/50 shadow-sm backdrop-blur-sm pointer-events-auto">
-                                {formatDateLabel(m.createdAt)}
-                              </div>
+                      return groups.map((group) => (
+                        <div key={group.date} className="flex flex-col relative">
+                          <div className="flex justify-center mb-4 sticky top-0 z-[40] -mx-4 py-2 pointer-events-none">
+                            <div className="bg-zinc-800/80 text-zinc-400 text-[11px] font-bold uppercase tracking-widest px-4 py-1.5 rounded-full border border-zinc-700/50 shadow-sm backdrop-blur-sm pointer-events-auto">
+                              {group.label}
                             </div>
-                          )}
-                          <div 
-                            id={`message-${m._id}`}
-                            className={`flex flex-col w-full transition-all duration-200 rounded-3xl mb-6 ${isMe ? "items-end" : "items-start"}`}
-                          onTouchStart={(e) => setTouchStart(e.targetTouches[0].clientX)}
-                          onTouchEnd={(e) => {
-                            if (touchStart === null) return;
-                            const touchEnd = e.changedTouches[0].clientX;
-                            const distance = touchEnd - touchStart;
-                            // Swipe right threshold (e.g., 50px)
-                            if (distance > 70) {
-                              setReplyingTo(m);
-                              // Provide haptic feedback if available
-                              if (window.navigator.vibrate) window.navigator.vibrate(10);
-                            }
-                            setTouchStart(null);
-                          }}
-                        >
-                          <div className={`flex items-center gap-2 mb-1.5 px-1.5 ${isMe ? "flex-row-reverse" : "flex-row"}`}>
-                            <span className="text-[10px] text-zinc-600 font-medium">
-                              {new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
-                            </span>
                           </div>
+                          {group.messages.map((m) => {
+                            const isMe = m.createdBy.trim().toLowerCase() === currentUser.trim().toLowerCase();
+                            const partnerUsername = (currentUser.trim().toLowerCase() === "alpha 1" ? "delta 1" : "alpha 1");
+                            const partner = users.find(u => u.username.trim().toLowerCase() === partnerUsername);
+                            const isRead = isMe && !!partner?.lastReadAt && (new Date(m.createdAt).getTime() <= new Date(partner.lastReadAt).getTime() + 100);
+                            
+                            return (
+                              <div 
+                                key={m._id}
+                                id={`message-${m._id}`}
+                                className={`flex flex-col w-full transition-all duration-200 rounded-3xl mb-6 ${isMe ? "items-end" : "items-start"}`}
+                                onTouchStart={(e) => setTouchStart(e.targetTouches[0].clientX)}
+                                onTouchEnd={(e) => {
+                                  if (touchStart === null) return;
+                                  const touchEnd = e.changedTouches[0].clientX;
+                                  const distance = touchEnd - touchStart;
+                                  if (distance > 70) {
+                                    setReplyingTo(m);
+                                    if (window.navigator.vibrate) window.navigator.vibrate(10);
+                                  }
+                                  setTouchStart(null);
+                                }}
+                              >
+                                <div className={`flex items-center gap-2 mb-1.5 px-1.5 ${isMe ? "flex-row-reverse" : "flex-row"}`}>
+                                  <span className="text-[10px] text-zinc-600 font-medium">
+                                    {new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
+                                  </span>
+                                </div>
 
-                          <div className={`flex items-end gap-2 w-full ${isMe ? "flex-row-reverse" : "flex-row"}`}>
-                            <div 
-                              onClick={() => {
-                                setActiveMessageActions(activeMessageActions === m._id ? null : m._id);
-                              }}
-                              className={`max-w-[85%] min-w-[50px] w-fit ${m.imageUrl && !m.text ? "p-3" : "p-4"} rounded-3xl text-[14.5px] leading-[1.6] relative break-words whitespace-pre-wrap shadow-xl cursor-pointer flex-shrink-0 ${
-                                isMe 
-                                  ? `${activeTheme.bubbleMe} ${activeTheme.textMe || 'text-white'} rounded-tr-none ${activeTheme.shadow}` 
-                                  : `${activeTheme.bubblePartner} text-zinc-100 rounded-tl-none border border-zinc-700/30 shadow-black/20`
-                              }`}
-                            >
-                              {m.savedBy?.includes(view as string) && (
-                                <div className={`absolute top-1 ${isMe ? "right-2" : "right-2"} z-10 text-yellow-400 opacity-80`}>
-                                  <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
-                                    <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
-                                  </svg>
-                                </div>
-                              )}
-                              {m.repliedTo && (
-                                <div 
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    scrollToMessage(m.repliedTo!._id);
-                                  }}
-                                  className={`mb-2 p-2 border-l-2 bg-black/10 rounded-r-lg max-w-full overflow-hidden cursor-pointer hover:bg-black/20 transition-colors ${isMe ? "border-white/50" : "border-indigo-500/50"}`}
-                                >
-                                  <p className="text-[10px] font-black uppercase tracking-wider opacity-60 mb-0.5">
-                                    {m.repliedTo.createdBy}
-                                  </p>
-                                  <p className="text-[11px] truncate opacity-80 italic">
-                                    {m.repliedTo.imageUrl ? "Sent an image" : m.repliedTo.text}
-                                  </p>
-                                </div>
-                              )}
-                              {m.imageUrl && (
-                                <div 
-                                  className={`${m.text ? "mb-1.5" : ""} rounded-2xl overflow-hidden cursor-zoom-in group relative`}
-                                  onClick={() => {
-                                    setPreviewMessage(m);
-                                  }}
-                                >
-                                  <img 
-                                    src={m.imageUrl} 
-                                    alt="Message attachment" 
-                                    className="w-full max-h-[400px] object-cover hover:scale-105 transition-transform duration-500"
-                                  />
-                                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
-                                </div>
-                              )}
-                              {m.text && (
-                                <div className={m.imageUrl ? "px-2.5 pb-2.5 pt-0.5" : ""}>
-                                  {editingMessage === m._id ? (
-                                    <div className="flex flex-col gap-2 min-w-[200px]">
-                                      <textarea
-                                        value={editingMessageText}
-                                        onChange={(e) => setEditingMessageText(e.target.value)}
-                                        className="w-full bg-black/20 border border-white/20 rounded-xl px-3 py-2 text-sm font-medium outline-none text-white resize-none"
-                                        autoFocus
-                                        rows={2}
-                                      />
-                                      <div className="flex justify-end gap-2">
-                                        <button onClick={(e) => { e.stopPropagation(); handleUpdateMessage(m._id, editingMessageText); }} className="text-[10px] font-black text-white bg-green-600 px-3 py-1 rounded-lg">SAVE</button>
-                                        <button onClick={(e) => { e.stopPropagation(); setEditingMessage(null); setEditingMessageText(""); }} className="text-[10px] font-black text-white bg-zinc-700 px-3 py-1 rounded-lg">CANCEL</button>
-                                      </div>
-                                    </div>
-                                  ) : (
-                                    m.text
-                                  )}
-                                </div>
-                              )}
-                              
-                              {activeMessageActions === m._id && editingMessage !== m._id && (
-                                <div className={`absolute ${isMe ? "-left-12" : "-right-12"} top-1/2 -translate-y-1/2 flex flex-col gap-1 z-20`}>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setReplyingTo(m);
-                                      setActiveMessageActions(null);
+                                <div className={`flex items-end gap-2 w-full ${isMe ? "flex-row-reverse" : "flex-row"}`}>
+                                  <div 
+                                    onClick={() => {
+                                      setActiveMessageActions(activeMessageActions === m._id ? null : m._id);
                                     }}
-                                    className="p-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-indigo-400 hover:text-white transition-colors shadow-2xl"
-                                    title="Reply"
-                                  >
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
-                                  </button>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleToggleSaveMessage(m._id);
-                                    }}
-                                    className={`p-1.5 bg-zinc-900 border border-zinc-800 rounded-lg transition-colors shadow-2xl ${
-                                      m.savedBy?.includes(view as string) ? "text-yellow-400" : "text-indigo-400 hover:text-white"
+                                    className={`max-w-[85%] min-w-[50px] w-fit ${m.imageUrl && !m.text ? "p-3" : "p-4"} rounded-3xl text-[14.5px] leading-[1.6] relative break-words whitespace-pre-wrap shadow-xl cursor-pointer flex-shrink-0 ${
+                                      isMe 
+                                        ? `${activeTheme.bubbleMe} ${activeTheme.textMe || 'text-white'} rounded-tr-none ${activeTheme.shadow}` 
+                                        : `${activeTheme.bubblePartner} text-zinc-100 rounded-tl-none border border-zinc-700/30 shadow-black/20`
                                     }`}
-                                    title={m.savedBy?.includes(view as string) ? "Unsave" : "Save"}
                                   >
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill={m.savedBy?.includes(view as string) ? "currentColor" : "none"} stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                                      <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
-                                    </svg>
-                                  </button>
+                                    {m.savedBy?.includes(view as string) && (
+                                      <div className={`absolute top-1 ${isMe ? "right-2" : "right-2"} z-10 text-yellow-400 opacity-80`}>
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
+                                          <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+                                        </svg>
+                                      </div>
+                                    )}
+                                    {m.repliedTo && (
+                                      <div 
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          scrollToMessage(m.repliedTo!._id);
+                                        }}
+                                        className={`mb-2 p-2 border-l-2 bg-black/10 rounded-r-lg max-w-full overflow-hidden cursor-pointer hover:bg-black/20 transition-colors ${isMe ? "border-white/50" : "border-indigo-500/50"}`}
+                                      >
+                                        <p className="text-[10px] font-black uppercase tracking-wider opacity-60 mb-0.5">
+                                          {m.repliedTo.createdBy}
+                                        </p>
+                                        <p className="text-[11px] truncate opacity-80 italic">
+                                          {m.repliedTo.imageUrl ? "Sent an image" : m.repliedTo.text}
+                                        </p>
+                                      </div>
+                                    )}
+                                    {m.imageUrl && (
+                                      <div 
+                                        className={`${m.text ? "mb-1.5" : ""} rounded-2xl overflow-hidden cursor-zoom-in group relative`}
+                                        onClick={() => {
+                                          setPreviewMessage(m);
+                                        }}
+                                      >
+                                        <img 
+                                          src={m.imageUrl} 
+                                          alt="Message attachment" 
+                                          className="w-full max-h-[400px] object-cover hover:scale-105 transition-transform duration-500"
+                                        />
+                                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+                                      </div>
+                                    )}
+                                    {m.text && (
+                                      <div className={m.imageUrl ? "px-2.5 pb-2.5 pt-0.5" : ""}>
+                                        {editingMessage === m._id ? (
+                                          <div className="flex flex-col gap-2 min-w-[200px]">
+                                            <textarea
+                                              value={editingMessageText}
+                                              onChange={(e) => setEditingMessageText(e.target.value)}
+                                              className="w-full bg-black/20 border border-white/20 rounded-xl px-3 py-2 text-sm font-medium outline-none text-white resize-none"
+                                              autoFocus
+                                              rows={2}
+                                            />
+                                            <div className="flex justify-end gap-2">
+                                              <button onClick={(e) => { e.stopPropagation(); handleUpdateMessage(m._id, editingMessageText); }} className="text-[10px] font-black text-white bg-green-600 px-3 py-1 rounded-lg">SAVE</button>
+                                              <button onClick={(e) => { e.stopPropagation(); setEditingMessage(null); setEditingMessageText(""); }} className="text-[10px] font-black text-white bg-zinc-700 px-3 py-1 rounded-lg">CANCEL</button>
+                                            </div>
+                                          </div>
+                                        ) : (
+                                          m.text
+                                        )}
+                                      </div>
+                                    )}
+                                    
+                                    {activeMessageActions === m._id && editingMessage !== m._id && (
+                                      <div className={`absolute ${isMe ? "-left-12" : "-right-12"} top-1/2 -translate-y-1/2 flex flex-col gap-1 z-20`}>
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setReplyingTo(m);
+                                            setActiveMessageActions(null);
+                                          }}
+                                          className="p-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-indigo-400 hover:text-white transition-colors shadow-2xl"
+                                          title="Reply"
+                                        >
+                                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
+                                        </button>
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleToggleSaveMessage(m._id);
+                                          }}
+                                          className={`p-1.5 bg-zinc-900 border border-zinc-800 rounded-lg transition-colors shadow-2xl ${
+                                            m.savedBy?.includes(view as string) ? "text-yellow-400" : "text-indigo-400 hover:text-white"
+                                          }`}
+                                          title={m.savedBy?.includes(view as string) ? "Unsave" : "Save"}
+                                        >
+                                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill={m.savedBy?.includes(view as string) ? "currentColor" : "none"} stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+                                          </svg>
+                                        </button>
+                                        {isMe && (
+                                          <>
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                setEditingMessage(m._id);
+                                                setEditingMessageText(m.text || "");
+                                                setActiveMessageActions(null);
+                                              }}
+                                              className="p-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-indigo-400 hover:text-white transition-colors shadow-2xl"
+                                              title="Edit"
+                                            >
+                                              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                                            </button>
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleDeleteMessage(m._id);
+                                              }}
+                                              className="p-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-red-500 hover:bg-red-950 transition-colors shadow-2xl"
+                                              title="Delete"
+                                            >
+                                              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                                            </button>
+                                          </>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
                                   {isMe && (
-                                    <>
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setEditingMessage(m._id);
-                                          setEditingMessageText(m.text || "");
-                                          setActiveMessageActions(null);
-                                        }}
-                                        className="p-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-indigo-400 hover:text-white transition-colors shadow-2xl"
-                                        title="Edit"
-                                      >
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
-                                      </button>
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleDeleteMessage(m._id);
-                                        }}
-                                        className="p-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-red-500 hover:bg-red-950 transition-colors shadow-2xl"
-                                        title="Delete"
-                                      >
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-                                      </button>
-                                    </>
+                                    <span className={`text-[10px] mb-2 flex-shrink-0 ${isRead ? "text-blue-500" : "text-zinc-600"}`} title={isRead ? "Read" : "Sent"}>
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                        {isRead ? (
+                                          <path d="M18 6 7 17l-5-5m16 0-7.5 7.5L13 16" />
+                                        ) : (
+                                          <path d="M20 6 9 17l-5-5" />
+                                        )}
+                                      </svg>
+                                    </span>
                                   )}
                                 </div>
-                              )}
-                            </div>
-                            {isMe && (
-                              <span className={`text-[10px] mb-2 flex-shrink-0 ${isRead ? "text-blue-500" : "text-zinc-600"}`} title={isRead ? "Read" : "Sent"}>
-                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                                  {isRead ? (
-                                    <path d="M18 6 7 17l-5-5m16 0-7.5 7.5L13 16" />
-                                  ) : (
-                                    <path d="M20 6 9 17l-5-5" />
-                                  )}
-                                </svg>
-                              </span>
-                            )}
-                          </div>
+                              </div>
+                            );
+                          })}
                         </div>
-                        </Fragment>
-                      );
-                    })}
+                      ));
+                    })()}
                     <div ref={messagesEndRef} />
                   </div>
                 )}
