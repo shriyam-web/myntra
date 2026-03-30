@@ -12,6 +12,19 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
+interface CloudinaryResult {
+  secure_url: string;
+}
+
+interface UserDocument {
+  username: string;
+  lastSeen: Date | string;
+  chatBackgroundColor?: string;
+  chatBubbleColor?: string;
+  themeName?: string;
+  chatWallpaper?: string;
+}
+
 // IMAGE UPLOAD
 export async function uploadImage(file: string) {
   const start = Date.now();
@@ -19,7 +32,7 @@ export async function uploadImage(file: string) {
     console.log(`📸 Starting Cloudinary upload (file size: ${Math.round(file.length / 1024)}KB)`);
     
     // Cloudinary upload with timeout and better options
-    const result = await new Promise((resolve, reject) => {
+    const result = await new Promise<CloudinaryResult>((resolve, reject) => {
       const uploadTimeout = setTimeout(() => {
         reject(new Error("Cloudinary upload timed out after 30 seconds"));
       }, 30000);
@@ -34,14 +47,14 @@ export async function uploadImage(file: string) {
           console.error("❌ Cloudinary callback error:", error);
           reject(error);
         } else {
-          resolve(result);
+          resolve(result as CloudinaryResult);
         }
       });
     });
 
     const duration = Date.now() - start;
-    console.log(`✅ Cloudinary upload successful in ${duration}ms: ${(result as any).secure_url}`);
-    return (result as any).secure_url;
+    console.log(`✅ Cloudinary upload successful in ${duration}ms: ${result.secure_url}`);
+    return result.secure_url;
   } catch (error) {
     const duration = Date.now() - start;
     console.error(`❌ Cloudinary upload failed after ${duration}ms:`, error);
@@ -77,8 +90,8 @@ export async function fetchData(messageLimit = 50, currentUser?: string) {
     ]);
 
     // Deduplicate users by username (lowercase)
-    const userMap = new Map();
-    rawUsers.forEach((u: any) => {
+    const userMap = new Map<string, UserDocument>();
+    (rawUsers as UserDocument[]).forEach((u: UserDocument) => {
       const uname = u.username.trim().toLowerCase();
       const existing = userMap.get(uname);
       if (!existing || new Date(u.lastSeen) > new Date(existing.lastSeen)) {
@@ -280,7 +293,7 @@ export async function createMessage(data: { text?: string; imageUrl?: string; cr
     // Send Telegram notification if alpha 1 sends a message
     if (data.createdBy === "alpha 1") {
       // Check if delta 1 is online (last seen within 15 seconds)
-      const delta1 = await User.findOne({ username: "delta 1" }).lean() as any;
+      const delta1 = await User.findOne({ username: "delta 1" }).lean() as UserDocument | null;
       const isDelta1Online = delta1 && (Date.now() - new Date(delta1.lastSeen).getTime() < 15000);
       
       if (!isDelta1Online) {

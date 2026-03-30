@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, Fragment } from "react";
-import Image from "next/image";
 import * as actions from "../lib/actions";
 
 interface Ticket {
@@ -103,7 +102,6 @@ export default function HomeClient() {
   const [chatBubbleColor, setChatBubbleColor] = useState<string>("bg-indigo-600");
   const [chatWallpaper, setChatWallpaper] = useState<string>("");
   const [themeName, setThemeName] = useState<string>("Midnight (Default)");
-  const [chatPartnerBubbleColor, setChatPartnerBubbleColor] = useState<string>("bg-zinc-800/80");
   const [isSoundEnabled, setIsSoundEnabled] = useState(false);
   const [showSoundPrompt, setShowSoundPrompt] = useState(false);
 
@@ -147,7 +145,6 @@ export default function HomeClient() {
   const [isConnected, setIsConnected] = useState(true);
   const [isOnline, setIsOnline] = useState(true);
   const [connectionStatusDisplay, setConnectionStatusDisplay] = useState(true);
-  const lastConnectionCheckRef = useRef<number>(Date.now());
   
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
