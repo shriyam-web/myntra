@@ -1652,7 +1652,7 @@ export default function HomeClient() {
                               const isToday = readDate.toDateString() === now.toDateString();
                               const time = readDate.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
                               if (isToday) return time;
-                              return `${readDate.getDate()} ${readDate.toLocaleString('default', { month: 'short' })}`;
+                              return `${readDate.getDate()} ${readDate.toLocaleString('default', { month: 'short' })}, ${time}`;
                             })()}
                           </span>
                         </div>
