@@ -1605,15 +1605,14 @@ export default function HomeClient() {
                     {hasUnreadMessages() && <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>}
                   </h2>
                   {!isHeaderCollapsed && (
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-col items-start gap-1">
                       <span className={`text-[10px] font-bold uppercase tracking-wider ${getPartnerStatus() === "Online" ? "text-green-500/80" : "text-zinc-500"}`}>
                         {getPartnerStatus() || "Offline"}
                       </span>
                       {users.find(u => u.username.trim().toLowerCase() === (currentUser.trim().toLowerCase() === "alpha 1" ? "delta 1" : "alpha 1"))?.lastReadAt && (
-                        <div className="flex items-center gap-1.5 opacity-60">
-                          <span className="w-1 h-1 bg-zinc-800 rounded-full"></span>
-                          <span className={`text-[9px] font-medium text-zinc-500 italic flex items-center gap-1`}>
-                            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 7 17l-5-5"/><path d="m22 10-7.5 7.5L13 16"/></svg>
+                        <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full ${activeTheme.bubbleMe} shadow-sm shadow-black/10 mt-0.5`}>
+                          <span className={`text-[8px] font-black uppercase tracking-widest ${activeTheme.textMe || 'text-white'} flex items-center gap-1`}>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 7 17l-5-5"/><path d="m22 10-7.5 7.5L13 16"/></svg>
                             {(() => {
                               const partnerUsername = currentUser.trim().toLowerCase() === "alpha 1" ? "delta 1" : "alpha 1";
                               const partner = users.find(u => u.username.trim().toLowerCase() === partnerUsername)!;
