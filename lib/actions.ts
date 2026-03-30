@@ -325,18 +325,22 @@ export async function createMessage(data: { text?: string; imageUrl?: string; cr
     await dbConnect();
     const message = await Message.create(data);
 
-    // Send Telegram notification if alpha 1 sends a message
+    // Run notification logic without awaiting it to keep the response fast
     if (data.createdBy === "alpha 1") {
-      // Check if delta 1 is online (last seen within 15 seconds)
-      const delta1 = await User.findOne({ username: "delta 1" }).lean() as UserDocument | null;
-      const isDelta1Online = delta1 && (Date.now() - new Date(delta1.lastSeen).getTime() < 15000);
-      
-      if (!isDelta1Online) {
-        const notificationText = data.imageUrl ? "Sent an image" : data.text || "";
-        sendTelegramNotification(`Alpha 1 sent a new message: ${notificationText.substring(0, 100)}${notificationText.length > 100 ? "..." : ""}`);
-      } else {
-        console.log("Telegram notification skipped: Delta 1 is currently online.");
-      }
+      (async () => {
+        try {
+          // Check if delta 1 is online (last seen within 15 seconds)
+          const delta1 = await User.findOne({ username: "delta 1" }).lean() as UserDocument | null;
+          const isDelta1Online = delta1 && (Date.now() - new Date(delta1.lastSeen).getTime() < 15000);
+          
+          if (!isDelta1Online) {
+            const notificationText = data.imageUrl ? "Sent an image" : data.text || "";
+            await sendTelegramNotification(`Alpha 1 sent a new message: ${notificationText.substring(0, 100)}${notificationText.length > 100 ? "..." : ""}`);
+          }
+        } catch (err) {
+          console.error("Background notification error:", err);
+        }
+      })();
     }
 
     return JSON.parse(JSON.stringify(message));

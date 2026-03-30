@@ -328,6 +328,7 @@ export default function HomeClient() {
   };
 
   const scrollToBottom = (instant = false) => {
+    // Shorter timeout for more immediate scrolling
     setTimeout(() => {
       if (messagesContainerRef.current) {
         messagesContainerRef.current.scrollTo({
@@ -335,7 +336,7 @@ export default function HomeClient() {
           behavior: instant ? "auto" : "smooth"
         });
       }
-    }, 100);
+    }, instant ? 10 : 50);
   };
 
   const scrollToMessage = (id: string) => {
@@ -367,7 +368,26 @@ export default function HomeClient() {
         setHasMoreMessages(true);
       }
       
-      setMessages(data.messages);
+      // Preserve optimistic messages (those with numeric IDs)
+      setMessages(prev => {
+        // Any ID that is purely numeric (like Date.now()) is optimistic
+        const optimistic = prev.filter(m => /^\d+$/.test(m._id));
+        
+        // Filter out any optimistic messages that might already be in the server response
+        // This is a safety check in case the polling happens right after a message is saved
+        const pendingOptimistic = optimistic.filter(opt => 
+          !data.messages.some((m: Message) => 
+            m.text === opt.text && 
+            m.imageUrl === opt.imageUrl && 
+            m.createdBy === opt.createdBy &&
+            Math.abs(new Date(m.createdAt).getTime() - new Date(opt.createdAt).getTime()) < 30000
+          )
+        );
+        
+        // Combine server messages with pending optimistic ones
+        // Ensure chronological order if possible, though optimistic ones are usually at the end
+        return [...data.messages, ...pendingOptimistic];
+      });
       setIsConnected(true);
       if (!silent) setIsRefreshing(false);
     } catch (error) {
@@ -394,7 +414,26 @@ export default function HomeClient() {
         setHasMoreMessages(true);
       }
       
-      setMessages(data.messages);
+      // Preserve optimistic messages (those with numeric IDs)
+      setMessages(prev => {
+        // Any ID that is purely numeric (like Date.now()) is optimistic
+        const optimistic = prev.filter(m => /^\d+$/.test(m._id));
+        
+        // Filter out any optimistic messages that might already be in the server response
+        // This is a safety check in case the polling happens right after a message is saved
+        const pendingOptimistic = optimistic.filter(opt => 
+          !data.messages.some((m: Message) => 
+            m.text === opt.text && 
+            m.imageUrl === opt.imageUrl && 
+            m.createdBy === opt.createdBy &&
+            Math.abs(new Date(m.createdAt).getTime() - new Date(opt.createdAt).getTime()) < 30000
+          )
+        );
+        
+        // Combine server messages with pending optimistic ones
+        // Ensure chronological order if possible, though optimistic ones are usually at the end
+        return [...data.messages, ...pendingOptimistic];
+      });
       setIsConnected(true);
       if (!silent) setIsRefreshing(false);
     } catch (error) {
@@ -547,7 +586,7 @@ export default function HomeClient() {
         };
       }
       
-      pollingWorkerRef.current.postMessage({ action: "start", interval: 2500 });
+      pollingWorkerRef.current.postMessage({ action: "start", interval: 1000 });
       
       return () => {
         if (pollingWorkerRef.current) {
@@ -1880,6 +1919,7 @@ export default function HomeClient() {
                             const partnerUsername = (currentUser.trim().toLowerCase() === "alpha 1" ? "delta 1" : "alpha 1");
                             const partner = users.find(u => u.username.trim().toLowerCase() === partnerUsername);
                             const isRead = isMe && !!partner?.lastReadAt && (new Date(m.createdAt).getTime() <= new Date(partner.lastReadAt).getTime() + 100);
+                            const isOptimistic = /^\d+$/.test(m._id);
                             
                             return (
                               <div 
@@ -1913,7 +1953,7 @@ export default function HomeClient() {
                                       isMe 
                                         ? `${activeTheme.bubbleMe} ${activeTheme.textMe || 'text-white'} rounded-tr-none ${activeTheme.shadow}` 
                                         : `${activeTheme.bubblePartner} text-zinc-100 rounded-tl-none border border-zinc-700/30 shadow-black/20`
-                                    }`}
+                                    } ${isOptimistic ? "opacity-70 animate-pulse" : "opacity-100"}`}
                                   >
                                     {m.savedBy?.includes(view as string) && (
                                       <div className={`absolute top-1 ${isMe ? "right-2" : "right-2"} z-10 text-yellow-400 opacity-80`}>
@@ -2032,13 +2072,16 @@ export default function HomeClient() {
                                     )}
                                   </div>
                                   {isMe && (
-                                    <span className={`text-[10px] mb-2 flex-shrink-0 ${isRead ? "text-blue-500" : "text-zinc-600"}`} title={isRead ? "Read" : "Sent"}>
+                                    <span className={`text-[10px] mb-2 flex-shrink-0 ${isRead ? "text-blue-500" : "text-zinc-600"}`} title={isRead ? "Read" : (isOptimistic ? "Sending..." : "Sent")}>
                                       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                                        {isRead ? (
+                                        {isOptimistic ? (
+                                          <circle cx="12" cy="12" r="10" />
+                                        ) : isRead ? (
                                           <path d="M18 6 7 17l-5-5m16 0-7.5 7.5L13 16" />
                                         ) : (
                                           <path d="M20 6 9 17l-5-5" />
                                         )}
+                                        {isOptimistic && <polyline points="12 6 12 12 16 14" />}
                                       </svg>
                                     </span>
                                   )}
