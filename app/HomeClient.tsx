@@ -1042,10 +1042,11 @@ export default function HomeClient() {
     }
     
     const day = lastSeenDate.getDate();
-    const month = lastSeenDate.toLocaleString('default', { month: 'long' });
+    const month = lastSeenDate.toLocaleString('default', { month: 'short' });
     const time = lastSeenDate.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
     
-    return `Last seen ${day} ${month}, ${time}`;
+    const isToday = lastSeenDate.toDateString() === new Date().toDateString();
+    return isToday ? `Last seen at ${time}` : `Last seen ${day} ${month}, ${time}`;
   };
 
   const hasNewContent = (tabId: string) => {
@@ -1609,9 +1610,10 @@ export default function HomeClient() {
                         {getPartnerStatus() || "Offline"}
                       </span>
                       {users.find(u => u.username.trim().toLowerCase() === (currentUser.trim().toLowerCase() === "alpha 1" ? "delta 1" : "alpha 1"))?.lastReadAt && (
-                        <>
+                        <div className="flex items-center gap-1.5 opacity-60">
                           <span className="w-1 h-1 bg-zinc-800 rounded-full"></span>
-                          <span className={`text-[9px] font-medium text-zinc-600 italic`}>
+                          <span className={`text-[9px] font-medium text-zinc-500 italic flex items-center gap-1`}>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 7 17l-5-5"/><path d="m22 10-7.5 7.5L13 16"/></svg>
                             {(() => {
                               const partnerUsername = currentUser.trim().toLowerCase() === "alpha 1" ? "delta 1" : "alpha 1";
                               const partner = users.find(u => u.username.trim().toLowerCase() === partnerUsername)!;
@@ -1619,11 +1621,11 @@ export default function HomeClient() {
                               const now = new Date();
                               const isToday = readDate.toDateString() === now.toDateString();
                               const time = readDate.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-                              if (isToday) return `Read ${time}`;
-                              return `Read ${readDate.getDate()} ${readDate.toLocaleString('default', { month: 'short' })}`;
+                              if (isToday) return time;
+                              return `${readDate.getDate()} ${readDate.toLocaleString('default', { month: 'short' })}`;
                             })()}
                           </span>
-                        </>
+                        </div>
                       )}
                     </div>
                   )}
