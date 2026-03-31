@@ -1938,7 +1938,7 @@ export default function HomeClient() {
                                 }}
                               >
                                 <div className={`flex items-center gap-2 mb-1.5 px-1.5 ${isMe ? "flex-row-reverse" : "flex-row"}`}>
-                                  <span className="text-[10px] text-zinc-600 font-medium">
+                                  <span className="text-[10px] text-zinc-400/90 font-medium drop-shadow-sm">
                                     {new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
                                   </span>
                                 </div>
@@ -2071,7 +2071,7 @@ export default function HomeClient() {
                                     )}
                                   </div>
                                   {isMe && (
-                                    <span className={`text-[10px] mb-2 flex-shrink-0 ${isRead ? "text-blue-500" : "text-zinc-600"}`} title={isRead ? "Read" : (isOptimistic ? "Sending..." : "Sent")}>
+                                    <span className={`text-[10px] mb-2 flex-shrink-0 ${isRead ? "text-blue-500" : "text-zinc-400/90 drop-shadow-sm"}`} title={isRead ? "Read" : (isOptimistic ? "Sending..." : "Sent")}>
                                       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                                         {isOptimistic ? (
                                           <circle cx="12" cy="12" r="10" />
