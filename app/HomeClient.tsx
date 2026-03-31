@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, Fragment } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, Fragment } from "react";
 import * as actions from "../lib/actions";
 import { renderMessage } from "../lib/utils";
 
@@ -17,6 +17,8 @@ interface Message {
   text?: string;
   imageUrl?: string;
   imageUrls?: string[];
+  videoUrl?: string;
+  videoUrls?: string[];
   createdAt: string;
   createdBy: "alpha 1" | "delta 1";
   savedBy?: string[];
@@ -25,6 +27,8 @@ interface Message {
     text?: string;
     imageUrl?: string;
     imageUrls?: string[];
+    videoUrl?: string;
+    videoUrls?: string[];
     createdBy: string;
   };
 }
@@ -115,6 +119,7 @@ export default function HomeClient() {
 
   // Image handling
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
+  const [selectedVideos, setSelectedVideos] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [previewMessage, setPreviewMessage] = useState<Message | null>(null);
@@ -776,19 +781,35 @@ export default function HomeClient() {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
     
-    if (selectedImages.length + files.length > 15) {
+    const newImages = files.filter(f => f.type.startsWith('image/'));
+    const newVideos = files.filter(f => f.type.startsWith('video/'));
+
+    if (selectedImages.length + newImages.length > 15) {
       alert("Maximum 15 images allowed at a time.");
+      return;
+    }
+
+    if (selectedVideos.length + newVideos.length > 5) {
+      alert("Maximum 5 videos allowed at a time.");
       return;
     }
     
     files.forEach(file => {
-      if (file.size > 15 * 1024 * 1024) { // 15MB limit
-        alert(`Image "${file.name}" is too large. Please select images under 15MB.`);
+      const isVideo = file.type.startsWith('video/');
+      const maxSize = isVideo ? 50 * 1024 * 1024 : 15 * 1024 * 1024; // 50MB for video, 15MB for image
+      
+      if (file.size > maxSize) {
+        alert(`${isVideo ? 'Video' : 'Image'} "${file.name}" is too large. Max size is ${isVideo ? '50MB' : '15MB'}.`);
         return;
       }
+
       const reader = new FileReader();
       reader.onloadend = () => {
-        setSelectedImages(prev => [...prev, reader.result as string]);
+        if (isVideo) {
+          setSelectedVideos(prev => [...prev, reader.result as string]);
+        } else {
+          setSelectedImages(prev => [...prev, reader.result as string]);
+        }
       };
       reader.readAsDataURL(file);
     });
@@ -801,16 +822,17 @@ export default function HomeClient() {
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() && selectedImages.length === 0) return;
+    if (!newMessage.trim() && selectedImages.length === 0 && selectedVideos.length === 0) return;
     
-    const isImageUpload = selectedImages.length > 0;
-    if (isImageUpload) {
+    const isMediaUpload = selectedImages.length > 0 || selectedVideos.length > 0;
+    if (isMediaUpload) {
       setIsUploading(true);
       setUploadProgress(0);
     }
     
     const messageText = newMessage;
     const currentSelectedImages = [...selectedImages];
+    const currentSelectedVideos = [...selectedVideos];
     const currentReplyingTo = replyingTo;
     const tempId = Date.now().toString();
     
@@ -818,6 +840,7 @@ export default function HomeClient() {
       _id: tempId,
       text: messageText || undefined,
       imageUrls: currentSelectedImages.length > 0 ? currentSelectedImages : undefined,
+      videoUrls: currentSelectedVideos.length > 0 ? currentSelectedVideos : undefined,
       createdAt: new Date().toISOString(),
       createdBy: currentUser as "alpha 1" | "delta 1",
       ...(currentReplyingTo && {
@@ -826,6 +849,8 @@ export default function HomeClient() {
           text: currentReplyingTo.text,
           imageUrl: currentReplyingTo.imageUrl,
           imageUrls: currentReplyingTo.imageUrls,
+          videoUrl: currentReplyingTo.videoUrl,
+          videoUrls: currentReplyingTo.videoUrls,
           createdBy: currentReplyingTo.createdBy
         }
       })
@@ -835,6 +860,7 @@ export default function HomeClient() {
     setMessages(prev => [...prev, optimisticMessage]);
     setNewMessage("");
     setSelectedImages([]);
+    setSelectedVideos([]);
     setReplyingTo(null);
     scrollToBottom(true);
     
@@ -879,7 +905,7 @@ export default function HomeClient() {
       // Update optimistic message
       setMessages(prev => prev.map(m => m._id === tempId ? savedMessage : m));
       
-      if (isImageUpload) {
+      if (isMediaUpload) {
         fetchInitialData(true);
       }
     } catch (error) {
@@ -892,7 +918,7 @@ export default function HomeClient() {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       alert(`Failed to send message (${errorMessage}). Please try again.`);
     } finally {
-      if (isImageUpload) {
+      if (isMediaUpload) {
         setIsUploading(false);
         setUploadProgress(0);
       }
