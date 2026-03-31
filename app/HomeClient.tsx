@@ -120,6 +120,7 @@ export default function HomeClient() {
   const [previewMessage, setPreviewMessage] = useState<Message | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messageInputRef = useRef<HTMLTextAreaElement>(null);
+  const rafRef = useRef<number | null>(null);
 
   const wallpapers = [
     { id: "none", name: "None", value: "" },
@@ -316,7 +317,7 @@ export default function HomeClient() {
 
   const activeTheme = themes.find(t => t.name === themeName) || themes[0];
 
-  const formatDateLabel = (dateString: string) => {
+  const formatDateLabel = useCallback((dateString: string) => {
     const date = new Date(dateString);
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -332,7 +333,22 @@ export default function HomeClient() {
     } else {
       return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
     }
-  };
+  }, []);
+
+  const groupedMessages = useMemo(() => {
+    const groups: { date: string; label: string; messages: Message[] }[] = [];
+    messages.forEach(m => {
+      const dateObj = new Date(m.createdAt);
+      const dateKey = dateObj.toLocaleDateString('en-GB');
+      const lastGroup = groups[groups.length - 1];
+      if (lastGroup && lastGroup.date === dateKey) {
+        lastGroup.messages.push(m);
+      } else {
+        groups.push({ date: dateKey, label: formatDateLabel(m.createdAt), messages: [m] });
+      }
+    });
+    return groups;
+  }, [messages, formatDateLabel]);
 
   const scrollToBottom = (instant = false) => {
     // Shorter timeout for more immediate scrolling
@@ -381,7 +397,6 @@ export default function HomeClient() {
         const optimistic = prev.filter(m => /^\d+$/.test(m._id));
         
         // Filter out any optimistic messages that might already be in the server response
-        // This is a safety check in case the polling happens right after a message is saved
         const pendingOptimistic = optimistic.filter(opt => 
           !data.messages.some((m: Message) => 
             m.text === opt.text && 
@@ -392,8 +407,19 @@ export default function HomeClient() {
         );
         
         // Combine server messages with pending optimistic ones
-        // Ensure chronological order if possible, though optimistic ones are usually at the end
-        return [...data.messages, ...pendingOptimistic];
+        const newMessages = [...data.messages, ...pendingOptimistic];
+        
+        // Avoid setting same messages to prevent unnecessary re-renders
+        if (prev.length === newMessages.length && 
+            prev.length > 0 &&
+            prev[0]._id === newMessages[0]._id && 
+            prev[prev.length - 1]._id === newMessages[newMessages.length - 1]._id) {
+          
+          const allMatch = prev.every((m, i) => m._id === newMessages[i]._id);
+          if (allMatch) return prev;
+        }
+        
+        return newMessages;
       });
       setIsConnected(true);
       if (!silent) setIsRefreshing(false);
@@ -427,7 +453,6 @@ export default function HomeClient() {
         const optimistic = prev.filter(m => /^\d+$/.test(m._id));
         
         // Filter out any optimistic messages that might already be in the server response
-        // This is a safety check in case the polling happens right after a message is saved
         const pendingOptimistic = optimistic.filter(opt => 
           !data.messages.some((m: Message) => 
             m.text === opt.text && 
@@ -438,8 +463,19 @@ export default function HomeClient() {
         );
         
         // Combine server messages with pending optimistic ones
-        // Ensure chronological order if possible, though optimistic ones are usually at the end
-        return [...data.messages, ...pendingOptimistic];
+        const newMessages = [...data.messages, ...pendingOptimistic];
+        
+        // Avoid setting same messages to prevent unnecessary re-renders
+        if (prev.length === newMessages.length && 
+            prev.length > 0 &&
+            prev[0]._id === newMessages[0]._id && 
+            prev[prev.length - 1]._id === newMessages[newMessages.length - 1]._id) {
+          
+          const allMatch = prev.every((m, i) => m._id === newMessages[i]._id);
+          if (allMatch) return prev;
+        }
+        
+        return newMessages;
       });
       setIsConnected(true);
       if (!silent) setIsRefreshing(false);
@@ -1256,10 +1292,24 @@ export default function HomeClient() {
             </button>
             <button 
               onClick={() => fetchInitialData()}
-              className={`group p-3 bg-zinc-800/50 rounded-2xl text-zinc-500 hover:text-white hover:bg-zinc-800 transition-all active:scale-90 border border-zinc-700/50 ${isRefreshing ? "animate-spin" : ""}`}
+              className="group p-3 bg-zinc-800/50 rounded-2xl text-zinc-500 hover:text-white hover:bg-zinc-800 transition-all active:scale-90 border border-zinc-700/50"
               title="Refresh Data"
+              disabled={isRefreshing}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+              <svg 
+                xmlns="http://www.w3.org/2000/svg" 
+                width="20" 
+                height="20" 
+                viewBox="0 0 24 24" 
+                fill="none" 
+                stroke="currentColor" 
+                strokeWidth="2.5" 
+                strokeLinecap="round" 
+                strokeLinejoin="round"
+                className={isRefreshing ? "animate-spin" : ""}
+              >
+                <path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+              </svg>
             </button>
             <button 
               onClick={handleLogout}
@@ -1771,11 +1821,24 @@ export default function HomeClient() {
                   <button
                     type="button"
                     onClick={() => fetchInitialData()}
-                    className={`p-1.5 text-zinc-500 hover:text-white hover:bg-zinc-800 rounded-lg transition-all active:scale-90 flex items-center justify-center min-w-[30px] min-h-[30px] ${isRefreshing ? "animate-spin text-white" : ""}`}
+                    className={`p-1.5 text-zinc-500 hover:text-white hover:bg-zinc-800 rounded-lg transition-all active:scale-90 flex items-center justify-center min-w-[30px] min-h-[30px] ${isRefreshing ? "text-white" : ""}`}
                     title="Refresh"
                     disabled={isRefreshing}
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.85.83 6.72 2.27L21 8"/><path d="M21 3v5h-5"/></svg>
+                    <svg 
+                      xmlns="http://www.w3.org/2000/svg" 
+                      width="14" 
+                      height="14" 
+                      viewBox="0 0 24 24" 
+                      fill="none" 
+                      stroke="currentColor" 
+                      strokeWidth="2.5" 
+                      strokeLinecap="round" 
+                      strokeLinejoin="round"
+                      className={isRefreshing ? "animate-spin" : ""}
+                    >
+                      <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.85.83 6.72 2.27L21 8"/><path d="M21 3v5h-5"/>
+                    </svg>
                   </button>
                 </div>
 
@@ -1868,17 +1931,29 @@ export default function HomeClient() {
                   const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
                   const currentTouchY = e.targetTouches[0].clientY;
                   const distanceY = touchStartY - currentTouchY;
-                  const isAtBottom = scrollHeight - scrollTop - clientHeight < 10;
+                  
+                  // Allow more tolerance for "at bottom" check
+                  const isAtBottom = scrollHeight - scrollTop - clientHeight < 20;
 
-                  if (distanceY > 0 && isAtBottom) {
-                    setPullUpDistance(Math.min(distanceY, 120));
-                    setIsPullingUp(true);
-                  } else {
-                    setIsPullingUp(false);
-                    setPullUpDistance(0);
-                  }
+                  if (rafRef.current) cancelAnimationFrame(rafRef.current);
+                  
+                  rafRef.current = requestAnimationFrame(() => {
+                    // Once we start pulling up, keep it true until released, as long as distance > 0
+                    if (distanceY > 5 && (isAtBottom || isPullingUp)) {
+                      // Only update state if distance changed significantly to reduce re-renders
+                      const newDistance = Math.min(distanceY, 120);
+                      if (Math.abs(newDistance - pullUpDistance) > 1 || !isPullingUp) {
+                        setPullUpDistance(newDistance);
+                        setIsPullingUp(true);
+                      }
+                    } else if (isPullingUp && distanceY <= 0) {
+                      setIsPullingUp(false);
+                      setPullUpDistance(0);
+                    }
+                  });
                 }}
                 onTouchEnd={(e) => {
+                  if (rafRef.current) cancelAnimationFrame(rafRef.current);
                   if (touchStartY === null || !messagesContainerRef.current) return;
                   const touchEndY = e.changedTouches[0].clientY;
                   const distanceY = touchStartY - touchEndY;
@@ -1924,21 +1999,8 @@ export default function HomeClient() {
                   </div>
                 ) : (
                   <div className="flex flex-col">
-                    {(() => {
-                      const groups: { date: string; label: string; messages: Message[] }[] = [];
-                      messages.forEach(m => {
-                        const dateObj = new Date(m.createdAt);
-                        const dateKey = dateObj.toLocaleDateString('en-GB');
-                        const lastGroup = groups[groups.length - 1];
-                        if (lastGroup && lastGroup.date === dateKey) {
-                          lastGroup.messages.push(m);
-                        } else {
-                          groups.push({ date: dateKey, label: formatDateLabel(m.createdAt), messages: [m] });
-                        }
-                      });
-
-                      return groups.map((group) => (
-                        <div key={group.date} className="flex flex-col relative">
+                    {groupedMessages.map((group) => (
+                      <div key={group.date} className="flex flex-col relative">
                           <div className="flex justify-center mb-4 sticky top-0 z-[40] -mx-4 py-2 pointer-events-none">
                             <div className="bg-zinc-800/80 text-zinc-400 text-[11px] font-bold uppercase tracking-widest px-4 py-1.5 rounded-full border border-zinc-700/50 shadow-sm backdrop-blur-sm pointer-events-auto">
                               {group.label}
@@ -2152,10 +2214,9 @@ export default function HomeClient() {
                             );
                           })}
                         </div>
-                      ));
-                    })()}
+                      ))}
                     {isPullingUp && pullUpDistance > 10 && (
-                      <div className="flex flex-col items-center justify-center py-8 text-zinc-500 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                      <div className="flex flex-col items-center justify-center py-8 text-zinc-500 transition-opacity duration-300">
                         <div 
                           className={`w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all duration-200 ${pullUpDistance > 90 ? 'border-indigo-500 text-indigo-500 bg-indigo-500/10 shadow-[0_0_15px_rgba(99,102,241,0.3)]' : 'border-zinc-700 bg-zinc-900/50'}`}
                           style={{ 
