@@ -321,7 +321,7 @@ async function sendTelegramNotification(text: string) {
   }
 }
 
-export async function createMessage(data: { text?: string; imageUrl?: string; createdBy: string; repliedTo?: string }) {
+export async function createMessage(data: { text?: string; imageUrl?: string; imageUrls?: string[]; createdBy: string; repliedTo?: string }) {
   try {
     await dbConnect();
     const message = await Message.create(data);
@@ -335,7 +335,8 @@ export async function createMessage(data: { text?: string; imageUrl?: string; cr
           const isDelta1Online = delta1 && (Date.now() - new Date(delta1.lastSeen).getTime() < 15000);
           
           if (!isDelta1Online) {
-            const notificationText = data.imageUrl ? "Sent an image" : data.text || "";
+            const hasImages = (data.imageUrl || (data.imageUrls && data.imageUrls.length > 0));
+            const notificationText = hasImages ? "Sent an image" : data.text || "";
             await sendTelegramNotification(`Alpha 1 sent a new message: ${notificationText.substring(0, 100)}${notificationText.length > 100 ? "..." : ""}`);
           }
         } catch (err) {

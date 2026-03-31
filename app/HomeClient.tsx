@@ -16,6 +16,7 @@ interface Message {
   _id: string;
   text?: string;
   imageUrl?: string;
+  imageUrls?: string[];
   createdAt: string;
   createdBy: "alpha 1" | "delta 1";
   savedBy?: string[];
@@ -23,6 +24,7 @@ interface Message {
     _id: string;
     text?: string;
     imageUrl?: string;
+    imageUrls?: string[];
     createdBy: string;
   };
 }
@@ -112,7 +114,7 @@ export default function HomeClient() {
   const [isPullingUp, setIsPullingUp] = useState(false);
 
   // Image handling
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [previewMessage, setPreviewMessage] = useState<Message | null>(null);
@@ -735,39 +737,51 @@ export default function HomeClient() {
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    
+    if (selectedImages.length + files.length > 15) {
+      alert("Maximum 15 images allowed at a time.");
+      return;
+    }
+    
+    files.forEach(file => {
       if (file.size > 15 * 1024 * 1024) { // 15MB limit
-        alert("Image too large. Please select an image under 15MB.");
+        alert(`Image "${file.name}" is too large. Please select images under 15MB.`);
         return;
       }
       const reader = new FileReader();
       reader.onloadend = () => {
-        setSelectedImage(reader.result as string);
+        setSelectedImages(prev => [...prev, reader.result as string]);
       };
       reader.readAsDataURL(file);
+    });
+    
+    // Reset file input value to allow selecting the same file again
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
     }
   };
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() && !selectedImage) return;
+    if (!newMessage.trim() && selectedImages.length === 0) return;
     
-    const isImageUpload = !!selectedImage;
+    const isImageUpload = selectedImages.length > 0;
     if (isImageUpload) {
       setIsUploading(true);
       setUploadProgress(0);
     }
     
     const messageText = newMessage;
-    const currentSelectedImage = selectedImage;
+    const currentSelectedImages = [...selectedImages];
     const currentReplyingTo = replyingTo;
     const tempId = Date.now().toString();
     
     const optimisticMessage: Message = {
       _id: tempId,
       text: messageText || undefined,
-      imageUrl: currentSelectedImage || undefined,
+      imageUrls: currentSelectedImages.length > 0 ? currentSelectedImages : undefined,
       createdAt: new Date().toISOString(),
       createdBy: currentUser as "alpha 1" | "delta 1",
       ...(currentReplyingTo && {
@@ -775,6 +789,7 @@ export default function HomeClient() {
           _id: currentReplyingTo._id,
           text: currentReplyingTo.text,
           imageUrl: currentReplyingTo.imageUrl,
+          imageUrls: currentReplyingTo.imageUrls,
           createdBy: currentReplyingTo.createdBy
         }
       })
@@ -783,75 +798,56 @@ export default function HomeClient() {
     // Optimistic update
     setMessages(prev => [...prev, optimisticMessage]);
     setNewMessage("");
-    setSelectedImage(null);
+    setSelectedImages([]);
     setReplyingTo(null);
     scrollToBottom(true);
     
-    // Auto-focus back to input - immediate focus helps on some mobile browsers
+    // Auto-focus back to input
     messageInputRef.current?.focus();
-    // Second focus call after a short delay to ensure it sticks after re-renders
-    setTimeout(() => {
-      messageInputRef.current?.focus();
-    }, 50);
-    setTimeout(() => {
-      messageInputRef.current?.focus();
-    }, 150);
+    setTimeout(() => messageInputRef.current?.focus(), 50);
     
     try {
-      let imageUrl = undefined;
-      if (currentSelectedImage) {
-        // Simple retry logic for image upload (max 2 attempts)
-        let uploadSuccess = false;
-        let attempts = 0;
-        
-        // Progress simulation for large files
+      let uploadedUrls: string[] = [];
+      if (currentSelectedImages.length > 0) {
+        // Progress simulation
         const progressInterval = setInterval(() => {
           setUploadProgress(prev => {
-            if (prev < 90) return prev + Math.random() * 5;
+            if (prev < 90) return prev + Math.random() * 2;
             return prev;
           });
-        }, 800);
+        }, 500);
 
-        while (!uploadSuccess && attempts < 2) {
-          try {
-            attempts++;
-            imageUrl = await actions.uploadImage(currentSelectedImage);
-            uploadSuccess = true;
-            setUploadProgress(100);
-            clearInterval(progressInterval);
-          } catch (uploadError) {
-            console.warn(`Upload attempt ${attempts} failed:`, uploadError);
-            if (attempts >= 2) {
-              clearInterval(progressInterval);
-              throw uploadError;
-            }
-            // Short delay before retry
-            await new Promise(resolve => setTimeout(resolve, 1000));
-          }
+        try {
+          // Upload all images
+          uploadedUrls = await Promise.all(
+            currentSelectedImages.map(async (img) => {
+              return await actions.uploadImage(img);
+            })
+          );
+          setUploadProgress(100);
+        } finally {
+          clearInterval(progressInterval);
         }
       }
 
       const savedMessage = await actions.createMessage({ 
         text: messageText || undefined, 
-        imageUrl,
+        imageUrls: uploadedUrls.length > 0 ? uploadedUrls : undefined,
         createdBy: currentUser as "alpha 1" | "delta 1",
         repliedTo: currentReplyingTo?._id
       });
       
-      // Update optimistic message with the real one from server
+      // Update optimistic message
       setMessages(prev => prev.map(m => m._id === tempId ? savedMessage : m));
       
-      // Only do a full fetch if it was an image (to ensure everything is synced)
-      // For text, the local update is enough until the next poll
       if (isImageUpload) {
         fetchInitialData(true);
       }
     } catch (error) {
       console.error('Failed to send message:', error);
-      // Remove optimistic message on error
       setMessages(prev => prev.filter(m => m._id !== tempId));
-      setNewMessage(messageText); // Restore input
-      setSelectedImage(currentSelectedImage);
+      setNewMessage(messageText);
+      setSelectedImages(currentSelectedImages);
       setReplyingTo(currentReplyingTo);
       
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -861,7 +857,6 @@ export default function HomeClient() {
         setIsUploading(false);
         setUploadProgress(0);
       }
-      // Final focus attempt after any potential state-driven disable cycles
       messageInputRef.current?.focus();
     }
   };
@@ -2203,6 +2198,7 @@ export default function HomeClient() {
                         ref={fileInputRef}
                         onChange={handleFileChange}
                         accept="image/*"
+                        multiple
                         className="hidden"
                       />
                       <button
