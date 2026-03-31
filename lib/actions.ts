@@ -394,6 +394,38 @@ export async function toggleSaveMessage(id: string, username: string) {
   }
 }
 
+export async function getUrlMetadata(url: string) {
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      }
+    });
+    const html = await response.text();
+
+    const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+    const title = titleMatch ? titleMatch[1] : '';
+
+    const descriptionMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["'][^>]*>/i) || 
+                          html.match(/<meta[^>]*property=["']og:description["'][^>]*content=["']([^"']+)["'][^>]*>/i);
+    const description = descriptionMatch ? descriptionMatch[1] : '';
+
+    const imageMatch = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["'][^>]*>/i) ||
+                    html.match(/<link[^>]*rel=["']icon["'][^>]*href=["']([^"']+)["'][^>]*>/i);
+    let image = imageMatch ? imageMatch[1] : '';
+
+    if (image && !image.startsWith('http')) {
+      const urlObj = new URL(url);
+      image = `${urlObj.origin}${image.startsWith('/') ? '' : '/'}${image}`;
+    }
+
+    return { title, description, image, url };
+  } catch (error) {
+    console.error('Failed to fetch URL metadata:', error);
+    return null;
+  }
+}
+
 export async function deleteAllMessages(deleteForEveryone = false, username?: string, includeSaved = false) {
   try {
     await dbConnect();

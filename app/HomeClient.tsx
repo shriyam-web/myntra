@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, Fragment } from "react";
 import * as actions from "../lib/actions";
+import { renderMessage } from "../lib/utils";
 
 interface Ticket {
   _id: string;
@@ -100,12 +101,15 @@ export default function HomeClient() {
   const [showClearHistoryModal, setShowClearHistoryModal] = useState(false);
   const [includeSavedInDelete, setIncludeSavedInDelete] = useState(false);
   const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [touchStartY, setTouchStartY] = useState<number | null>(null);
   const [chatBgColor, setChatBgColor] = useState<string>("bg-zinc-900/50");
   const [chatBubbleColor, setChatBubbleColor] = useState<string>("bg-indigo-600");
   const [chatWallpaper, setChatWallpaper] = useState<string>("");
   const [themeName, setThemeName] = useState<string>("Midnight (Default)");
   const [isSoundEnabled, setIsSoundEnabled] = useState(false);
   const [showSoundPrompt, setShowSoundPrompt] = useState(false);
+  const [pullUpDistance, setPullUpDistance] = useState(0);
+  const [isPullingUp, setIsPullingUp] = useState(false);
 
   // Image handling
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -1860,6 +1864,35 @@ export default function HomeClient() {
               <div 
                 ref={messagesContainerRef} 
                 onScroll={handleScroll}
+                onTouchStart={(e) => setTouchStartY(e.targetTouches[0].clientY)}
+                onTouchMove={(e) => {
+                  if (touchStartY === null || !messagesContainerRef.current) return;
+                  const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
+                  const currentTouchY = e.targetTouches[0].clientY;
+                  const distanceY = touchStartY - currentTouchY;
+                  const isAtBottom = scrollHeight - scrollTop - clientHeight < 10;
+
+                  if (distanceY > 0 && isAtBottom) {
+                    setPullUpDistance(Math.min(distanceY, 120));
+                    setIsPullingUp(true);
+                  } else {
+                    setIsPullingUp(false);
+                    setPullUpDistance(0);
+                  }
+                }}
+                onTouchEnd={(e) => {
+                  if (touchStartY === null || !messagesContainerRef.current) return;
+                  const touchEndY = e.changedTouches[0].clientY;
+                  const distanceY = touchStartY - touchEndY;
+
+                  if (distanceY > 100 && isPullingUp) {
+                    fetchInitialData(false);
+                    if (window.navigator.vibrate) window.navigator.vibrate(20);
+                  }
+                  setTouchStartY(null);
+                  setPullUpDistance(0);
+                  setIsPullingUp(false);
+                }}
                 className={`flex-1 overflow-y-auto no-scrollbar scroll-smooth px-4 ${isMessageExpanded ? "py-6 h-full" : "py-4 max-h-[35vh] min-h-[250px]"}`}
               >
                 {showScrollButton && (
@@ -2009,7 +2042,7 @@ export default function HomeClient() {
                                             </div>
                                           </div>
                                         ) : (
-                                          m.text
+                                          renderMessage(m.text)
                                         )}
                                       </div>
                                     )}
@@ -2091,6 +2124,25 @@ export default function HomeClient() {
                         </div>
                       ));
                     })()}
+                    {isPullingUp && pullUpDistance > 10 && (
+                      <div className="flex flex-col items-center justify-center py-8 text-zinc-500 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                        <div 
+                          className={`w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all duration-200 ${pullUpDistance > 90 ? 'border-indigo-500 text-indigo-500 bg-indigo-500/10 shadow-[0_0_15px_rgba(99,102,241,0.3)]' : 'border-zinc-700 bg-zinc-900/50'}`}
+                          style={{ 
+                            transform: `scale(${Math.min(0.8 + pullUpDistance / 200, 1.2)}) rotate(${pullUpDistance * 3}deg)`,
+                            opacity: Math.min(pullUpDistance / 50, 1)
+                          }}
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                            <polyline points="22 4 22 10 16 10" />
+                          </svg>
+                        </div>
+                        <span className={`text-[10px] font-black uppercase tracking-[0.2em] mt-3 transition-all duration-200 ${pullUpDistance > 90 ? 'text-indigo-400 scale-110' : 'text-zinc-500'}`}>
+                          {pullUpDistance > 90 ? "Release to Refresh" : "Pull up to Refresh"}
+                        </span>
+                      </div>
+                    )}
                     <div ref={messagesEndRef} />
                   </div>
                 )}
