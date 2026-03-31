@@ -809,24 +809,27 @@ export default function HomeClient() {
     try {
       let uploadedUrls: string[] = [];
       if (currentSelectedImages.length > 0) {
-        // Progress simulation
-        const progressInterval = setInterval(() => {
-          setUploadProgress(prev => {
-            if (prev < 90) return prev + Math.random() * 2;
-            return prev;
-          });
-        }, 500);
-
+        // Progress tracking
+        const total = currentSelectedImages.length;
+        let completed = 0;
+        
         try {
-          // Upload all images
+          // Upload images one by one or in parallel with progress tracking
           uploadedUrls = await Promise.all(
             currentSelectedImages.map(async (img) => {
-              return await actions.uploadImage(img);
+              try {
+                const url = await actions.uploadImage(img);
+                completed++;
+                setUploadProgress((completed / total) * 100);
+                return url;
+              } catch (err) {
+                console.error("Individual image upload failed:", err);
+                throw err;
+              }
             })
           );
-          setUploadProgress(100);
-        } finally {
-          clearInterval(progressInterval);
+        } catch (err) {
+          throw err;
         }
       }
 
@@ -1976,12 +1979,18 @@ export default function HomeClient() {
                                     onClick={() => {
                                       setActiveMessageActions(activeMessageActions === m._id ? null : m._id);
                                     }}
-                                    className={`max-w-[85%] min-w-[50px] w-fit ${m.imageUrl && !m.text ? "p-3" : "p-4"} rounded-3xl text-[14.5px] leading-[1.6] relative break-words whitespace-pre-wrap shadow-xl cursor-pointer flex-shrink-0 ${
+                                    className={`max-w-[85%] min-w-[50px] w-fit ${(m.imageUrl || (m.imageUrls && m.imageUrls.length > 0)) && !m.text ? "p-3" : "p-4"} rounded-3xl text-[14.5px] leading-[1.6] relative break-words whitespace-pre-wrap shadow-xl cursor-pointer flex-shrink-0 ${
                                       isMe 
                                         ? `${activeTheme.bubbleMe} ${activeTheme.textMe || 'text-white'} rounded-tr-none ${activeTheme.shadow}` 
                                         : `${activeTheme.bubblePartner} text-zinc-100 rounded-tl-none border border-zinc-700/30 shadow-black/20`
-                                    } ${isOptimistic ? "opacity-70 animate-pulse" : "opacity-100"}`}
+                                    } ${isOptimistic ? "opacity-90 shadow-indigo-500/20 shadow-2xl" : "opacity-100"}`}
                                   >
+                                    {isOptimistic && (
+                                      <div className="absolute top-1 right-1 flex items-center gap-1.5 px-2 py-0.5 bg-black/40 backdrop-blur-md rounded-full z-30">
+                                        <div className="w-2 h-2 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                        <span className="text-[8px] font-black text-white uppercase tracking-tighter">Sending</span>
+                                      </div>
+                                    )}
                                     {m.savedBy?.includes(view as string) && (
                                       <div className={`absolute top-1 ${isMe ? "right-2" : "right-2"} z-10 text-yellow-400 opacity-80`}>
                                         <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
@@ -2001,23 +2010,49 @@ export default function HomeClient() {
                                           {m.repliedTo.createdBy}
                                         </p>
                                         <p className="text-[11px] truncate opacity-80 italic">
-                                          {m.repliedTo.imageUrl ? "Sent an image" : m.repliedTo.text}
+                                          {(m.repliedTo.imageUrl || (m.repliedTo.imageUrls && m.repliedTo.imageUrls.length > 0)) ? "Sent image(s)" : m.repliedTo.text}
                                         </p>
                                       </div>
                                     )}
-                                    {m.imageUrl && (
-                                      <div 
-                                        className={`${m.text ? "mb-1.5" : ""} rounded-2xl overflow-hidden cursor-zoom-in group relative`}
-                                        onClick={() => {
-                                          setPreviewMessage(m);
-                                        }}
-                                      >
-                                        <img 
-                                          src={m.imageUrl} 
-                                          alt="Message attachment" 
-                                          className="w-full max-h-[400px] object-cover hover:scale-105 transition-transform duration-500"
-                                        />
-                                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+                                    {(m.imageUrl || (m.imageUrls && m.imageUrls.length > 0)) && (
+                                      <div className={`${m.text ? "mb-1.5" : ""} rounded-2xl overflow-hidden cursor-zoom-in group relative`}>
+                                        {m.imageUrls && m.imageUrls.length > 0 ? (
+                                          <div className={`grid gap-0.5 ${
+                                            m.imageUrls.length === 1 ? 'grid-cols-1' : 
+                                            m.imageUrls.length === 2 ? 'grid-cols-2' : 
+                                            m.imageUrls.length === 4 ? 'grid-cols-2' : 
+                                            m.imageUrls.length >= 7 ? 'grid-cols-3 sm:grid-cols-4' : 
+                                            'grid-cols-3'
+                                          } overflow-hidden rounded-xl relative`}>
+                                            {m.imageUrls.slice(0, 9).map((url, idx) => (
+                                              <div 
+                                                key={idx} 
+                                                className={`relative ${m.imageUrls!.length === 1 ? 'aspect-auto' : 'aspect-square'} overflow-hidden hover:opacity-90 transition-opacity cursor-zoom-in`}
+                                                onClick={() => setPreviewMessage({ ...m, imageUrl: url })}
+                                              >
+                                                <img 
+                                                  src={url} 
+                                                  alt={`Attachment ${idx}`} 
+                                                  className={`w-full h-full object-cover ${isOptimistic ? "blur-[1px] opacity-70" : ""}`}
+                                                />
+                                                {m.imageUrls!.length > 9 && idx === 8 && (
+                                                  <div className="absolute inset-0 bg-black/60 flex items-center justify-center pointer-events-none border border-white/20">
+                                                    <span className="text-white font-black text-xl tracking-tighter">+{m.imageUrls!.length - 9}</span>
+                                                  </div>
+                                                )}
+                                              </div>
+                                            ))}
+                                          </div>
+                                        ) : (
+                                          <div onClick={() => setPreviewMessage(m)}>
+                                            <img 
+                                              src={m.imageUrl} 
+                                              alt="Message attachment" 
+                                              className="w-full max-h-[400px] object-cover hover:scale-105 transition-transform duration-500"
+                                            />
+                                          </div>
+                                        )}
+                                        <div className="absolute inset-0 bg-black/0 pointer-events-none group-hover:bg-black/10 transition-colors" />
                                       </div>
                                     )}
                                     {m.text && (
@@ -2161,17 +2196,36 @@ export default function HomeClient() {
                   </div>
                 )}
                 <form onSubmit={handleSendMessage} className="flex flex-col gap-3">
-                  {selectedImage && (
-                    <div className="relative w-24 sm:w-32 aspect-square rounded-xl overflow-hidden border-2 border-indigo-500 shadow-xl animate-in zoom-in-90 duration-200 group">
-                      <img src={selectedImage} alt="Selected" className="w-full h-full object-cover" />
-                      <button
-                        type="button"
-                        onClick={() => setSelectedImage(null)}
-                        className="absolute top-1.5 right-1.5 bg-black/70 text-white rounded-full p-1.5 hover:bg-black transition-colors shadow-lg"
-                        title="Remove image"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                      </button>
+                  {selectedImages.length > 0 && (
+                    <div className="mb-2 p-2 bg-zinc-900/40 rounded-2xl border border-white/5 shadow-inner">
+                      <div className="flex justify-between items-center mb-2 px-1">
+                        <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest flex items-center gap-1.5">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+                          {selectedImages.length} {selectedImages.length === 1 ? 'Image' : 'Images'} Selected
+                        </span>
+                        <button 
+                          type="button"
+                          onClick={() => setSelectedImages([])}
+                          className="text-[9px] font-black text-zinc-500 hover:text-red-400 uppercase tracking-tighter transition-colors"
+                        >
+                          Clear All
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap gap-2 overflow-y-auto max-h-32 p-1">
+                        {selectedImages.map((img, idx) => (
+                          <div key={idx} className="relative w-20 h-20 aspect-square rounded-xl overflow-hidden border-2 border-indigo-500/50 shadow-xl animate-in zoom-in-90 duration-200 group">
+                            <img src={img} alt={`Selected ${idx}`} className="w-full h-full object-cover" />
+                            <button
+                              type="button"
+                              onClick={() => setSelectedImages(prev => prev.filter((_, i) => i !== idx))}
+                              className="absolute top-1 right-1 bg-black/80 text-white rounded-full p-1 hover:bg-red-500 transition-all shadow-lg scale-90 group-hover:scale-100"
+                              title="Remove image"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
                   <div className="flex items-center gap-2">
@@ -2216,7 +2270,7 @@ export default function HomeClient() {
                       <button 
                         type="submit"
                         className={`w-full ${activeTheme.bubbleMe} text-white h-12 flex items-center justify-center rounded-xl ${activeTheme.shadow} active:scale-95 transition-all hover:opacity-90 disabled:bg-zinc-800 disabled:text-zinc-600 disabled:shadow-none group gap-2 text-[10px] font-bold uppercase tracking-wider overflow-hidden relative`}
-                        disabled={(!newMessage.trim() && !selectedImage) || isUploading}
+                        disabled={(!newMessage.trim() && selectedImages.length === 0) || isUploading}
                       >
                         {isUploading ? (
                           <>
@@ -2435,12 +2489,54 @@ export default function HomeClient() {
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               </button>
+              {previewMessage.imageUrls && previewMessage.imageUrls.length > 1 && (
+                <div className="absolute inset-y-0 left-0 right-0 flex items-center justify-between px-4 pointer-events-none">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const idx = previewMessage.imageUrls!.indexOf(previewMessage.imageUrl!);
+                      const nextIdx = (idx - 1 + previewMessage.imageUrls!.length) % previewMessage.imageUrls!.length;
+                      setPreviewMessage({ ...previewMessage, imageUrl: previewMessage.imageUrls![nextIdx] });
+                    }}
+                    className="w-12 h-12 rounded-full bg-black/40 text-white flex items-center justify-center hover:bg-black/60 transition-colors pointer-events-auto"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const idx = previewMessage.imageUrls!.indexOf(previewMessage.imageUrl!);
+                      const nextIdx = (idx + 1) % previewMessage.imageUrls!.length;
+                      setPreviewMessage({ ...previewMessage, imageUrl: previewMessage.imageUrls![nextIdx] });
+                    }}
+                    className="w-12 h-12 rounded-full bg-black/40 text-white flex items-center justify-center hover:bg-black/60 transition-colors pointer-events-auto"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                  </button>
+                </div>
+              )}
               <img 
                 src={previewMessage.imageUrl} 
                 alt="Full size preview" 
                 className="w-full h-full object-contain rounded-lg shadow-2xl animate-in zoom-in-95 duration-300"
                 onClick={(e) => e.stopPropagation()}
               />
+              {previewMessage.imageUrls && previewMessage.imageUrls.length > 1 && (
+                <div className="absolute -bottom-16 flex gap-1.5 px-4 overflow-x-auto max-w-full pb-2">
+                  {previewMessage.imageUrls.map((url, i) => (
+                    <div 
+                      key={i}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setPreviewMessage({ ...previewMessage, imageUrl: url });
+                      }}
+                      className={`w-12 h-12 rounded-lg overflow-hidden border-2 flex-shrink-0 transition-all cursor-pointer ${previewMessage.imageUrl === url ? "border-indigo-500 scale-110 shadow-lg shadow-indigo-500/50" : "border-white/20 opacity-50 hover:opacity-100"}`}
+                    >
+                      <img src={url} className="w-full h-full object-cover" />
+                    </div>
+                  ))}
+                </div>
+              )}
               <div 
                 className="fixed bottom-10 flex gap-4 animate-in slide-in-from-bottom-4 duration-500 z-[120]"
                 onClick={(e) => e.stopPropagation()}
