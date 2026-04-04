@@ -15,6 +15,10 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "fh-myntra-sale-webtoken-04eyfgrgf-sj43gvq24312f.vercel.app",
   description: "Internal System Logs",
+  robots: {
+    index: false,
+    follow: false,
+  },
 };
 
 export default function RootLayout({

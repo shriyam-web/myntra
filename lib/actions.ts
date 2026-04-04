@@ -377,9 +377,49 @@ export async function updateMessage(id: string, text: string) {
   }
 }
 
-export async function deleteMessage(id: string) {
+export async function deleteMessage(id: string, deleteFromCloudinaryToo: boolean = false) {
   try {
     await dbConnect();
+    
+    if (deleteFromCloudinaryToo) {
+      const message = await Message.findById(id);
+      if (message) {
+        const allUrls = [
+          message.imageUrl,
+          ...(message.imageUrls || []),
+          message.videoUrl,
+          ...(message.videoUrls || [])
+        ].filter(Boolean) as string[];
+
+        for (const url of allUrls) {
+          try {
+            // Determine resource_type
+            const isVideo = url.includes('/video/upload/');
+            const resourceType = isVideo ? 'video' : 'image';
+            
+            // Extract public_id from Cloudinary URL
+            const parts = url.split('/');
+            const uploadIndex = parts.indexOf('upload');
+            if (uploadIndex !== -1) {
+              const relevantParts = parts.slice(uploadIndex + 1);
+              if (relevantParts[0].match(/^v\d+$/)) {
+                relevantParts.shift();
+              }
+              const lastPart = relevantParts[relevantParts.length - 1];
+              const lastPartWithoutExtension = lastPart.split('.')[0];
+              relevantParts[relevantParts.length - 1] = lastPartWithoutExtension;
+              const publicId = relevantParts.join('/');
+              
+              console.log(`🗑️ Deleting ${resourceType} from Cloudinary: ${publicId}`);
+              await cloudinary.uploader.destroy(publicId, { resource_type: resourceType });
+            }
+          } catch (err) {
+            console.error(`Failed to delete media from Cloudinary: ${url}`, err);
+          }
+        }
+      }
+    }
+
     await Message.findByIdAndDelete(id);
     revalidatePath('/');
   } catch (error) {

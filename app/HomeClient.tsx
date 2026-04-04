@@ -345,8 +345,21 @@ export default function HomeClient() {
 
   const handleDeleteMessage = async (id: string) => {
     try {
+      let deleteFromCloudinaryToo = false;
+      const messageToDelete = messages.find(m => m._id === id);
+      const hasMedia = messageToDelete && (
+        messageToDelete.imageUrl || 
+        (messageToDelete.imageUrls && messageToDelete.imageUrls.length > 0) ||
+        messageToDelete.videoUrl || 
+        (messageToDelete.videoUrls && messageToDelete.videoUrls.length > 0)
+      );
+
+      if (currentUser === "delta 1" && hasMedia) {
+        deleteFromCloudinaryToo = window.confirm("You have the exclusive power to delete media from Cloudinary. \n\nDelete from Cloudinary too?");
+      }
+
       setMessages(prev => prev.filter(m => m._id !== id));
-      await actions.deleteMessage(id);
+      await actions.deleteMessage(id, deleteFromCloudinaryToo);
     } catch (error) {
       console.error('Failed to delete message:', error);
       fetchInitialData();
