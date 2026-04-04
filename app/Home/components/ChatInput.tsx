@@ -3,19 +3,19 @@ import { Message, Theme } from "../types";
 
 interface ChatInputProps {
   newMessage: string;
-  setNewMessage: (value: string) => void;
+  setNewMessage: React.Dispatch<React.SetStateAction<string>>;
   handleSendMessage: (e?: React.FormEvent) => void;
   replyingTo: Message | null;
-  setReplyingTo: (m: Message | null) => void;
+  setReplyingTo: React.Dispatch<React.SetStateAction<Message | null>>;
   activeTheme: Theme;
   messageInputRef: React.RefObject<HTMLTextAreaElement | null>;
   fileInputRef: React.RefObject<HTMLInputElement | null>;
   selectedImages: string[];
-  setSelectedImages: (images: string[]) => void;
+  setSelectedImages: React.Dispatch<React.SetStateAction<string[]>>;
   selectedVideos: string[];
-  setSelectedVideos: (videos: string[]) => void;
+  setSelectedVideos: React.Dispatch<React.SetStateAction<string[]>>;
   selectedFiles: File[];
-  setSelectedFiles: (files: File[]) => void;
+  setSelectedFiles: React.Dispatch<React.SetStateAction<File[]>>;
   isUploading: boolean;
   uploadProgress: number;
 }
