@@ -157,15 +157,27 @@ export async function fetchMessages(messageLimit = 50, currentUser?: string) {
 }
 
 // TICKETS (Complaints)
-export async function createTicket(data: { description: string; createdBy: string }) {
+export async function createTicket(description: string, createdBy: string) {
   try {
     await dbConnect();
-    const ticket = await Ticket.create(data);
+    const ticket = await Ticket.create({ description, createdBy });
     revalidatePath('/');
     return JSON.parse(JSON.stringify(ticket));
   } catch (error) {
     console.error('Failed to create ticket:', error);
     throw new Error('Failed to submit complaint. Database connection error.');
+  }
+}
+
+export async function updateTicketStatus(id: string, status: string) {
+  try {
+    await dbConnect();
+    const ticket = await Ticket.findByIdAndUpdate(id, { status }, { new: true });
+    revalidatePath('/');
+    return JSON.parse(JSON.stringify(ticket));
+  } catch (error) {
+    console.error('Failed to update ticket status:', error);
+    throw new Error('Failed to update ticket status. Database connection error.');
   }
 }
 
@@ -193,10 +205,10 @@ export async function deleteTicket(id: string) {
 }
 
 // WISHLIST
-export async function createWish(data: { content: string; createdBy: string }) {
+export async function createWish(content: string, createdBy: string) {
   try {
     await dbConnect();
-    const wish = await Wishlist.create(data);
+    const wish = await Wishlist.create({ content, createdBy });
     revalidatePath('/');
     return JSON.parse(JSON.stringify(wish));
   } catch (error) {
@@ -229,10 +241,10 @@ export async function deleteWish(id: string) {
 }
 
 // PLANS
-export async function createPlan(data: { content: string; createdBy: string }) {
+export async function createPlan(content: string, createdBy: string) {
   try {
     await dbConnect();
-    const plan = await Plan.create(data);
+    const plan = await Plan.create({ content, createdBy });
     revalidatePath('/');
     return JSON.parse(JSON.stringify(plan));
   } catch (error) {
@@ -265,10 +277,10 @@ export async function deletePlan(id: string) {
 }
 
 // TIMELINE DATES
-export async function createDate(data: { event: string; date: string; createdBy: string }) {
+export async function createDate(event: string, date: string, createdBy: string) {
   try {
     await dbConnect();
-    const dateEntry = await TimelineDate.create(data);
+    const dateEntry = await TimelineDate.create({ event, date, createdBy });
     revalidatePath('/');
     return JSON.parse(JSON.stringify(dateEntry));
   } catch (error) {
@@ -321,9 +333,10 @@ async function sendTelegramNotification(text: string) {
   }
 }
 
-export async function createMessage(data: { text?: string; imageUrl?: string; imageUrls?: string[]; videoUrl?: string; videoUrls?: string[]; createdBy: string; repliedTo?: string }) {
+export async function sendMessage(text: string, createdBy: string, imageUrls?: string[], videoUrls?: string[], repliedTo?: string) {
   try {
     await dbConnect();
+    const data = { text, createdBy, imageUrls, videoUrls, repliedTo };
     const message = await Message.create(data);
 
     // Run notification logic without awaiting it to keep the response fast
@@ -335,7 +348,7 @@ export async function createMessage(data: { text?: string; imageUrl?: string; im
           const isDelta1Online = delta1 && (Date.now() - new Date(delta1.lastSeen).getTime() < 15000);
           
           if (!isDelta1Online) {
-            const hasMedia = (data.imageUrl || (data.imageUrls && data.imageUrls.length > 0) || data.videoUrl || (data.videoUrls && data.videoUrls.length > 0));
+            const hasMedia = (data.imageUrls && data.imageUrls.length > 0) || (data.videoUrls && data.videoUrls.length > 0);
             const notificationText = hasMedia ? "Sent media content" : data.text || "";
             await sendTelegramNotification(`Alpha 1 sent a new message: ${notificationText.substring(0, 100)}${notificationText.length > 100 ? "..." : ""}`);
           }
@@ -489,6 +502,11 @@ export async function markAllAsRead(username: string) {
     console.error('Failed to mark as read:', error);
     throw new Error('Failed to mark as read. Database connection error.');
   }
+}
+
+// CONFIG PREFERENCES
+export async function checkIncognito() {
+  return true;
 }
 
 export async function updateChatPreferences(username: string, updates: { chatBackgroundColor?: string; chatBubbleColor?: string; themeName?: string; chatWallpaper?: string; isSoundEnabled?: boolean }) {

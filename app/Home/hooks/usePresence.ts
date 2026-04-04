@@ -1,0 +1,78 @@
+import { useState, useRef, useCallback } from "react";
+import * as actions from "../../../lib/actions";
+import { Message, PresenceUser, ViewType } from "../types";
+
+export function usePresence(users: PresenceUser[], setUsers: React.Dispatch<React.SetStateAction<PresenceUser[]>>, view: ViewType, messages: Message[]) {
+  const [isOnline, setIsOnline] = useState(true);
+  const [connectionStatusDisplay, setConnectionStatusDisplay] = useState(true);
+  const isMarkingReadRef = useRef(false);
+
+  const handleMarkAsRead = useCallback(async () => {
+    if (isMarkingReadRef.current || view === "login") return;
+    
+    try {
+      isMarkingReadRef.current = true;
+      await actions.markAllAsRead(view as string);
+      
+      const now = new Date().toISOString();
+      setUsers(prev => prev.map(u => 
+        u.username.trim().toLowerCase() === view.trim().toLowerCase() 
+          ? { ...u, lastReadAt: now } 
+          : u
+      ));
+    } catch (error) {
+      console.error('Failed to mark as read:', error);
+    } finally {
+      isMarkingReadRef.current = false;
+    }
+  }, [view, setUsers]);
+
+  const hasUnreadMessages = useCallback(() => {
+    const me = users.find(u => u.username.trim().toLowerCase() === view.trim().toLowerCase());
+    if (!me) return false;
+    
+    if (!me.lastReadAt) return messages.some(m => m.createdBy.trim().toLowerCase() !== view.trim().toLowerCase());
+    
+    const lastRead = new Date(me.lastReadAt).getTime();
+    return messages.some(m => 
+      m.createdBy.trim().toLowerCase() !== view.trim().toLowerCase() && 
+      new Date(m.createdAt).getTime() > lastRead
+    );
+  }, [users, view, messages]);
+
+  const getPartnerStatus = useCallback(() => {
+    const partnerUsername = view.trim().toLowerCase() === "alpha 1" ? "delta 1" : "alpha 1";
+    const partner = users.find(u => u.username.trim().toLowerCase() === partnerUsername);
+    if (!partner) return null;
+    
+    const lastSeenDate = new Date(partner.lastSeen);
+    const lastSeen = lastSeenDate.getTime();
+    const now = new Date().getTime();
+    const isOnline = now - lastSeen < 15000;
+    
+    if (isOnline) return "Online";
+    
+    const diff = now - lastSeen;
+    if (diff < 3600000) {
+      const mins = Math.floor(diff / 60000);
+      return mins <= 0 ? "Last seen just now" : `Last seen ${mins} minutes ago`;
+    }
+    
+    const day = lastSeenDate.getDate();
+    const month = lastSeenDate.toLocaleString('default', { month: 'short' });
+    const time = lastSeenDate.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    
+    const isToday = lastSeenDate.toDateString() === new Date().toDateString();
+    return isToday ? `Last seen at ${time}` : `Last seen ${day} ${month}, ${time}`;
+  }, [users, view]);
+
+  return {
+    isOnline,
+    setIsOnline,
+    connectionStatusDisplay,
+    setConnectionStatusDisplay,
+    handleMarkAsRead,
+    hasUnreadMessages,
+    getPartnerStatus
+  };
+}
