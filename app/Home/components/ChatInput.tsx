@@ -285,15 +285,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           )}
         </button>
       </form>
-      <div className="max-w-2xl mx-auto flex items-center justify-between px-2 mt-4">
-        <p className="text-[9px] font-black uppercase tracking-[0.3em] text-zinc-700 flex items-center gap-2">
-            <span className="w-1 h-1 bg-green-500 rounded-full"></span>
-            End-to-end encrypted
-        </p>
-        <p className="text-[9px] font-black uppercase tracking-[0.3em] text-zinc-700">
-            Node: SGP-X1
-        </p>
-      </div>
     </div>
   );
 };

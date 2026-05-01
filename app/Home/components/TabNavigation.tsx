@@ -94,7 +94,7 @@ export function TabNavigation({
   };
 
   return (
-    <nav className="max-w-md mx-auto flex items-center gap-2 overflow-x-auto no-scrollbar pt-3 px-6 pb-3 sticky top-[73px] z-40 bg-zinc-950/80 backdrop-blur-xl border-b border-zinc-900/50">
+    <nav className="max-w-md mx-auto flex items-center gap-2 overflow-x-auto no-scrollbar pt-3 px-4 pb-3 sticky top-[73px] z-40 bg-zinc-950/80 backdrop-blur-xl border-b border-zinc-900/50">
       {TABS.map((tab) => (
         <button
           key={tab.id}

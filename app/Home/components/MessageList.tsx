@@ -110,7 +110,7 @@ export const MessageList: React.FC<MessageListProps> = ({
         setIsPullingUp(false);
       }}
       className={`flex-1 overflow-y-auto no-scrollbar scroll-smooth px-4 ${
-        isMessageExpanded ? "py-6 h-full" : "py-4 max-h-[35vh] min-h-[250px]"
+        isMessageExpanded ? "py-6 h-full" : "py-4 max-h-[60vh] min-h-[300px]"
       }`}
     >
       {showScrollButton && (

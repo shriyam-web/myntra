@@ -52,10 +52,10 @@ export function usePresence(users: PresenceUser[], setUsers: React.Dispatch<Reac
     
     if (isOnline) return "Online";
     
-    const diff = now - lastSeen;
+    const diff = Math.max(0, now - lastSeen);
     if (diff < 3600000) {
       const mins = Math.floor(diff / 60000);
-      return mins <= 0 ? "Last seen just now" : `Last seen ${mins} minutes ago`;
+      return mins <= 0 ? "Last seen just now" : `Last seen ${mins} ${mins === 1 ? 'minute' : 'minutes'} ago`;
     }
     
     const day = lastSeenDate.getDate();

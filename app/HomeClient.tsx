@@ -109,7 +109,16 @@ export default function HomeClient() {
   useEffect(() => {
     if (view !== "login") {
       fetchInitialData();
-      const interval = setInterval(() => fetchMessagesOnly(true), 3000);
+      // Initial presence update
+      actions.updatePresence(view as string);
+      
+      const interval = setInterval(() => {
+        fetchMessagesOnly(true);
+        // Periodic presence update every 10 seconds
+        if (Date.now() % 10000 < 3000) {
+            actions.updatePresence(view as string);
+        }
+      }, 3000);
       return () => clearInterval(interval);
     }
   }, [view, fetchInitialData, fetchMessagesOnly]);
@@ -537,7 +546,7 @@ export default function HomeClient() {
         currentUser={currentUser}
       />
 
-      <main className="flex-1 max-w-md mx-auto w-full px-6 pt-8 pb-32">
+      <main className="flex-1 max-w-md mx-auto w-full px-4 pt-8 pb-32">
         {activeTab === "complaints" && (
           <ComplaintsTab 
             tickets={tickets}
