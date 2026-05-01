@@ -67,6 +67,10 @@ export const MessageList: React.FC<MessageListProps> = ({
   handleDownloadMedia,
   setPreviewMessage,
 }) => {
+  const [swipingMessageId, setSwipingMessageId] = React.useState<string | null>(null);
+  const [swipeDistance, setSwipeDistance] = React.useState(0);
+  const touchStartRef = React.useRef<{ x: number; y: number } | null>(null);
+
   return (
     <div
       ref={messagesContainerRef}
@@ -110,7 +114,7 @@ export const MessageList: React.FC<MessageListProps> = ({
         setIsPullingUp(false);
       }}
       className={`flex-1 overflow-y-auto no-scrollbar scroll-smooth px-4 ${
-        isMessageExpanded ? "py-6 h-full" : "py-4 max-h-[60vh] min-h-[300px]"
+        isMessageExpanded ? "py-6 h-full" : "py-4 max-h-[50vh] min-h-[300px]"
       }`}
     >
       {showScrollButton && (
@@ -170,17 +174,57 @@ export const MessageList: React.FC<MessageListProps> = ({
                 const isRead =
                   isMe &&
                   !!partner?.lastReadAt &&
-                  new Date(m.createdAt).getTime() <= new Date(partner.lastReadAt).getTime() + 100;
+                  new Date(m.createdAt).getTime() <= new Date(partner.lastReadAt).getTime();
                 const isOptimistic = /^\d+$/.test(m._id);
 
                 return (
                   <div
                     key={m._id}
                     id={`message-${m._id}`}
+                    onTouchStart={(e) => {
+                      touchStartRef.current = {
+                        x: e.touches[0].clientX,
+                        y: e.touches[0].clientY
+                      };
+                    }}
+                    onTouchMove={(e) => {
+                      if (!touchStartRef.current) return;
+                      const deltaX = e.touches[0].clientX - touchStartRef.current.x;
+                      const deltaY = e.touches[0].clientY - touchStartRef.current.y;
+                      
+                      // If horizontal swipe is dominant
+                      if (Math.abs(deltaX) > Math.abs(deltaY) && deltaX > 0) {
+                        setSwipingMessageId(m._id);
+                        setSwipeDistance(Math.min(deltaX, 80));
+                      }
+                    }}
+                    onTouchEnd={() => {
+                      if (swipeDistance > 60) {
+                        setReplyingTo(m);
+                        if (window.navigator.vibrate) window.navigator.vibrate(10);
+                      }
+                      setSwipingMessageId(null);
+                      setSwipeDistance(0);
+                      touchStartRef.current = null;
+                    }}
+                    style={{
+                      transform: swipingMessageId === m._id ? `translateX(${swipeDistance}px)` : 'none',
+                      transition: swipingMessageId === m._id ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)'
+                    }}
                     className={`flex flex-col w-full transition-all duration-300 relative group/msg ${
                       isMe ? "items-end" : "items-start"
                     }`}
                   >
+                    {swipingMessageId === m._id && swipeDistance > 20 && (
+                      <div 
+                        className="absolute left-[-40px] top-1/2 -translate-y-1/2 opacity-0 transition-opacity duration-200"
+                        style={{ opacity: Math.min((swipeDistance - 20) / 40, 1) }}
+                      >
+                        <div className={`p-2 rounded-full ${activeTheme.bubbleMe} text-white shadow-lg`}>
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
+                        </div>
+                      </div>
+                    )}
                     <div
                       className={`flex flex-col max-w-[85%] sm:max-w-[75%] gap-1 mb-1 relative ${
                         isMe ? "items-end" : "items-start"

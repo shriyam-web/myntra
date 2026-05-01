@@ -14,7 +14,7 @@ interface ThemeSettingsProps {
   setChatBgColor: (color: string) => void;
   chatBubbleColor: string;
   setChatBubbleColor: (color: string) => void;
-  handleUpdateChatPreferences: (updates: { chatBackgroundColor?: string; chatBubbleColor?: string }) => void;
+  handleUpdateChatPreferences: (updates: { chatBackgroundColor?: string; chatBubbleColor?: string; themeName?: string; chatWallpaper?: string }) => void;
 }
 
 export const ThemeSettings: React.FC<ThemeSettingsProps> = ({
@@ -40,10 +40,10 @@ export const ThemeSettings: React.FC<ThemeSettingsProps> = ({
         <div className="p-8 border-b border-zinc-900 flex justify-between items-center bg-zinc-900/20">
           <div>
             <h2 className="text-xl font-black text-white uppercase tracking-widest mb-1">
-              Interface Config
+              Chat Appearance
             </h2>
             <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.2em]">
-              System Visual Environment
+              Customize your environment
             </p>
           </div>
           <button
@@ -84,6 +84,7 @@ export const ThemeSettings: React.FC<ThemeSettingsProps> = ({
                     handleUpdateChatPreferences({
                       chatBackgroundColor: t.bg,
                       chatBubbleColor: t.bubbleMe,
+                      themeName: t.name,
                     });
                   }}
                   className={`relative p-5 rounded-3xl border transition-all duration-300 group overflow-hidden ${
@@ -114,7 +115,12 @@ export const ThemeSettings: React.FC<ThemeSettingsProps> = ({
               {wallpapers.map((w) => (
                 <button
                   key={w.id}
-                  onClick={() => setChatWallpaper(w.value)}
+                  onClick={() => {
+                    setChatWallpaper(w.value);
+                    handleUpdateChatPreferences({
+                      chatWallpaper: w.value,
+                    });
+                  }}
                   className={`relative aspect-square rounded-2xl border flex items-center justify-center transition-all group overflow-hidden ${
                     chatWallpaper === w.value ? "border-white scale-95" : "border-zinc-800/50 hover:border-zinc-700 active:scale-90"
                   }`}
@@ -143,7 +149,7 @@ export const ThemeSettings: React.FC<ThemeSettingsProps> = ({
               onClick={() => setShowThemeSettings(false)}
               className="w-full py-5 bg-white text-black rounded-3xl font-black uppercase tracking-widest text-xs hover:bg-zinc-200 transition-all active:scale-95 shadow-xl shadow-white/5"
            >
-              Update Environment
+              Save Changes
            </button>
         </div>
       </div>

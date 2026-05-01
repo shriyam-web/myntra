@@ -23,7 +23,6 @@ interface UserDocument {
   chatBubbleColor?: string;
   themeName?: string;
   chatWallpaper?: string;
-  isSoundEnabled?: boolean;
 }
 
 // IMAGE UPLOAD
@@ -92,7 +91,7 @@ export async function fetchData(messageLimit = 50, currentUser?: string) {
       Plan.find({}).lean(),
       TimelineDate.find({}).lean(),
       Message.find(messageQuery).sort({ createdAt: -1 }).limit(messageLimit).populate('repliedTo').lean(),
-      User.find({}).select('username lastSeen lastReadAt chatBackgroundColor chatBubbleColor themeName chatWallpaper isSoundEnabled').lean()
+      User.find({}).select('username lastSeen lastReadAt chatBackgroundColor chatBubbleColor themeName chatWallpaper').lean()
     ]);
 
     // Deduplicate users by username (lowercase)
@@ -148,7 +147,7 @@ export async function fetchMessages(messageLimit = 50, currentUser?: string) {
 
     const [messages, rawUsers] = await Promise.all([
       Message.find(messageQuery).sort({ createdAt: -1 }).limit(messageLimit).populate('repliedTo').lean(),
-      User.find({}).select('username lastSeen lastReadAt chatBackgroundColor chatBubbleColor themeName chatWallpaper isSoundEnabled').lean()
+      User.find({}).select('username lastSeen lastReadAt chatBackgroundColor chatBubbleColor themeName chatWallpaper').lean()
     ]);
 
     const userMap = new Map<string, UserDocument>();
@@ -586,7 +585,7 @@ export async function checkIncognito() {
   return true;
 }
 
-export async function updateChatPreferences(username: string, updates: { chatBackgroundColor?: string; chatBubbleColor?: string; themeName?: string; chatWallpaper?: string; isSoundEnabled?: boolean }) {
+export async function updateChatPreferences(username: string, updates: { chatBackgroundColor?: string; chatBubbleColor?: string; themeName?: string; chatWallpaper?: string }) {
   noStore();
   try {
     await dbConnect();

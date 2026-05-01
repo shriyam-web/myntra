@@ -46,7 +46,11 @@ export default function HomeClient() {
   } = useAppData(view, messageLimit);
 
   const [isSoundEnabled, setIsSoundEnabled] = useState(false);
-  const { playSound, handleToggleSound } = useAudio(isSoundEnabled, setIsSoundEnabled, view);
+  const { playSound, handleToggleSound: baseToggleSound } = useAudio(isSoundEnabled, setIsSoundEnabled, view);
+  
+  const handleToggleSound = useCallback(() => {
+    baseToggleSound();
+  }, [baseToggleSound]);
   
   const {
     connectionStatusDisplay,
@@ -150,6 +154,43 @@ export default function HomeClient() {
     };
     checkIncognito();
   }, []);
+
+  useEffect(() => {
+    if (activeTab === "messages") {
+      scrollToBottom(messages.length <= messageLimit);
+    }
+  }, [activeTab, messages.length, messageLimit]);
+
+  useEffect(() => {
+    if (activeTab === "messages" && messages.length > 0) {
+      const hasUnread = messages.some(m => {
+        const isMe = m.createdBy.trim().toLowerCase() === currentUser.trim().toLowerCase();
+        if (isMe) return false;
+        
+        const me = users.find(u => u.username.trim().toLowerCase() === currentUser.trim().toLowerCase());
+        if (!me?.lastReadAt) return true;
+        
+        return new Date(m.createdAt).getTime() > new Date(me.lastReadAt).getTime();
+      });
+
+      if (hasUnread) {
+        handleMarkAsRead();
+      }
+    }
+  }, [activeTab, messages, currentUser, users, handleMarkAsRead]);
+
+  // Sync preferences from database to local state
+  useEffect(() => {
+    if (view !== "login" && users.length > 0) {
+      const me = users.find(u => u.username.trim().toLowerCase() === view.trim().toLowerCase());
+      if (me) {
+        if (me.chatWallpaper !== undefined) setChatWallpaper(me.chatWallpaper || "");
+        if (me.chatBackgroundColor) setChatBgColor(me.chatBackgroundColor);
+        if (me.chatBubbleColor) setChatBubbleColor(me.chatBubbleColor);
+        if (me.themeName) setThemeName(me.themeName);
+      }
+    }
+  }, [view, users]);
 
   // Handlers
   const handleLogin = (e?: React.FormEvent) => {
@@ -458,7 +499,12 @@ export default function HomeClient() {
     }
   };
 
-  const handleUpdateChatPreferences = async (updates: { chatBackgroundColor?: string; chatBubbleColor?: string }) => {
+  const handleUpdateChatPreferences = async (updates: { 
+    chatBackgroundColor?: string; 
+    chatBubbleColor?: string; 
+    themeName?: string; 
+    chatWallpaper?: string; 
+  }) => {
     try {
       await actions.updateChatPreferences(currentUser, updates);
       fetchInitialData(true);
@@ -554,7 +600,7 @@ export default function HomeClient() {
         />
       </div>
 
-      <main className="flex-1 max-w-md mx-auto w-full px-4 pt-4 pb-24 md:pb-32">
+      <main className="flex-1 max-w-md mx-auto w-full px-4 pt-4 pb-10 md:pb-16">
         {activeTab === "complaints" && (
           <ComplaintsTab 
             tickets={tickets}
@@ -706,13 +752,13 @@ export default function HomeClient() {
                         onClick={() => setShowClearHistoryModal(true)}
                         className="flex-1 py-3 bg-red-950/20 border border-red-900/20 rounded-2xl text-red-500 text-[10px] font-black uppercase tracking-widest hover:bg-red-900/40 transition-all active:scale-95"
                     >
-                        Purge History
+                        Clear Chat
                     </button>
                     <button 
                         onClick={() => setShowThemeSettings(true)}
                         className="flex-1 py-3 bg-zinc-900 border border-zinc-800 rounded-2xl text-zinc-500 text-[10px] font-black uppercase tracking-widest hover:text-white transition-all active:scale-95"
                     >
-                        Config Interface
+                        Wallpaper & Theme
                     </button>
                 </div>
              )}
