@@ -261,7 +261,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   }
                 }}
                 className="w-full bg-transparent text-white text-sm font-bold py-4 px-1 outline-none no-scrollbar resize-none max-h-40 placeholder:text-zinc-800"
-                placeholder="Secure message transmission..."
+                placeholder="Say, Hello!"
                 rows={1}
                 autoFocus
                 spellCheck={false}
@@ -281,7 +281,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           {isUploading ? (
              <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
           ) : (
-             <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="translate-x-0.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="translate-x-0.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
           )}
         </button>
       </form>
