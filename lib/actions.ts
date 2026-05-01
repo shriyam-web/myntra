@@ -72,6 +72,11 @@ export async function fetchData(messageLimit = 50, currentUser?: string) {
   try {
     await dbConnect();
 
+    // Update presence if currentUser provided
+    if (currentUser && currentUser !== "login") {
+      await updatePresence(currentUser);
+    }
+
     // Log the number of users found to debug
     const userCount = await User.countDocuments();
     console.log(`🔍 fetchData: Found ${userCount} users in database`);
@@ -95,7 +100,11 @@ export async function fetchData(messageLimit = 50, currentUser?: string) {
     (rawUsers as UserDocument[]).forEach((u: UserDocument) => {
       const uname = u.username.trim().toLowerCase();
       const existing = userMap.get(uname);
-      if (!existing || new Date(u.lastSeen) > new Date(existing.lastSeen)) {
+      
+      const uDate = u.lastSeen ? new Date(u.lastSeen).getTime() : 0;
+      const eDate = (existing && existing.lastSeen) ? new Date(existing.lastSeen).getTime() : 0;
+
+      if (!existing || uDate > eDate) {
         userMap.set(uname, u);
       }
     });
@@ -126,6 +135,12 @@ export async function fetchMessages(messageLimit = 50, currentUser?: string) {
   noStore();
   try {
     await dbConnect();
+    
+    // Update presence if currentUser provided
+    if (currentUser && currentUser !== "login") {
+      await updatePresence(currentUser);
+    }
+
     const messageQuery: Record<string, unknown> = {};
     if (currentUser) {
       messageQuery.deletedFor = { $ne: currentUser };
@@ -140,7 +155,11 @@ export async function fetchMessages(messageLimit = 50, currentUser?: string) {
     (rawUsers as UserDocument[]).forEach((u: UserDocument) => {
       const uname = u.username.trim().toLowerCase();
       const existing = userMap.get(uname);
-      if (!existing || new Date(u.lastSeen) > new Date(existing.lastSeen)) {
+      
+      const uDate = u.lastSeen ? new Date(u.lastSeen).getTime() : 0;
+      const eDate = (existing && existing.lastSeen) ? new Date(existing.lastSeen).getTime() : 0;
+
+      if (!existing || uDate > eDate) {
         userMap.set(uname, u);
       }
     });
@@ -336,6 +355,10 @@ async function sendTelegramNotification(text: string) {
 export async function sendMessage(text: string, createdBy: string, imageUrls?: string[], videoUrls?: string[], repliedTo?: string) {
   try {
     await dbConnect();
+    
+    // Update sender's presence
+    await updatePresence(createdBy);
+
     const data = { text, createdBy, imageUrls, videoUrls, repliedTo };
     const message = await Message.create(data);
 
@@ -516,14 +539,28 @@ export async function deleteAllMessages(deleteForEveryone = false, username?: st
 
 export async function updatePresence(username: string) {
   noStore();
+  if (!username || username === "login") return;
+  
   try {
     await dbConnect();
+    const uname = username.trim().toLowerCase();
     const updatedUser = await User.findOneAndUpdate(
-      { username: username.trim().toLowerCase() },
+      { username: uname },
       { lastSeen: new Date() },
       { upsert: true, new: true }
     );
+    
+    // Also update any other variations if they exist (to fix duplicates)
+    await User.updateMany(
+      { 
+        username: { $regex: new RegExp(`^${uname}$`, 'i') },
+        _id: { $ne: updatedUser._id }
+      },
+      { lastSeen: new Date() }
+    );
+
     console.log(`📡 Presence updated for: ${username.trim()} at ${updatedUser.lastSeen}`);
+    revalidatePath('/');
   } catch (error) {
     console.error('Failed to update presence:', error);
   }
