@@ -21,7 +21,7 @@ export function ChatHeader({
   handleLogout
 }: ChatHeaderProps) {
   return (
-    <header className="bg-zinc-900/80 backdrop-blur-xl border-b border-zinc-800/50 px-4 py-3 sticky top-0 z-50 shadow-2xl">
+    <header className="bg-zinc-900/80 backdrop-blur-xl border-b border-zinc-800/50 px-4 py-3 z-50 shadow-2xl">
       <div className="max-w-md mx-auto flex justify-between items-center w-full">
         <div className="flex items-center gap-4">
           <div className="flex flex-col">

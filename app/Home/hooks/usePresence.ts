@@ -47,23 +47,41 @@ export function usePresence(users: PresenceUser[], setUsers: React.Dispatch<Reac
     
     const lastSeenDate = new Date(partner.lastSeen);
     const lastSeen = lastSeenDate.getTime();
-    const now = new Date().getTime();
-    const isOnline = now - lastSeen < 15000;
+    const now = Date.now();
+    const diff = now - lastSeen;
+    const isOnline = diff < 20000; // Increased to 20s to be safer with 10s update interval
     
     if (isOnline) return "Online";
     
-    const diff = Math.max(0, now - lastSeen);
+    if (diff < 0) return "Online"; // Handle client clock behind server
+
+    if (diff < 60000) {
+      return "Last seen just now";
+    }
+    
     if (diff < 3600000) {
       const mins = Math.floor(diff / 60000);
-      return mins <= 0 ? "Last seen just now" : `Last seen ${mins} ${mins === 1 ? 'minute' : 'minutes'} ago`;
+      return `Last seen ${mins} ${mins === 1 ? 'minute' : 'minutes'} ago`;
+    }
+    
+    const isToday = lastSeenDate.toDateString() === new Date().toDateString();
+    const time = lastSeenDate.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    
+    if (isToday) {
+      return `Last seen at ${time}`;
+    }
+
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const isYesterday = lastSeenDate.toDateString() === yesterday.toDateString();
+    
+    if (isYesterday) {
+      return `Last seen yesterday at ${time}`;
     }
     
     const day = lastSeenDate.getDate();
     const month = lastSeenDate.toLocaleString('default', { month: 'short' });
-    const time = lastSeenDate.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-    
-    const isToday = lastSeenDate.toDateString() === new Date().toDateString();
-    return isToday ? `Last seen at ${time}` : `Last seen ${day} ${month}, ${time}`;
+    return `Last seen ${day} ${month}, ${time}`;
   }, [users, view]);
 
   return {

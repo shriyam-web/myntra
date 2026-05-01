@@ -112,14 +112,20 @@ export default function HomeClient() {
       // Initial presence update
       actions.updatePresence(view as string);
       
-      const interval = setInterval(() => {
+      // Separate presence update interval (every 10 seconds)
+      const presenceInterval = setInterval(() => {
+        actions.updatePresence(view as string);
+      }, 10000);
+
+      // Data fetching interval (every 3 seconds)
+      const fetchInterval = setInterval(() => {
         fetchMessagesOnly(true);
-        // Periodic presence update every 10 seconds
-        if (Date.now() % 10000 < 3000) {
-            actions.updatePresence(view as string);
-        }
       }, 3000);
-      return () => clearInterval(interval);
+
+      return () => {
+        clearInterval(presenceInterval);
+        clearInterval(fetchInterval);
+      };
     }
   }, [view, fetchInitialData, fetchMessagesOnly]);
 
@@ -525,28 +531,30 @@ export default function HomeClient() {
   if (view === "login") return <LoginView password={password} setPassword={setPassword} handleLogin={handleLogin} />;
 
   return (
-    <div className="flex flex-col min-h-screen bg-zinc-950 text-zinc-100 font-sans pb-2 selection:bg-white selection:text-black">
-      <ChatHeader 
-        connectionStatusDisplay={connectionStatusDisplay}
-        currentUser={currentUser}
-        isSoundEnabled={isSoundEnabled}
-        handleToggleSound={handleToggleSound}
-        isRefreshing={isRefreshing}
-        fetchInitialData={fetchInitialData}
-        handleLogout={handleLogout}
-      />
+    <div className="flex flex-col min-h-[100svh] bg-zinc-950 text-zinc-100 font-sans pb-2 selection:bg-white selection:text-black">
+      <div className="sticky top-0 z-50">
+        <ChatHeader 
+          connectionStatusDisplay={connectionStatusDisplay}
+          currentUser={currentUser}
+          isSoundEnabled={isSoundEnabled}
+          handleToggleSound={handleToggleSound}
+          isRefreshing={isRefreshing}
+          fetchInitialData={fetchInitialData}
+          handleLogout={handleLogout}
+        />
 
-      <TabNavigation 
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        tickets={tickets}
-        wishlist={wishlist}
-        plans={plans}
-        messages={messages}
-        currentUser={currentUser}
-      />
+        <TabNavigation 
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          tickets={tickets}
+          wishlist={wishlist}
+          plans={plans}
+          messages={messages}
+          currentUser={currentUser}
+        />
+      </div>
 
-      <main className="flex-1 max-w-md mx-auto w-full px-4 pt-8 pb-32">
+      <main className="flex-1 max-w-md mx-auto w-full px-4 pt-4 pb-24 md:pb-32">
         {activeTab === "complaints" && (
           <ComplaintsTab 
             tickets={tickets}

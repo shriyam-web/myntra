@@ -8,7 +8,7 @@ interface LoginViewProps {
 
 export function LoginView({ password, setPassword, handleLogin }: LoginViewProps) {
   return (
-    <div className="flex flex-col min-h-screen items-center justify-center bg-zinc-950 font-sans p-6">
+    <div className="flex flex-col min-h-[100svh] items-center justify-center bg-zinc-950 font-sans p-6">
       <form onSubmit={handleLogin} className="w-full max-w-xs flex flex-col items-center gap-4">
         <input
           type="password"
