@@ -626,3 +626,114 @@ export async function fetchAllMedia(currentUser?: string) {
     throw new Error('Unable to fetch media.');
   }
 }
+
+// CALLING FEATURE
+export async function initiateCall(fromUser: string, toUser: string, signalData: string) {
+  noStore();
+  try {
+    await dbConnect();
+    const toUname = toUser.trim().toLowerCase();
+    
+    // Update target user's call status
+    await User.findOneAndUpdate(
+      { username: toUname },
+      { 
+        callStatus: 'ringing', 
+        callerId: fromUser, 
+        signalData: signalData 
+      }
+    );
+    
+    // Update own call status to avoid multiple calls
+    await User.findOneAndUpdate(
+      { username: fromUser.trim().toLowerCase() },
+      { callStatus: 'on-call', callerId: toUser }
+    );
+
+    revalidatePath('/');
+  } catch (error) {
+    console.error('Failed to initiate call:', error);
+    throw new Error('Failed to initiate call.');
+  }
+}
+
+export async function acceptCall(username: string, signalData: string) {
+  noStore();
+  try {
+    await dbConnect();
+    const uname = username.trim().toLowerCase();
+    
+    // Update target user (the caller) with my response signal
+    const me = await User.findOne({ username: uname });
+    if (me && me.callerId) {
+      await User.findOneAndUpdate(
+        { username: me.callerId.trim().toLowerCase() },
+        { signalData: signalData }
+      );
+    }
+
+    // Set own status to on-call
+    await User.findOneAndUpdate(
+      { username: uname },
+      { callStatus: 'on-call' }
+    );
+
+    revalidatePath('/');
+  } catch (error) {
+    console.error('Failed to accept call:', error);
+    throw new Error('Failed to accept call.');
+  }
+}
+
+export async function endCall(username: string) {
+  noStore();
+  try {
+    await dbConnect();
+    const uname = username.trim().toLowerCase();
+    const user = await User.findOne({ username: uname });
+    
+    if (user && user.callerId) {
+      // Reset the other person
+      await User.findOneAndUpdate(
+        { username: user.callerId.trim().toLowerCase() },
+        { callStatus: 'idle', callerId: null, signalData: null }
+      );
+    }
+
+    // Reset self
+    await User.findOneAndUpdate(
+      { username: uname },
+      { callStatus: 'idle', callerId: null, signalData: null }
+    );
+
+    revalidatePath('/');
+  } catch (error) {
+    console.error('Failed to end call:', error);
+    throw new Error('Failed to end call.');
+  }
+}
+
+export async function updateSignal(username: string, signalData: string) {
+  noStore();
+  try {
+    await dbConnect();
+    await User.findOneAndUpdate(
+      { username: username.trim().toLowerCase() },
+      { signalData: signalData }
+    );
+  } catch (error) {
+    console.error('Failed to update signal:', error);
+  }
+}
+
+export async function fetchCallStatus(username: string) {
+  noStore();
+  try {
+    await dbConnect();
+    const user = await User.findOne({ username: username.trim().toLowerCase() }).select('callStatus callerId signalData').lean();
+    return JSON.parse(JSON.stringify(user));
+  } catch (error) {
+    console.error('Failed to fetch call status:', error);
+    return null;
+  }
+}

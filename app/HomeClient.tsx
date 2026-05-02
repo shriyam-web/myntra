@@ -23,6 +23,8 @@ import { ThemeSettings } from "./Home/components/ThemeSettings";
 import { ClearHistoryModal } from "./Home/components/ClearHistoryModal";
 import { SoundPrompt } from "./Home/components/SoundPrompt";
 import { MediaTab } from "./Home/components/MediaTab";
+import { CallOverlay } from "./Home/components/CallOverlay";
+import { useCall } from "./Home/hooks/useCall";
 
 export default function HomeClient() {
   const [isIncognito, setIsIncognito] = useState<boolean | null>(null);
@@ -120,6 +122,20 @@ export default function HomeClient() {
   const lastMessageIdRef = useRef<string | null>(null);
   const prevLastMessageIdRef = useRef<string | null>(null);
 
+  const currentUser = view;
+
+  const {
+    callStatus,
+    isIncoming,
+    partnerName,
+    localStream,
+    remoteStream,
+    handleStartCall,
+    handleAcceptCall,
+    handleEndCall,
+    handleRejectCall
+  } = useCall(currentUser as string, view);
+
   useEffect(() => {
     if (activeTab === "media") {
       fetchAllMedia();
@@ -136,9 +152,7 @@ export default function HomeClient() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const currentUser = view;
-
-  // Effects
+  // Handlers
   useEffect(() => {
     if (activeTab === "messages") {
       const currentLastMessageId = messages.length > 0 ? messages[messages.length - 1]._id : null;
@@ -743,7 +757,7 @@ export default function HomeClient() {
                         </button>
                     )}
                     <button 
-                        onClick={() => alert("Calling feature coming soon...")}
+                        onClick={handleStartCall}
                         className="p-2 bg-green-600/20 border border-green-500/30 rounded-xl text-green-500 hover:bg-green-600 hover:text-white transition-all active:scale-90"
                         title="Start Call"
                     >
@@ -900,6 +914,18 @@ export default function HomeClient() {
         showSoundPrompt={showSoundPrompt}
         setShowSoundPrompt={setShowSoundPrompt}
         handleToggleSound={handleToggleSound}
+      />
+
+      <CallOverlay 
+        currentUser={currentUser as string}
+        partnerName={partnerName}
+        callStatus={callStatus}
+        isIncoming={isIncoming}
+        onAccept={handleAcceptCall}
+        onReject={handleRejectCall}
+        onEnd={handleEndCall}
+        stream={localStream}
+        remoteStream={remoteStream}
       />
 
       {previewMessage && (
