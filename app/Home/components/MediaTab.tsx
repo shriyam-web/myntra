@@ -7,6 +7,7 @@ interface MediaTabProps {
   handleDownloadMedia: (url: string) => void;
   setPreviewMessage: (m: Message | null) => void;
   setPreviewImageIndex: (index: number) => void;
+  isLoading?: boolean;
 }
 
 export const MediaTab: React.FC<MediaTabProps> = ({
@@ -15,6 +16,7 @@ export const MediaTab: React.FC<MediaTabProps> = ({
   handleDownloadMedia,
   setPreviewMessage,
   setPreviewImageIndex,
+  isLoading = false,
 }) => {
   const mediaItems = useMemo(() => {
     const items: { url: string; type: "image" | "video"; message: Message; originalIndex: number }[] = [];
@@ -44,6 +46,15 @@ export const MediaTab: React.FC<MediaTabProps> = ({
 
     return items;
   }, [messages]);
+
+  if (isLoading && mediaItems.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-center py-20 px-6">
+        <div className="w-12 h-12 border-4 border-zinc-800 border-t-white rounded-full animate-spin mb-4" />
+        <p className="text-zinc-500 text-sm font-medium">Fetching media...</p>
+      </div>
+    );
+  }
 
   if (mediaItems.length === 0) {
     return (

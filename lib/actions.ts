@@ -599,3 +599,30 @@ export async function updateChatPreferences(username: string, updates: { chatBac
     throw new Error('Failed to update chat preferences.');
   }
 }
+
+export async function fetchAllMedia(currentUser?: string) {
+  noStore();
+  try {
+    await dbConnect();
+    
+    const mediaQuery: Record<string, unknown> = {
+      $or: [
+        { imageUrl: { $exists: true, $ne: null, $ne: "" } },
+        { imageUrls: { $exists: true, $not: { $size: 0 } } },
+        { videoUrl: { $exists: true, $ne: null, $ne: "" } },
+        { videoUrls: { $exists: true, $not: { $size: 0 } } }
+      ]
+    };
+
+    if (currentUser) {
+      mediaQuery.deletedFor = { $ne: currentUser };
+    }
+
+    const messages = await Message.find(mediaQuery).sort({ createdAt: -1 }).lean();
+
+    return JSON.parse(JSON.stringify(messages));
+  } catch (error) {
+    console.error('Fetch all media error:', error);
+    throw new Error('Unable to fetch media.');
+  }
+}

@@ -5,6 +5,7 @@ import { Ticket, Message, WishlistItem, PlanItem, TimelineDate, PresenceUser, Vi
 export function useAppData(view: ViewType, messageLimit: number) {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [mediaMessages, setMediaMessages] = useState<Message[]>([]);
   const [wishlist, setWishlist] = useState<WishlistItem[]>([]);
   const [plans, setPlans] = useState<PlanItem[]>([]);
   const [dates, setDates] = useState<TimelineDate[]>([]);
@@ -99,9 +100,25 @@ export function useAppData(view: ViewType, messageLimit: number) {
     }
   }, [messageLimit, view, updateMessagesState]);
 
+  const fetchAllMedia = useCallback(async (silent = false) => {
+    if (view === "login") return;
+    try {
+      if (!silent) setIsRefreshing(true);
+      const data = await actions.fetchAllMedia(view as string);
+      setMediaMessages(data);
+      setIsConnected(true);
+    } catch (error) {
+      console.error('Failed to fetch all media:', error);
+      setIsConnected(false);
+    } finally {
+      if (!silent) setIsRefreshing(false);
+    }
+  }, [view]);
+
   return {
     tickets, setTickets,
     messages, setMessages,
+    mediaMessages, setMediaMessages,
     wishlist, setWishlist,
     plans, setPlans,
     dates, setDates,
@@ -110,6 +127,7 @@ export function useAppData(view: ViewType, messageLimit: number) {
     isConnected,
     isRefreshing,
     fetchInitialData,
-    fetchMessagesOnly
+    fetchMessagesOnly,
+    fetchAllMedia
   };
 }
