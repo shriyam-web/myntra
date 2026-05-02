@@ -46,6 +46,9 @@ const UserSchema = new Schema({
   chatBubbleColor: { type: String, default: "bg-indigo-600" },
   chatWallpaper: { type: String, default: "" },
   themeName: { type: String, default: "Midnight (Default)" },
+  callStatus: { type: String, enum: ['idle', 'ringing', 'on-call'], default: 'idle' },
+  callerId: { type: String, default: null },
+  signalData: { type: String, default: null }, // Store WebRTC offer/answer/candidates
 });
 
 export const Ticket = models.Ticket || model('Ticket', TicketSchema);
