@@ -30,7 +30,7 @@ export default function HomeClient() {
   const [password, setPassword] = useState("");
   const [view, setView] = useState<ViewType>("login");
   const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
-  const [activeTab, setActiveTab] = useState<"complaints" | "wishlist" | "plans" | "dates" | "messages" | "emergency" | "news">("complaints");
+  const [activeTab, setActiveTab] = useState<TabType>("complaints");
   
   const [messageLimit, setMessageLimit] = useState(50);
   
