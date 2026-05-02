@@ -61,7 +61,7 @@ export interface TimelineDate {
 }
 
 export type ViewType = "login" | UserType;
-export type TabType = "complaints" | "wishlist" | "plans" | "dates" | "messages" | "emergency" | "news";
+export type TabType = "complaints" | "wishlist" | "plans" | "dates" | "messages" | "emergency" | "news" | "media";
 
 export interface Theme {
   name: string;

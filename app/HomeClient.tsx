@@ -22,11 +22,14 @@ import { ChatInput } from "./Home/components/ChatInput";
 import { ThemeSettings } from "./Home/components/ThemeSettings";
 import { ClearHistoryModal } from "./Home/components/ClearHistoryModal";
 import { SoundPrompt } from "./Home/components/SoundPrompt";
+import { FloatingWidget } from "./Home/components/FloatingWidget";
+import { MediaTab } from "./Home/components/MediaTab";
 
 export default function HomeClient() {
   const [isIncognito, setIsIncognito] = useState<boolean | null>(null);
   const [password, setPassword] = useState("");
   const [view, setView] = useState<ViewType>("login");
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
   const [activeTab, setActiveTab] = useState<"complaints" | "wishlist" | "plans" | "dates" | "messages" | "emergency" | "news">("complaints");
   
   const [messageLimit, setMessageLimit] = useState(50);
@@ -44,6 +47,11 @@ export default function HomeClient() {
     fetchInitialData,
     fetchMessagesOnly
   } = useAppData(view, messageLimit);
+
+  const handleManualRefresh = useCallback(async (silent = false) => {
+    await fetchInitialData(silent);
+    if (!silent) setLastRefreshedAt(new Date());
+  }, [fetchInitialData]);
 
   const [isSoundEnabled, setIsSoundEnabled] = useState(false);
   const { playSound, handleToggleSound: baseToggleSound } = useAudio(isSoundEnabled, setIsSoundEnabled, view);
@@ -97,6 +105,7 @@ export default function HomeClient() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [previewMessage, setPreviewMessage] = useState<Message | null>(null);
+  const [previewImageIndex, setPreviewImageIndex] = useState(0);
   const [pullUpDistance, setPullUpDistance] = useState(0);
   const [isPullingUp, setIsPullingUp] = useState(false);
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
@@ -106,10 +115,28 @@ export default function HomeClient() {
   const messageInputRef = useRef<HTMLTextAreaElement>(null);
   const rafRef = useRef<number | null>(null);
   const lastMessageIdRef = useRef<string | null>(null);
+  const prevLastMessageIdRef = useRef<string | null>(null);
 
   const currentUser = view;
 
   // Effects
+  useEffect(() => {
+    if (activeTab === "messages") {
+      const currentLastMessageId = messages.length > 0 ? messages[messages.length - 1]._id : null;
+      const isNewMessage = currentLastMessageId !== prevLastMessageIdRef.current;
+
+      if (isNewMessage) {
+        const lastMsg = messages[messages.length - 1];
+        const isMyMessage = lastMsg?.createdBy === currentUser;
+
+        if (prevLastMessageIdRef.current === null || isMyMessage || !showScrollButton) {
+          scrollToBottom(messages.length <= messageLimit);
+        }
+      }
+      prevLastMessageIdRef.current = currentLastMessageId;
+    }
+  }, [activeTab, messages, messageLimit, showScrollButton, currentUser]);
+
   useEffect(() => {
     if (view !== "login") {
       fetchInitialData();
@@ -154,12 +181,6 @@ export default function HomeClient() {
     };
     checkIncognito();
   }, []);
-
-  useEffect(() => {
-    if (activeTab === "messages") {
-      scrollToBottom(messages.length <= messageLimit);
-    }
-  }, [activeTab, messages.length, messageLimit]);
 
   useEffect(() => {
     if (activeTab === "messages" && messages.length > 0) {
@@ -585,7 +606,7 @@ export default function HomeClient() {
           isSoundEnabled={isSoundEnabled}
           handleToggleSound={handleToggleSound}
           isRefreshing={isRefreshing}
-          fetchInitialData={fetchInitialData}
+          fetchInitialData={handleManualRefresh}
           handleLogout={handleLogout}
         />
 
@@ -661,13 +682,39 @@ export default function HomeClient() {
           />
         )}
 
+        {activeTab === "media" && (
+          <div className="flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <button 
+              onClick={() => setActiveTab("messages")}
+              className="flex items-center gap-2 mb-6 text-zinc-500 hover:text-white transition-colors group"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="group-hover:-translate-x-1 transition-transform"><polyline points="15 18 9 12 15 6"/></svg>
+              <span className="text-[10px] font-black uppercase tracking-widest">Back to Messages</span>
+            </button>
+            <MediaTab 
+              messages={messages}
+              activeTheme={activeTheme}
+              handleDownloadMedia={handleDownloadMedia}
+              setPreviewMessage={setPreviewMessage}
+              setPreviewImageIndex={setPreviewImageIndex}
+            />
+          </div>
+        )}
+
         {activeTab === "messages" && (
-          <div className={`flex flex-col gap-4 animate-in fade-in slide-in-from-bottom-4 duration-700 ${isMessageExpanded ? "fixed inset-0 z-[60] bg-zinc-950 p-4 pb-20" : ""}`}>
-             <div className="flex items-center justify-between px-1">
+          <div className={`flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-700 ${isMessageExpanded ? "fixed inset-0 z-[60] bg-zinc-950 gap-0" : "gap-4"}`}>
+             <div className={`flex items-center justify-between px-1 ${isMessageExpanded ? "p-4 pb-0" : ""}`}>
                 <div className="flex flex-col items-start gap-1">
-                  <span className={`text-[10px] font-bold uppercase tracking-wider ${getPartnerStatus() === "Online" ? "text-green-500/80" : "text-zinc-500"}`}>
-                    {getPartnerStatus() || "Offline"}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] font-bold uppercase tracking-wider ${getPartnerStatus() === "Online" ? "text-green-500/80" : "text-zinc-500"}`}>
+                      {getPartnerStatus() || "Offline"}
+                    </span>
+                    {lastRefreshedAt && (
+                      <span className="text-[9px] font-medium text-zinc-600 italic animate-in fade-in duration-500">
+                        • Updated at {lastRefreshedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
                     {hasUnreadMessages() && (
@@ -675,6 +722,13 @@ export default function HomeClient() {
                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 7 17l-5-5"/><path d="m22 10-7.5 7.5L13 16"/></svg>
                         </button>
                     )}
+                    <button 
+                        onClick={() => alert("Calling feature coming soon...")}
+                        className="p-2 bg-green-600/20 border border-green-500/30 rounded-xl text-green-500 hover:bg-green-600 hover:text-white transition-all active:scale-90"
+                        title="Start Call"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l2.28-2.28a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                    </button>
                     <button 
                         onClick={() => setIsMessageExpanded(!isMessageExpanded)}
                         className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl text-zinc-500 hover:text-white transition-all active:scale-90"
@@ -688,7 +742,7 @@ export default function HomeClient() {
                 </div>
              </div>
 
-             <div className={`relative flex-1 flex flex-col bg-zinc-900/50 rounded-[2.5rem] border border-zinc-800/50 shadow-2xl overflow-hidden backdrop-blur-xl ${isMessageExpanded ? "rounded-3xl" : ""}`}>
+             <div className={`relative flex-1 flex flex-col bg-zinc-900/50 rounded-[2.5rem] border border-zinc-800/50 shadow-2xl overflow-hidden backdrop-blur-xl ${isMessageExpanded ? "rounded-none border-none" : ""}`}>
                 {chatWallpaper && (
                     <div className="absolute inset-0 pointer-events-none opacity-20" style={{ backgroundImage: `url(${chatWallpaper})`, backgroundSize: 'cover', backgroundPosition: 'center' }}></div>
                 )}
@@ -712,7 +766,7 @@ export default function HomeClient() {
                     setIsPullingUp={setIsPullingUp}
                     showScrollButton={showScrollButton}
                     scrollToBottom={scrollToBottom}
-                    fetchInitialData={fetchInitialData}
+                    fetchInitialData={handleManualRefresh}
                     isMessageExpanded={isMessageExpanded}
                     handleDeleteMessage={handleDeleteMessage}
                     handleUpdateMessage={handleUpdateMessage}
@@ -724,6 +778,7 @@ export default function HomeClient() {
                     setEditingMessageText={setEditingMessageText}
                     handleDownloadMedia={handleDownloadMedia}
                     setPreviewMessage={setPreviewMessage}
+                    setPreviewImageIndex={setPreviewImageIndex}
                 />
 
                 <ChatInput 
@@ -746,21 +801,13 @@ export default function HomeClient() {
                 />
              </div>
 
-             {!isMessageExpanded && (
-                <div className="flex gap-2">
-                    <button 
-                        onClick={() => setShowClearHistoryModal(true)}
-                        className="flex-1 py-3 bg-red-950/20 border border-red-900/20 rounded-2xl text-red-500 text-[10px] font-black uppercase tracking-widest hover:bg-red-900/40 transition-all active:scale-95"
-                    >
-                        Clear Chat
-                    </button>
-                    <button 
-                        onClick={() => setShowThemeSettings(true)}
-                        className="flex-1 py-3 bg-zinc-900 border border-zinc-800 rounded-2xl text-zinc-500 text-[10px] font-black uppercase tracking-widest hover:text-white transition-all active:scale-95"
-                    >
-                        Wallpaper & Theme
-                    </button>
-                </div>
+             {activeTab === "messages" && (
+                <FloatingWidget 
+                  activeTheme={activeTheme}
+                  onDeleteChat={() => setShowClearHistoryModal(true)}
+                  onChangeTheme={() => setShowThemeSettings(true)}
+                  onViewMedia={() => setActiveTab("media")}
+                />
              )}
           </div>
         )}
@@ -799,28 +846,75 @@ export default function HomeClient() {
       {previewMessage && (
         <div className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-3xl flex items-center justify-center p-4 animate-in fade-in duration-500" onClick={() => setPreviewMessage(null)}>
             <div className="relative max-w-4xl w-full h-full flex flex-col items-center justify-center gap-8" onClick={(e) => e.stopPropagation()}>
-                {previewMessage.videoUrl || (previewMessage.videoUrls && previewMessage.videoUrls.length > 0) ? (
-                    <video 
-                        src={previewMessage.videoUrl || (previewMessage.videoUrls && previewMessage.videoUrls[0])} 
-                        className="max-w-full max-h-[80vh] object-contain rounded-2xl shadow-2xl"
-                        controls
-                        autoPlay
-                    />
-                ) : (
-                    <img 
-                        src={previewMessage.imageUrl || (previewMessage.imageUrls && previewMessage.imageUrls[0])} 
-                        className="max-w-full max-h-[80vh] object-contain rounded-2xl shadow-2xl"
-                    />
-                )}
-                <button 
-                    onClick={() => handleDownloadMedia(
-                        previewMessage.videoUrl || (previewMessage.videoUrls && previewMessage.videoUrls[0]) || 
-                        previewMessage.imageUrl || (previewMessage.imageUrls && previewMessage.imageUrls[0])!
-                    )}
-                    className="px-8 py-4 bg-white text-black rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-zinc-200 transition-all active:scale-95 shadow-2xl"
-                >
-                    Save Media
-                </button>
+                {(() => {
+                    const mediaItems = [
+                        ...(previewMessage.imageUrls || (previewMessage.imageUrl ? [previewMessage.imageUrl] : [])).map(url => ({ type: 'image', url })),
+                        ...(previewMessage.videoUrls || (previewMessage.videoUrl ? [previewMessage.videoUrl] : [])).map(url => ({ type: 'video', url }))
+                    ];
+                    const currentMedia = mediaItems[previewImageIndex] || mediaItems[0];
+                    if (!currentMedia) return null;
+
+                    return (
+                        <>
+                            <div className="relative w-full flex-1 flex items-center justify-center group">
+                                {currentMedia.type === 'video' ? (
+                                    <video 
+                                        key={currentMedia.url}
+                                        src={currentMedia.url} 
+                                        className="max-w-full max-h-[75vh] object-contain rounded-2xl shadow-2xl"
+                                        controls
+                                        autoPlay
+                                    />
+                                ) : (
+                                    <img 
+                                        key={currentMedia.url}
+                                        src={currentMedia.url} 
+                                        className="max-w-full max-h-[75vh] object-contain rounded-2xl shadow-2xl"
+                                    />
+                                )}
+
+                                {mediaItems.length > 1 && (
+                                    <>
+                                        <button 
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setPreviewImageIndex((previewImageIndex - 1 + mediaItems.length) % mediaItems.length);
+                                            }}
+                                            className="absolute left-0 p-4 text-white/50 hover:text-white transition-colors bg-black/20 hover:bg-black/40 rounded-full ml-4"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                                        </button>
+                                        <button 
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setPreviewImageIndex((previewImageIndex + 1) % mediaItems.length);
+                                            }}
+                                            className="absolute right-0 p-4 text-white/50 hover:text-white transition-colors bg-black/20 hover:bg-black/40 rounded-full mr-4"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                                        </button>
+
+                                        <div className="absolute bottom-[-40px] left-1/2 -translate-x-1/2 flex gap-2">
+                                            {mediaItems.map((_, i) => (
+                                                <div 
+                                                    key={i} 
+                                                    className={`w-2 h-2 rounded-full transition-all ${i === previewImageIndex ? 'bg-white scale-125' : 'bg-white/20'}`}
+                                                />
+                                            ))}
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+
+                            <button 
+                                onClick={() => handleDownloadMedia(currentMedia.url)}
+                                className="px-8 py-4 bg-white text-black rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-zinc-200 transition-all active:scale-95 shadow-2xl"
+                            >
+                                Save {currentMedia.type === 'video' ? 'Video' : 'Image'}
+                            </button>
+                        </>
+                    );
+                })()}
                 <button 
                     className="absolute top-0 right-0 p-4 text-white/50 hover:text-white transition-colors"
                     onClick={() => setPreviewMessage(null)}

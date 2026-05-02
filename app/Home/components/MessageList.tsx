@@ -33,6 +33,7 @@ interface MessageListProps {
   setEditingMessageText: (text: string) => void;
   handleDownloadMedia: (url: string) => void;
   setPreviewMessage: (m: Message | null) => void;
+  setPreviewImageIndex: (index: number) => void;
 }
 
 export const MessageList: React.FC<MessageListProps> = ({
@@ -66,6 +67,7 @@ export const MessageList: React.FC<MessageListProps> = ({
   setEditingMessageText,
   handleDownloadMedia,
   setPreviewMessage,
+  setPreviewImageIndex,
 }) => {
   const [swipingMessageId, setSwipingMessageId] = React.useState<string | null>(null);
   const [swipeDistance, setSwipeDistance] = React.useState(0);
@@ -114,7 +116,7 @@ export const MessageList: React.FC<MessageListProps> = ({
         setIsPullingUp(false);
       }}
       className={`flex-1 overflow-y-auto no-scrollbar scroll-smooth px-4 ${
-        isMessageExpanded ? "py-6 h-full" : "py-4 max-h-[50vh] min-h-[300px]"
+        isMessageExpanded ? "py-6 h-full" : "py-4 max-h-[35vh] min-h-[250px]"
       }`}
     >
       {showScrollButton && (
@@ -253,7 +255,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                                     value={editingMessageText}
                                     onChange={(e) => setEditingMessageText(e.target.value)}
                                     onKeyDown={(e) => {
-                                        if (e.key === "Enter" && !e.shiftKey) {
+                                        if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
                                             e.preventDefault();
                                             handleUpdateMessage(m._id, editingMessageText);
                                         }
@@ -296,7 +298,10 @@ export const MessageList: React.FC<MessageListProps> = ({
                                             src={url!} 
                                             alt="Shared content" 
                                             className="w-full h-auto max-h-[300px] object-cover hover:scale-105 transition-transform duration-500 cursor-pointer"
-                                            onClick={() => setPreviewMessage(m)}
+                                            onClick={() => {
+                                                setPreviewMessage(m);
+                                                setPreviewImageIndex(idx);
+                                            }}
                                         />
                                         <button 
                                             onClick={() => handleDownloadMedia(url!)}
@@ -316,11 +321,17 @@ export const MessageList: React.FC<MessageListProps> = ({
                                         <video 
                                             src={url!} 
                                             className="w-full h-full object-cover cursor-pointer"
-                                            onClick={() => setPreviewMessage(m)}
+                                            onClick={() => {
+                                                setPreviewMessage(m);
+                                                setPreviewImageIndex(idx + (m.imageUrls?.length || (m.imageUrl ? 1 : 0)));
+                                            }}
                                         />
                                         <div 
                                             className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover/vid:bg-black/40 transition-all cursor-pointer"
-                                            onClick={() => setPreviewMessage(m)}
+                                            onClick={() => {
+                                                setPreviewMessage(m);
+                                                setPreviewImageIndex(idx + (m.imageUrls?.length || (m.imageUrl ? 1 : 0)));
+                                            }}
                                         >
                                             <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/30 group-hover/vid:scale-110 transition-transform">
                                                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="white" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
