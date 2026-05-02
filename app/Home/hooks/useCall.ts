@@ -12,7 +12,29 @@ export function useCall(currentUser: string, view: string) {
   const peerConnection = useRef<RTCPeerConnection | null>(null);
   const lastSignalRef = useRef<string | null>(null);
 
-  const endCall = useCallback(async () => {
+  const callStartTime = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (callStatus === 'on-call' && !callStartTime.current) {
+      callStartTime.current = Date.now();
+    } else if (callStatus === 'idle') {
+      callStartTime.current = null;
+    }
+  }, [callStatus]);
+
+  const endCall = useCallback(async (statusOverride?: 'missed' | 'rejected' | 'completed') => {
+    let finalStatus: 'missed' | 'rejected' | 'completed' = statusOverride || 'completed';
+    let duration = 0;
+
+    if (callStartTime.current) {
+      duration = Math.floor((Date.now() - callStartTime.current) / 1000);
+      finalStatus = 'completed';
+    } else if (callStatus === 'ringing') {
+      finalStatus = isIncoming ? 'rejected' : 'missed';
+    }
+
+    const partner = partnerName || (currentUser === "alpha 1" ? "delta 1" : "alpha 1");
+
     if (peerConnection.current) {
       peerConnection.current.close();
       peerConnection.current = null;
@@ -24,8 +46,14 @@ export function useCall(currentUser: string, view: string) {
     setRemoteStream(null);
     setCallStatus('idle');
     setIsIncoming(false);
-    await actions.endCall(currentUser);
-  }, [currentUser, localStream]);
+
+    await actions.endCall(currentUser, {
+      from: isIncoming ? partner : currentUser,
+      to: isIncoming ? currentUser : partner,
+      status: finalStatus,
+      duration: duration
+    });
+  }, [currentUser, localStream, callStatus, isIncoming, partnerName]);
 
   const setupPeerConnection = useCallback(async () => {
     const pc = new RTCPeerConnection({

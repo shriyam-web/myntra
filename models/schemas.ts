@@ -51,9 +51,18 @@ const UserSchema = new Schema({
   signalData: { type: String, default: null }, // Store WebRTC offer/answer/candidates
 });
 
+const CallLogSchema = new Schema({
+  from: { type: String, required: true },
+  to: { type: String, required: true },
+  status: { type: String, enum: ['missed', 'completed', 'rejected'], required: true },
+  duration: { type: Number, default: 0 }, // in seconds
+  createdAt: { type: Date, default: Date.now },
+});
+
 export const Ticket = models.Ticket || model('Ticket', TicketSchema);
 export const Wishlist = models.Wishlist || model('Wishlist', WishlistSchema);
 export const Plan = models.Plan || model('Plan', PlanSchema);
 export const TimelineDate = models.TimelineDate || model('TimelineDate', DateSchema);
 export const Message = models.Message || model('Message', MessageSchema);
 export const User = models.User || model('User', UserSchema);
+export const CallLog = models.CallLog || model('CallLog', CallLogSchema);

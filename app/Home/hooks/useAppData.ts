@@ -1,10 +1,11 @@
 import { useState, useCallback } from "react";
 import * as actions from "../../../lib/actions";
-import { Ticket, Message, WishlistItem, PlanItem, TimelineDate, PresenceUser, ViewType } from "../types";
+import { Ticket, Message, WishlistItem, PlanItem, TimelineDate, PresenceUser, ViewType, CallLog } from "../types";
 
 export function useAppData(view: ViewType, messageLimit: number) {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [callLogs, setCallLogs] = useState<CallLog[]>([]);
   const [mediaMessages, setMediaMessages] = useState<Message[]>([]);
   const [wishlist, setWishlist] = useState<WishlistItem[]>([]);
   const [plans, setPlans] = useState<PlanItem[]>([]);
@@ -67,6 +68,7 @@ export function useAppData(view: ViewType, messageLimit: number) {
       if (!silent) setIsRefreshing(true);
       const data = await actions.fetchMessages(messageLimit, view as string);
       setUsers(data.users || []);
+      setCallLogs(data.callLogs || []);
       setHasMoreMessages(data.messages.length >= messageLimit);
       updateMessagesState(data.messages);
       setIsConnected(true);
@@ -88,6 +90,7 @@ export function useAppData(view: ViewType, messageLimit: number) {
       setPlans(data.plans);
       setDates(data.dates);
       setUsers(data.users || []);
+      setCallLogs(data.callLogs || []);
       setHasMoreMessages(data.messages.length >= messageLimit);
       updateMessagesState(data.messages);
       setIsConnected(true);
@@ -118,6 +121,7 @@ export function useAppData(view: ViewType, messageLimit: number) {
   return {
     tickets, setTickets,
     messages, setMessages,
+    callLogs, setCallLogs,
     mediaMessages, setMediaMessages,
     wishlist, setWishlist,
     plans, setPlans,

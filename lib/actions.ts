@@ -1,7 +1,7 @@
 "use server";
 
 import dbConnect from "./mongodb";
-import { Ticket, Wishlist, Plan, TimelineDate, Message, User } from "../models/schemas";
+import { Ticket, Wishlist, Plan, TimelineDate, Message, User, CallLog } from "../models/schemas";
 import { revalidatePath, unstable_noStore as noStore } from "next/cache";
 import { v2 as cloudinary } from "cloudinary";
 
@@ -85,13 +85,14 @@ export async function fetchData(messageLimit = 50, currentUser?: string) {
       messageQuery.deletedFor = { $ne: currentUser };
     }
 
-    const [tickets, wishlist, plans, dates, messages, rawUsers] = await Promise.all([
+    const [tickets, wishlist, plans, dates, messages, rawUsers, callLogs] = await Promise.all([
       Ticket.find({}).sort({ createdAt: -1 }).lean(),
       Wishlist.find({}).lean(),
       Plan.find({}).lean(),
       TimelineDate.find({}).lean(),
       Message.find(messageQuery).sort({ createdAt: -1 }).limit(messageLimit).populate('repliedTo').lean(),
-      User.find({}).select('username lastSeen lastReadAt chatBackgroundColor chatBubbleColor themeName chatWallpaper').lean()
+      User.find({}).select('username lastSeen lastReadAt chatBackgroundColor chatBubbleColor themeName chatWallpaper').lean(),
+      CallLog.find({}).sort({ createdAt: -1 }).limit(50).lean()
     ]);
 
     // Deduplicate users by username (lowercase)
@@ -121,7 +122,8 @@ export async function fetchData(messageLimit = 50, currentUser?: string) {
       plans: JSON.parse(JSON.stringify(plans)),
       dates: JSON.parse(JSON.stringify(dates)),
       messages: JSON.parse(JSON.stringify(sortedMessages)),
-      users: JSON.parse(JSON.stringify(users))
+      users: JSON.parse(JSON.stringify(users)),
+      callLogs: JSON.parse(JSON.stringify(callLogs))
     };
   } catch (error) {
     console.error('Database fetch error:', error);
@@ -145,9 +147,10 @@ export async function fetchMessages(messageLimit = 50, currentUser?: string) {
       messageQuery.deletedFor = { $ne: currentUser };
     }
 
-    const [messages, rawUsers] = await Promise.all([
+    const [messages, rawUsers, callLogs] = await Promise.all([
       Message.find(messageQuery).sort({ createdAt: -1 }).limit(messageLimit).populate('repliedTo').lean(),
-      User.find({}).select('username lastSeen lastReadAt chatBackgroundColor chatBubbleColor themeName chatWallpaper').lean()
+      User.find({}).select('username lastSeen lastReadAt chatBackgroundColor chatBubbleColor themeName chatWallpaper').lean(),
+      CallLog.find({}).sort({ createdAt: -1 }).limit(50).lean()
     ]);
 
     const userMap = new Map<string, UserDocument>();
@@ -166,7 +169,8 @@ export async function fetchMessages(messageLimit = 50, currentUser?: string) {
 
     return {
       messages: JSON.parse(JSON.stringify(messages.reverse())),
-      users: JSON.parse(JSON.stringify(users))
+      users: JSON.parse(JSON.stringify(users)),
+      callLogs: JSON.parse(JSON.stringify(callLogs))
     };
   } catch (error) {
     console.error('Fetch messages error:', error);
@@ -685,7 +689,7 @@ export async function acceptCall(username: string, signalData: string) {
   }
 }
 
-export async function endCall(username: string) {
+export async function endCall(username: string, logData?: { status: 'completed' | 'missed' | 'rejected', duration: number, from: string, to: string }) {
   noStore();
   try {
     await dbConnect();
@@ -706,10 +710,33 @@ export async function endCall(username: string) {
       { callStatus: 'idle', callerId: null, signalData: null }
     );
 
+    // Log the call if data is provided
+    if (logData) {
+      await CallLog.create({
+        from: logData.from,
+        to: logData.to,
+        status: logData.status,
+        duration: logData.duration,
+        createdAt: new Date()
+      });
+    }
+
     revalidatePath('/');
   } catch (error) {
     console.error('Failed to end call:', error);
     throw new Error('Failed to end call.');
+  }
+}
+
+export async function getCallLogs() {
+  noStore();
+  try {
+    await dbConnect();
+    const logs = await CallLog.find({}).sort({ createdAt: -1 }).limit(50).lean();
+    return JSON.parse(JSON.stringify(logs));
+  } catch (error) {
+    console.error('Failed to fetch call logs:', error);
+    throw new Error('Failed to fetch call logs.');
   }
 }
 

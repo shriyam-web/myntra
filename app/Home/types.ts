@@ -61,7 +61,17 @@ export interface TimelineDate {
 }
 
 export type ViewType = "login" | UserType;
-export type TabType = "complaints" | "wishlist" | "plans" | "dates" | "messages" | "emergency" | "news" | "media";
+export type TabType = "complaints" | "wishlist" | "plans" | "dates" | "messages" | "emergency" | "news" | "media" | "calls";
+
+export interface CallLog {
+  _id: string;
+  from: string;
+  to: string;
+  status: 'missed' | 'completed' | 'rejected';
+  duration: number;
+  createdAt: string;
+  type?: 'call'; // Added to distinguish in interleaved lists
+}
 
 export interface Theme {
   name: string;
