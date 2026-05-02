@@ -6,7 +6,7 @@ import { useAppData } from "./Home/hooks/useAppData";
 import { useAudio } from "./Home/hooks/useAudio";
 import { usePresence } from "./Home/hooks/usePresence";
 import { themes, wallpapers } from "./Home/constants";
-import { ViewType, Message, UserType } from "./Home/types";
+import { ViewType, Message, UserType, TabType } from "./Home/types";
 
 // Components
 import { LoginView } from "./Home/components/LoginView";
