@@ -22,7 +22,6 @@ import { ChatInput } from "./Home/components/ChatInput";
 import { ThemeSettings } from "./Home/components/ThemeSettings";
 import { ClearHistoryModal } from "./Home/components/ClearHistoryModal";
 import { SoundPrompt } from "./Home/components/SoundPrompt";
-import { FloatingWidget } from "./Home/components/FloatingWidget";
 import { MediaTab } from "./Home/components/MediaTab";
 
 export default function HomeClient() {
@@ -608,6 +607,9 @@ export default function HomeClient() {
           isRefreshing={isRefreshing}
           fetchInitialData={handleManualRefresh}
           handleLogout={handleLogout}
+          onViewMedia={() => setActiveTab("media")}
+          onChangeTheme={() => setShowThemeSettings(true)}
+          onDeleteChat={() => setShowClearHistoryModal(true)}
         />
 
         <TabNavigation 
@@ -800,15 +802,6 @@ export default function HomeClient() {
                     uploadProgress={uploadProgress}
                 />
              </div>
-
-             {activeTab === "messages" && (
-                <FloatingWidget 
-                  activeTheme={activeTheme}
-                  onDeleteChat={() => setShowClearHistoryModal(true)}
-                  onChangeTheme={() => setShowThemeSettings(true)}
-                  onViewMedia={() => setActiveTab("media")}
-                />
-             )}
           </div>
         )}
       </main>
