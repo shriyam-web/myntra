@@ -8,6 +8,7 @@ interface ChatHeaderProps {
   handleToggleSound: () => void;
   fetchInitialData: () => void;
   isRefreshing: boolean;
+  handleLogout: () => void;
 }
 
 export function ChatHeader({
@@ -16,7 +17,8 @@ export function ChatHeader({
   isSoundEnabled,
   handleToggleSound,
   fetchInitialData,
-  isRefreshing
+  isRefreshing,
+  handleLogout
 }: ChatHeaderProps) {
   return (
     <header className="bg-zinc-900/80 backdrop-blur-xl border-b border-zinc-800/50 px-4 py-3 z-50 shadow-2xl">
@@ -74,6 +76,14 @@ export function ChatHeader({
             >
               <path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
             </svg>
+          </button>
+
+          <button 
+            onClick={handleLogout}
+            className="p-2.5 bg-zinc-800/50 rounded-xl text-zinc-500 hover:text-red-500 hover:bg-red-500/10 transition-all active:scale-90 border border-zinc-700/50"
+            title="Logout"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
           </button>
         </div>
       </div>

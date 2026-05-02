@@ -626,6 +626,7 @@ export default function HomeClient() {
           handleToggleSound={handleToggleSound}
           isRefreshing={isRefreshing}
           fetchInitialData={handleManualRefresh}
+          handleLogout={handleLogout}
         />
 
         <TabNavigation 
@@ -802,17 +803,6 @@ export default function HomeClient() {
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
                             <span className="text-[11px] font-bold uppercase tracking-wider">Delete Chat</span>
-                          </button>
-                          <div className="h-px bg-zinc-800 my-1 mx-2" />
-                          <button
-                            onClick={() => {
-                              handleLogout();
-                              setIsMenuOpen(false);
-                            }}
-                            className="w-full flex items-center gap-3 px-4 py-2.5 text-zinc-500 hover:text-white hover:bg-zinc-800 transition-colors text-left"
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-                            <span className="text-[11px] font-bold uppercase tracking-wider">Logout</span>
                           </button>
                         </div>
                       )}
