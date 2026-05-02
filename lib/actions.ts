@@ -607,9 +607,9 @@ export async function fetchAllMedia(currentUser?: string) {
     
     const mediaQuery: Record<string, unknown> = {
       $or: [
-        { imageUrl: { $exists: true, $ne: null, $ne: "" } },
+        { imageUrl: { $exists: true, $nin: [null, ""] } },
         { imageUrls: { $exists: true, $not: { $size: 0 } } },
-        { videoUrl: { $exists: true, $ne: null, $ne: "" } },
+        { videoUrl: { $exists: true, $nin: [null, ""] } },
         { videoUrls: { $exists: true, $not: { $size: 0 } } }
       ]
     };
