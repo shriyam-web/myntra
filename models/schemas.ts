@@ -49,6 +49,7 @@ const UserSchema = new Schema({
   callStatus: { type: String, enum: ['idle', 'ringing', 'on-call'], default: 'idle' },
   callerId: { type: String, default: null },
   signalData: { type: String, default: null }, // Store WebRTC offer/answer/candidates
+  lastCallEndReason: { type: String, default: null }, // 'missed', 'rejected', 'completed', 'ended'
 });
 
 const CallLogSchema = new Schema({

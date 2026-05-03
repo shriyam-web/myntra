@@ -128,6 +128,7 @@ export default function HomeClient() {
 
   const {
     callStatus,
+    endReason,
     isIncoming,
     partnerName,
     localStream,
@@ -929,6 +930,7 @@ export default function HomeClient() {
         currentUser={currentUser as string}
         partnerName={partnerName}
         callStatus={callStatus}
+        endReason={endReason}
         isIncoming={isIncoming}
         onAccept={handleAcceptCall}
         onReject={handleRejectCall}

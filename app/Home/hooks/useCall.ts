@@ -5,6 +5,7 @@ import * as actions from "../../../lib/actions";
 
 export function useCall(currentUser: string, view: string) {
   const [callStatus, setCallStatus] = useState<'idle' | 'ringing' | 'on-call'>('idle');
+  const [endReason, setEndReason] = useState<'completed' | 'missed' | 'rejected' | null>(null);
   const [isIncoming, setIsIncoming] = useState(false);
   const [partnerName, setPartnerName] = useState("");
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
@@ -45,8 +46,13 @@ export function useCall(currentUser: string, view: string) {
     }
     setRemoteStream(null);
     setCallStatus('idle');
+    setEndReason(finalStatus);
     setIsIncoming(false);
     lastSignalRef.current = null;
+
+    setTimeout(() => {
+      setEndReason(null);
+    }, 3000);
 
     await actions.endCall(currentUser, {
       from: isIncoming ? partner : currentUser,
@@ -133,6 +139,7 @@ export function useCall(currentUser: string, view: string) {
       console.log(`📞 Starting call to ${targetUser}...`);
       setPartnerName(targetUser);
       setCallStatus('ringing');
+      setEndReason(null);
       setIsIncoming(false);
 
       const pc = await setupPeerConnection();
@@ -193,7 +200,7 @@ export function useCall(currentUser: string, view: string) {
         if (!status) return;
 
         if (status.callStatus === 'idle' && callStatus !== 'idle') {
-          console.log("📴 Call ended by remote");
+          console.log("📴 Call ended by remote, reason:", status.lastCallEndReason);
           if (peerConnection.current) {
               peerConnection.current.close();
               peerConnection.current = null;
@@ -203,11 +210,22 @@ export function useCall(currentUser: string, view: string) {
               setLocalStream(null);
           }
           setRemoteStream(null);
-          setCallStatus('idle');
+          
+          if (status.lastCallEndReason) {
+            setEndReason(status.lastCallEndReason);
+            setCallStatus('idle');
+            // Keep the endReason for 3 seconds to show the status in the UI
+            setTimeout(() => {
+              setEndReason(null);
+            }, 3000);
+          } else {
+            setCallStatus('idle');
+          }
         } 
         else if (status.callStatus === 'ringing' && callStatus === 'idle') {
           console.log("🔔 Incoming call from:", status.callerId);
           setCallStatus('ringing');
+          setEndReason(null);
           setIsIncoming(true);
           setPartnerName(status.callerId);
         }
@@ -233,6 +251,7 @@ export function useCall(currentUser: string, view: string) {
 
   return {
     callStatus,
+    endReason,
     isIncoming,
     partnerName,
     localStream,

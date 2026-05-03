@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useMemo } from "react";
 
 interface CallOverlayProps {
   currentUser: string;
   partnerName: string;
   callStatus: 'idle' | 'ringing' | 'on-call';
+  endReason?: 'completed' | 'missed' | 'rejected' | null;
   isIncoming: boolean;
   onAccept: () => void;
   onReject: () => void;
@@ -17,6 +18,7 @@ interface CallOverlayProps {
 export function CallOverlay({
   partnerName,
   callStatus,
+  endReason,
   isIncoming,
   onAccept,
   onReject,
@@ -27,6 +29,10 @@ export function CallOverlay({
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const [duration, setDuration] = useState(0);
+
+  const barHeights = useMemo(() => {
+    return [...Array(24)].map(() => Math.floor(30 + Math.random() * 70));
+  }, []);
 
   useEffect(() => {
     if (remoteVideoRef.current && remoteStream) {
@@ -58,7 +64,7 @@ export function CallOverlay({
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  if (callStatus === 'idle') return null;
+  if (callStatus === 'idle' && !endReason) return null;
 
   return (
     <div className="fixed inset-0 z-[1000] bg-zinc-950 flex flex-col items-center justify-between text-white overflow-hidden font-sans">
@@ -77,9 +83,16 @@ export function CallOverlay({
       {/* Top Bar / Status */}
       <div className="relative z-10 w-full px-8 pt-12 flex flex-col items-center animate-in fade-in slide-in-from-top-8 duration-1000">
         <div className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/10 backdrop-blur-2xl shadow-2xl">
-          <div className={`w-2 h-2 rounded-full ${callStatus === 'on-call' ? 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.8)]' : 'bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.8)] animate-pulse'}`} />
+          <div className={`w-2 h-2 rounded-full ${
+            endReason ? 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)]' : 
+            callStatus === 'on-call' ? 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.8)]' : 
+            'bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.8)] animate-pulse'
+          }`} />
           <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white/80">
-            {callStatus === 'ringing' 
+            {endReason === 'rejected' ? 'Call Rejected' :
+             endReason === 'missed' ? 'Call Missed' :
+             endReason === 'completed' ? 'Call Ended' :
+             callStatus === 'ringing' 
               ? (isIncoming ? 'Incoming Audio Call' : 'Calling...') 
               : 'Secure Connection Active'}
           </span>
@@ -94,7 +107,7 @@ export function CallOverlay({
           <div className="absolute -inset-12 rounded-full border border-white/5 animate-[spin_15s_linear_infinite_reverse]" />
           
           {/* Pulse Effect for Ringing */}
-          {callStatus === 'ringing' && (
+          {callStatus === 'ringing' && !endReason && (
             <>
               <div className="absolute -inset-4 rounded-full border-2 border-indigo-500/30 animate-ping" />
               <div className="absolute -inset-8 rounded-full border border-purple-500/20 animate-ping animation-delay-700" />
@@ -143,8 +156,9 @@ export function CallOverlay({
       </div>
 
       {/* Control Buttons */}
-      <div className="relative z-10 w-full max-w-md px-12 pb-20 flex justify-center gap-10 animate-in slide-in-from-bottom-12 duration-1000 delay-300">
-        {callStatus === 'ringing' && isIncoming ? (
+      {!endReason && (
+        <div className="relative z-10 w-full max-w-md px-12 pb-20 flex justify-center gap-10 animate-in slide-in-from-bottom-12 duration-1000 delay-300">
+          {callStatus === 'ringing' && isIncoming ? (
           <>
             <div className="flex flex-col items-center gap-4">
               <button 
@@ -187,6 +201,7 @@ export function CallOverlay({
           </div>
         )}
       </div>
+      )}
 
       <style jsx>{`
         @keyframes wave-enhanced {

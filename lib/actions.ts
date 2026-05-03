@@ -644,14 +644,15 @@ export async function initiateCall(fromUser: string, toUser: string, signalData:
       { 
         callStatus: 'ringing', 
         callerId: fromUser, 
-        signalData: signalData 
+        signalData: signalData,
+        lastCallEndReason: null 
       }
     );
     
     // Update own call status to avoid multiple calls
     await User.findOneAndUpdate(
       { username: fromUser.trim().toLowerCase() },
-      { callStatus: 'on-call', callerId: toUser }
+      { callStatus: 'on-call', callerId: toUser, lastCallEndReason: null }
     );
 
     revalidatePath('/');
@@ -696,18 +697,20 @@ export async function endCall(username: string, logData?: { status: 'completed' 
     const uname = username.trim().toLowerCase();
     const user = await User.findOne({ username: uname });
     
+    const reason = logData?.status || 'completed';
+
     if (user && user.callerId) {
-      // Reset the other person
+      // Reset the other person and set reason
       await User.findOneAndUpdate(
         { username: user.callerId.trim().toLowerCase() },
-        { callStatus: 'idle', callerId: null, signalData: null }
+        { callStatus: 'idle', callerId: null, signalData: null, lastCallEndReason: reason }
       );
     }
 
-    // Reset self
+    // Reset self and set reason
     await User.findOneAndUpdate(
       { username: uname },
-      { callStatus: 'idle', callerId: null, signalData: null }
+      { callStatus: 'idle', callerId: null, signalData: null, lastCallEndReason: reason }
     );
 
     // Log the call if data is provided
@@ -764,7 +767,7 @@ export async function fetchCallStatus(username: string) {
   noStore();
   try {
     await dbConnect();
-    const user = await User.findOne({ username: username.trim().toLowerCase() }).select('callStatus callerId signalData').lean();
+    const user = await User.findOne({ username: username.trim().toLowerCase() }).select('callStatus callerId signalData lastCallEndReason').lean();
     return JSON.parse(JSON.stringify(user));
   } catch (error) {
     console.error('Failed to fetch call status:', error);
