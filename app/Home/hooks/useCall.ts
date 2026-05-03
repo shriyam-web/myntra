@@ -180,6 +180,7 @@ export function useCall(currentUser: string, view: string) {
       }
 
       const pc = await setupPeerConnection();
+      if (!signalData) throw new Error("Signal data is missing");
       const offer = JSON.parse(signalData);
       console.log("📩 Received offer, setting remote description");
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
