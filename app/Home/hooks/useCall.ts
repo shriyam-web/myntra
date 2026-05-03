@@ -8,6 +8,7 @@ export function useCall(currentUser: string, view: string) {
   const [endReason, setEndReason] = useState<'completed' | 'missed' | 'rejected' | null>(null);
   const [isIncoming, setIsIncoming] = useState(false);
   const [partnerName, setPartnerName] = useState("");
+  const [incomingSignal, setIncomingSignal] = useState<string | null>(null);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const peerConnection = useRef<RTCPeerConnection | null>(null);
@@ -68,7 +69,7 @@ export function useCall(currentUser: string, view: string) {
       const timeout = setTimeout(() => {
         pc.removeEventListener('icegatheringstatechange', check);
         resolve(null);
-      }, 2000); 
+      }, 1000); 
       function check() {
         if (pc.iceGatheringState === 'complete') {
           clearTimeout(timeout);
@@ -92,6 +93,9 @@ export function useCall(currentUser: string, view: string) {
     pc.onicecandidate = (event) => {
       if (event.candidate) {
         console.log("🧊 New ICE candidate");
+        // Send candidate to partner
+        const target = partnerName || (currentUser === "alpha 1" ? "delta 1" : "alpha 1");
+        actions.updateSignal(target, JSON.stringify({ type: 'candidate', candidate: event.candidate }));
       } else {
         console.log("🧊 ICE gathering complete");
       }
@@ -103,6 +107,7 @@ export function useCall(currentUser: string, view: string) {
         setCallStatus('on-call');
       } else if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
         console.error("🔌 Connection failed/disconnected");
+        endCall();
       }
     };
 
@@ -163,32 +168,40 @@ export function useCall(currentUser: string, view: string) {
   const handleAcceptCall = useCallback(async () => {
     try {
       console.log("📞 Accepting call...");
-      const pc = await setupPeerConnection();
       
-      const status = await actions.fetchCallStatus(currentUser);
-      if (status && status.signalData) {
-          const offer = JSON.parse(status.signalData);
-          console.log("📩 Received offer, setting remote description");
-          await pc.setRemoteDescription(new RTCSessionDescription(offer));
-          
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          
-          console.log("⏳ Waiting for ICE candidates (answer)...");
-          await awaitIceGathering(pc);
-
-          const finalAnswer = pc.localDescription;
-          const answerStr = JSON.stringify(finalAnswer);
-          await actions.acceptCall(currentUser, answerStr);
-          lastSignalRef.current = answerStr;
-          setCallStatus('on-call');
-          console.log("📲 Call accepted and answer sent");
+      let signalData = incomingSignal;
+      if (!signalData) {
+        console.error("❌ No incoming signal data available in state, fetching...");
+        const status = await actions.fetchCallStatus(currentUser);
+        if (!status || !status.signalData) {
+            throw new Error("No signal data found even after fetch");
+        }
+        signalData = status.signalData;
       }
+
+      const pc = await setupPeerConnection();
+      const offer = JSON.parse(signalData);
+      console.log("📩 Received offer, setting remote description");
+      await pc.setRemoteDescription(new RTCSessionDescription(offer));
+      
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      
+      console.log("⏳ Waiting for ICE candidates (answer)...");
+      await awaitIceGathering(pc);
+
+      const finalAnswer = pc.localDescription;
+      const answerStr = JSON.stringify(finalAnswer);
+      await actions.acceptCall(currentUser, answerStr);
+      lastSignalRef.current = answerStr;
+      setCallStatus('on-call');
+      setIncomingSignal(null);
+      console.log("📲 Call accepted and answer sent");
     } catch (err) {
       console.error("❌ Failed to accept call:", err);
       endCall();
     }
-  }, [currentUser, setupPeerConnection, awaitIceGathering, endCall]);
+  }, [currentUser, incomingSignal, setupPeerConnection, awaitIceGathering, endCall]);
 
   // Polling for call status
   useEffect(() => {
@@ -228,6 +241,30 @@ export function useCall(currentUser: string, view: string) {
           setEndReason(null);
           setIsIncoming(true);
           setPartnerName(status.callerId);
+          if (status.signalData) {
+            setIncomingSignal(status.signalData);
+          }
+        } 
+        else if (status.callStatus === 'ringing' && callStatus === 'ringing' && isIncoming) {
+          // Update signal if it changes while ringing
+          if (status.signalData && status.signalData !== incomingSignal) {
+            setIncomingSignal(status.signalData);
+          }
+        }
+        else if (status.callStatus === 'on-call' && callStatus === 'on-call') {
+          // Process incremental candidates
+          if (status.signalData && status.signalData !== lastSignalRef.current) {
+            try {
+              const signal = JSON.parse(status.signalData);
+              if (signal.type === 'candidate' && peerConnection.current) {
+                console.log("🧊 Received remote ICE candidate");
+                await peerConnection.current.addIceCandidate(new RTCIceCandidate(signal.candidate));
+                lastSignalRef.current = status.signalData;
+              }
+            } catch (e) {
+              console.error("Error adding ice candidate:", e);
+            }
+          }
         }
         else if (status.callStatus === 'on-call' && callStatus === 'ringing' && !isIncoming) {
           // Other person accepted my call
@@ -244,10 +281,21 @@ export function useCall(currentUser: string, view: string) {
       } catch (err) {
         console.error("📡 Polling error:", err);
       }
-    }, 800);
+    }, 500);
 
     return () => clearInterval(interval);
   }, [currentUser, view, callStatus, isIncoming, localStream]);
+
+  // Handle tab close/navigation
+  useEffect(() => {
+    const handleUnload = () => {
+      if (callStatus !== 'idle') {
+        endCall();
+      }
+    };
+    window.addEventListener('beforeunload', handleUnload);
+    return () => window.removeEventListener('beforeunload', handleUnload);
+  }, [callStatus, endCall]);
 
   return {
     callStatus,
