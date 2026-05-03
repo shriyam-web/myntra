@@ -25,6 +25,7 @@ import { SoundPrompt } from "./Home/components/SoundPrompt";
 import { MediaTab } from "./Home/components/MediaTab";
 import { CallOverlay } from "./Home/components/CallOverlay";
 import { useCall } from "./Home/hooks/useCall";
+import { CallLogsTab } from "./Home/components/CallLogsTab";
 
 export default function HomeClient() {
   const [isIncognito, setIsIncognito] = useState<boolean | null>(null);
@@ -39,6 +40,7 @@ export default function HomeClient() {
   const {
     tickets,
     messages, setMessages,
+    callLogs,
     mediaMessages,
     wishlist,
     plans,
@@ -712,6 +714,13 @@ export default function HomeClient() {
             setEditingEventText={setEditingEventText}
             handleUpdateDate={handleUpdateDate}
             handleDeleteDate={handleDeleteDate}
+          />
+        )}
+
+        {activeTab === "calls" && (
+          <CallLogsTab 
+            callLogs={callLogs}
+            currentUser={currentUser as any}
           />
         )}
 

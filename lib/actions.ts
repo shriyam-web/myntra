@@ -719,6 +719,13 @@ export async function endCall(username: string, logData?: { status: 'completed' 
         duration: logData.duration,
         createdAt: new Date()
       });
+
+      // Also send a message to the chat
+      await Message.create({
+        text: `[CALL_LOG:${logData.status}:${logData.duration}:${logData.from}:${logData.to}]`,
+        createdBy: logData.from,
+        createdAt: new Date()
+      });
     }
 
     revalidatePath('/');
