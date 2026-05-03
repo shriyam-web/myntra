@@ -46,6 +46,7 @@ export function useCall(currentUser: string, view: string) {
     setRemoteStream(null);
     setCallStatus('idle');
     setIsIncoming(false);
+    lastSignalRef.current = null;
 
     await actions.endCall(currentUser, {
       from: isIncoming ? partner : currentUser,
@@ -55,101 +56,177 @@ export function useCall(currentUser: string, view: string) {
     });
   }, [currentUser, localStream, callStatus, isIncoming, partnerName]);
 
+  const awaitIceGathering = useCallback(async (pc: RTCPeerConnection) => {
+    if (pc.iceGatheringState === 'complete') return;
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        pc.removeEventListener('icegatheringstatechange', check);
+        resolve(null);
+      }, 2000); 
+      function check() {
+        if (pc.iceGatheringState === 'complete') {
+          clearTimeout(timeout);
+          pc.removeEventListener('icegatheringstatechange', check);
+          resolve(null);
+        }
+      }
+      pc.addEventListener('icegatheringstatechange', check);
+    });
+  }, []);
+
   const setupPeerConnection = useCallback(async () => {
+    console.log("📞 Setting up PeerConnection...");
     const pc = new RTCPeerConnection({
-      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+      ]
     });
 
-    pc.onicecandidate = async (event) => {
+    pc.onicecandidate = (event) => {
       if (event.candidate) {
-        // In a real app, we'd send candidates individually. 
-        // For polling simplicity, we'll wait for the full offer/answer usually,
-        // but WebRTC works better if we can trickle. 
-        // We'll just update the signal data with the latest local description including candidates.
+        console.log("🧊 New ICE candidate");
+      } else {
+        console.log("🧊 ICE gathering complete");
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      console.log("🔌 Connection state:", pc.connectionState);
+      if (pc.connectionState === 'connected') {
+        setCallStatus('on-call');
+      } else if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+        console.error("🔌 Connection failed/disconnected");
       }
     };
 
     pc.ontrack = (event) => {
-      setRemoteStream(event.streams[0]);
+      console.log("🎵 Received remote track:", event.track.kind);
+      setRemoteStream(prev => {
+        if (event.streams && event.streams[0]) {
+          return event.streams[0];
+        }
+        if (prev) {
+          prev.addTrack(event.track);
+          return new MediaStream(prev.getTracks());
+        }
+        return new MediaStream([event.track]);
+      });
     };
 
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-    setLocalStream(stream);
-    stream.getTracks().forEach(track => pc.addTrack(track, stream));
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      setLocalStream(stream);
+      stream.getTracks().forEach(track => pc.addTrack(track, stream));
+      console.log("🎤 Local stream acquired and tracks added");
+    } catch (err) {
+      console.error("🎤 Failed to get local stream:", err);
+    }
 
     peerConnection.current = pc;
     return pc;
   }, []);
 
   const handleStartCall = useCallback(async () => {
-    const targetUser = currentUser === "alpha 1" ? "delta 1" : "alpha 1";
-    setPartnerName(targetUser);
-    setCallStatus('ringing');
-    setIsIncoming(false);
+    try {
+      const targetUser = currentUser === "alpha 1" ? "delta 1" : "alpha 1";
+      console.log(`📞 Starting call to ${targetUser}...`);
+      setPartnerName(targetUser);
+      setCallStatus('ringing');
+      setIsIncoming(false);
 
-    const pc = await setupPeerConnection();
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
+      const pc = await setupPeerConnection();
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
 
-    await actions.initiateCall(currentUser, targetUser, JSON.stringify(offer));
-  }, [currentUser, setupPeerConnection]);
+      console.log("⏳ Waiting for ICE candidates...");
+      await awaitIceGathering(pc);
+
+      const finalOffer = pc.localDescription;
+      const signalStr = JSON.stringify(finalOffer);
+      await actions.initiateCall(currentUser, targetUser, signalStr);
+      lastSignalRef.current = signalStr;
+      console.log("📲 Call initiated with signal data");
+    } catch (err) {
+      console.error("❌ Failed to start call:", err);
+      setCallStatus('idle');
+    }
+  }, [currentUser, setupPeerConnection, awaitIceGathering]);
 
   const handleAcceptCall = useCallback(async () => {
-    const pc = await setupPeerConnection();
-    
-    // Get the offer from the signalData (will be fetched in polling)
-    const status = await actions.fetchCallStatus(currentUser);
-    if (status && status.signalData) {
-        const offer = JSON.parse(status.signalData);
-        await pc.setRemoteDescription(new RTCSessionDescription(offer));
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        await actions.acceptCall(currentUser, JSON.stringify(answer));
-        setCallStatus('on-call');
+    try {
+      console.log("📞 Accepting call...");
+      const pc = await setupPeerConnection();
+      
+      const status = await actions.fetchCallStatus(currentUser);
+      if (status && status.signalData) {
+          const offer = JSON.parse(status.signalData);
+          console.log("📩 Received offer, setting remote description");
+          await pc.setRemoteDescription(new RTCSessionDescription(offer));
+          
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          
+          console.log("⏳ Waiting for ICE candidates (answer)...");
+          await awaitIceGathering(pc);
+
+          const finalAnswer = pc.localDescription;
+          const answerStr = JSON.stringify(finalAnswer);
+          await actions.acceptCall(currentUser, answerStr);
+          lastSignalRef.current = answerStr;
+          setCallStatus('on-call');
+          console.log("📲 Call accepted and answer sent");
+      }
+    } catch (err) {
+      console.error("❌ Failed to accept call:", err);
+      endCall();
     }
-  }, [currentUser, setupPeerConnection]);
+  }, [currentUser, setupPeerConnection, awaitIceGathering, endCall]);
 
   // Polling for call status
   useEffect(() => {
     if (view === "login") return;
 
     const interval = setInterval(async () => {
-      const status = await actions.fetchCallStatus(currentUser);
-      if (!status) return;
+      try {
+        const status = await actions.fetchCallStatus(currentUser);
+        if (!status) return;
 
-      if (status.callStatus === 'idle' && callStatus !== 'idle') {
-        // Call was ended by the other person
-        if (peerConnection.current) {
-            peerConnection.current.close();
-            peerConnection.current = null;
+        if (status.callStatus === 'idle' && callStatus !== 'idle') {
+          console.log("📴 Call ended by remote");
+          if (peerConnection.current) {
+              peerConnection.current.close();
+              peerConnection.current = null;
+          }
+          if (localStream) {
+              localStream.getTracks().forEach(track => track.stop());
+              setLocalStream(null);
+          }
+          setRemoteStream(null);
+          setCallStatus('idle');
+        } 
+        else if (status.callStatus === 'ringing' && callStatus === 'idle') {
+          console.log("🔔 Incoming call from:", status.callerId);
+          setCallStatus('ringing');
+          setIsIncoming(true);
+          setPartnerName(status.callerId);
         }
-        if (localStream) {
-            localStream.getTracks().forEach(track => track.stop());
-            setLocalStream(null);
+        else if (status.callStatus === 'on-call' && callStatus === 'ringing' && !isIncoming) {
+          // Other person accepted my call
+          if (status.signalData && status.signalData !== lastSignalRef.current) {
+              const answer = JSON.parse(status.signalData);
+              if (answer.type === 'answer' && peerConnection.current) {
+                  console.log("📩 Received answer, setting remote description");
+                  await peerConnection.current.setRemoteDescription(new RTCSessionDescription(answer));
+                  setCallStatus('on-call');
+                  lastSignalRef.current = status.signalData;
+              }
+          }
         }
-        setRemoteStream(null);
-        setCallStatus('idle');
-      } 
-      else if (status.callStatus === 'ringing' && callStatus === 'idle') {
-        // Incoming call
-        setCallStatus('ringing');
-        setIsIncoming(true);
-        setPartnerName(status.callerId);
+      } catch (err) {
+        console.error("📡 Polling error:", err);
       }
-      else if (status.callStatus === 'on-call' && callStatus === 'ringing' && !isIncoming) {
-        // Other person accepted my call
-        if (status.signalData && status.signalData !== lastSignalRef.current) {
-            const answer = JSON.parse(status.signalData);
-            if (answer.type === 'answer' && peerConnection.current) {
-                await peerConnection.current.setRemoteDescription(new RTCSessionDescription(answer));
-                setCallStatus('on-call');
-                lastSignalRef.current = status.signalData;
-            }
-        }
-      }
-      // If we are on-call, we might still need to sync ICE candidates via signalData,
-      // but for a basic implementation, if both set remote descriptions, audio might start.
-    }, 2000);
+    }, 800);
 
     return () => clearInterval(interval);
   }, [currentUser, view, callStatus, isIncoming, localStream]);
