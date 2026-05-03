@@ -61,9 +61,11 @@ const UrlPreview = ({ url }: { url: string }) => {
 };
 
 export const renderMessage = (text: string) => {
-  if (text.startsWith('[CALL_LOG]')) {
-    const parts = text.split(':');
-    const status = parts[1];
+  const trimmedText = text.trim();
+  const upperText = trimmedText.toUpperCase();
+  if (upperText.startsWith('[CALL_LOG:')) {
+    const parts = trimmedText.split(':');
+    const status = parts[1].toLowerCase();
     const duration = parseInt(parts[2]) || 0;
     
     const formatDuration = (seconds: number) => {
