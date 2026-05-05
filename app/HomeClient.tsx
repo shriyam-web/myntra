@@ -184,10 +184,10 @@ export default function HomeClient() {
         actions.updatePresence(view as string);
       }, 10000);
 
-      // Data fetching interval (every 3 seconds)
+      // Data fetching interval (every 4 seconds)
       const fetchInterval = setInterval(() => {
         fetchMessagesOnly(true);
-      }, 3000);
+      }, 4000);
 
       return () => {
         clearInterval(presenceInterval);

@@ -282,7 +282,7 @@ export function useCall(currentUser: string, view: string) {
       } catch (err) {
         console.error("📡 Polling error:", err);
       }
-    }, 500);
+    }, 1500);
 
     return () => clearInterval(interval);
   }, [currentUser, view, callStatus, isIncoming, localStream]);

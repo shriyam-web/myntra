@@ -183,7 +183,6 @@ export async function createTicket(description: string, createdBy: string) {
   try {
     await dbConnect();
     const ticket = await Ticket.create({ description, createdBy });
-    revalidatePath('/');
     return JSON.parse(JSON.stringify(ticket));
   } catch (error) {
     console.error('Failed to create ticket:', error);
@@ -195,7 +194,6 @@ export async function updateTicketStatus(id: string, status: string) {
   try {
     await dbConnect();
     const ticket = await Ticket.findByIdAndUpdate(id, { status }, { new: true });
-    revalidatePath('/');
     return JSON.parse(JSON.stringify(ticket));
   } catch (error) {
     console.error('Failed to update ticket status:', error);
@@ -207,7 +205,6 @@ export async function updateTicket(id: string, updates: Record<string, unknown>)
   try {
     await dbConnect();
     const ticket = await Ticket.findByIdAndUpdate(id, updates, { new: true });
-    revalidatePath('/');
     return JSON.parse(JSON.stringify(ticket));
   } catch (error) {
     console.error('Failed to update ticket:', error);
@@ -219,7 +216,6 @@ export async function deleteTicket(id: string) {
   try {
     await dbConnect();
     await Ticket.findByIdAndDelete(id);
-    revalidatePath('/');
   } catch (error) {
     console.error('Failed to delete ticket:', error);
     throw new Error('Failed to delete ticket. Database connection error.');
@@ -345,11 +341,17 @@ async function sendTelegramNotification(text: string) {
   }
 
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    
     await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ chat_id: chatId, text }),
+      signal: controller.signal
     });
+    
+    clearTimeout(timeoutId);
   } catch (error) {
     console.error('Failed to send Telegram notification:', error);
   }
@@ -359,13 +361,12 @@ export async function sendMessage(text: string, createdBy: string, imageUrls?: s
   try {
     await dbConnect();
     
-    // Update sender's presence
-    await updatePresence(createdBy);
+    // Run presence update and notifications in background to keep message sending fast
+    updatePresence(createdBy).catch(err => console.error("Background presence update error:", err));
 
     const data = { text, createdBy, imageUrls, videoUrls, repliedTo };
     const message = await Message.create(data);
 
-    // Run notification logic without awaiting it to keep the response fast
     if (data.createdBy === "alpha 1") {
       (async () => {
         try {
@@ -547,22 +548,11 @@ export async function updatePresence(username: string) {
   try {
     await dbConnect();
     const uname = username.trim().toLowerCase();
-    const updatedUser = await User.findOneAndUpdate(
+    await User.findOneAndUpdate(
       { username: uname },
       { lastSeen: new Date() },
       { upsert: true, new: true }
     );
-    
-    // Also update any other variations if they exist (to fix duplicates)
-    await User.updateMany(
-      { 
-        username: { $regex: new RegExp(`^${uname}$`, 'i') },
-        _id: { $ne: updatedUser._id }
-      },
-      { lastSeen: new Date() }
-    );
-
-    console.log(`📡 Presence updated for: ${username.trim()} at ${updatedUser.lastSeen}`);
   } catch (error) {
     console.error('Failed to update presence:', error);
   }
