@@ -563,7 +563,6 @@ export async function updatePresence(username: string) {
     );
 
     console.log(`📡 Presence updated for: ${username.trim()} at ${updatedUser.lastSeen}`);
-    revalidatePath('/');
   } catch (error) {
     console.error('Failed to update presence:', error);
   }
@@ -654,8 +653,6 @@ export async function initiateCall(fromUser: string, toUser: string, signalData:
       { username: fromUser.trim().toLowerCase() },
       { callStatus: 'on-call', callerId: toUser, lastCallEndReason: null }
     );
-
-    revalidatePath('/');
   } catch (error) {
     console.error('Failed to initiate call:', error);
     throw new Error('Failed to initiate call.');
@@ -682,8 +679,6 @@ export async function acceptCall(username: string, signalData: string) {
       { username: uname },
       { callStatus: 'on-call' }
     );
-
-    revalidatePath('/');
   } catch (error) {
     console.error('Failed to accept call:', error);
     throw new Error('Failed to accept call.');
@@ -730,8 +725,6 @@ export async function endCall(username: string, logData?: { status: 'completed' 
         createdAt: new Date()
       });
     }
-
-    revalidatePath('/');
   } catch (error) {
     console.error('Failed to end call:', error);
     throw new Error('Failed to end call.');
