@@ -428,6 +428,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                       </div>
                     </div>
                   </div>
+                );
               })}
             </div>
           ))}
