@@ -230,9 +230,9 @@ export const MessageList: React.FC<MessageListProps> = ({
                       </div>
                     )}
                     
-                    <div className={`flex items-end gap-1.5 max-w-[95%] sm:max-w-[85%] ${isMe ? "flex-row-reverse" : "flex-row"}`}>
+                    <div className={`flex items-start gap-1.5 max-w-[95%] sm:max-w-[85%] ${isMe ? "flex-row-reverse" : "flex-row"}`}>
                       <div 
-                        className="flex-shrink-0 cursor-pointer active:scale-95 transition-transform"
+                        className="flex-shrink-0 cursor-pointer active:scale-95 transition-transform mt-0.5"
                         onClick={() => setZoomedAvatar(avatarSrc)}
                       >
                         <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full border border-zinc-800/50 overflow-hidden shadow-md">
@@ -246,8 +246,10 @@ export const MessageList: React.FC<MessageListProps> = ({
                         }`}
                       >
                         <div
-                          className={`relative rounded-2xl p-2.5 sm:p-3 text-sm font-medium shadow-sm border border-zinc-800/10 ${
-                            isMe ? `${activeTheme.bubbleMe} ${activeTheme.textMe || "text-white"}` : activeTheme.bubblePartner
+                          className={`relative p-2.5 sm:p-3 text-sm font-medium shadow-sm border border-zinc-800/10 ${
+                            isMe 
+                              ? `${activeTheme.bubbleMe} ${activeTheme.textMe || "text-white"} rounded-2xl rounded-tr-none` 
+                              : `${activeTheme.bubblePartner} rounded-2xl rounded-tl-none`
                           }`}
                         >
                            {m.repliedTo && (
