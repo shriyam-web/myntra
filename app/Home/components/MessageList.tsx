@@ -71,6 +71,7 @@ export const MessageList: React.FC<MessageListProps> = ({
 }) => {
   const [swipingMessageId, setSwipingMessageId] = React.useState<string | null>(null);
   const [swipeDistance, setSwipeDistance] = React.useState(0);
+  const [zoomedAvatar, setZoomedAvatar] = React.useState<string | null>(null);
   const touchStartRef = React.useRef<{ x: number; y: number } | null>(null);
 
   return (
@@ -178,6 +179,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                   !!partner?.lastReadAt &&
                   new Date(m.createdAt).getTime() <= new Date(partner.lastReadAt).getTime();
                 const isOptimistic = /^\d+$/.test(m._id);
+                const avatarSrc = m.createdBy.trim().toLowerCase() === "alpha 1" ? "/female.png" : "/male.png";
 
                 return (
                   <div
@@ -227,11 +229,22 @@ export const MessageList: React.FC<MessageListProps> = ({
                         </div>
                       </div>
                     )}
-                    <div
-                      className={`flex flex-col max-w-[85%] sm:max-w-[75%] gap-1 mb-1 relative ${
-                        isMe ? "items-end" : "items-start"
-                      }`}
-                    >
+                    
+                    <div className={`flex items-end gap-2 max-w-[95%] sm:max-w-[85%] ${isMe ? "flex-row-reverse" : "flex-row"}`}>
+                      <div 
+                        className="flex-shrink-0 mb-1 cursor-pointer active:scale-95 transition-transform"
+                        onClick={() => setZoomedAvatar(avatarSrc)}
+                      >
+                        <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 border-zinc-800/50 overflow-hidden shadow-lg">
+                          <img src={avatarSrc} className="w-full h-full object-cover" alt="avatar" />
+                        </div>
+                      </div>
+
+                      <div
+                        className={`flex flex-col gap-1 mb-1 relative ${
+                          isMe ? "items-end" : "items-start"
+                        }`}
+                      >
                       {/* Message bubble content logic from HomeClient would go here */}
                       {/* For brevity, I'll keep the structure and let the user refactor further if needed */}
                       <div
@@ -404,6 +417,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                       </div>
                     </div>
                   </div>
+                </div>
                 );
               })}
             </div>
@@ -418,6 +432,27 @@ export const MessageList: React.FC<MessageListProps> = ({
               ></div>
             </div>
           )}
+        </div>
+      )}
+
+      {zoomedAvatar && (
+        <div 
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-xl animate-in fade-in duration-300"
+          onClick={() => setZoomedAvatar(null)}
+        >
+          <div className="relative p-4 max-w-[90vw] max-h-[90vh]" onClick={e => e.stopPropagation()}>
+            <img 
+              src={zoomedAvatar} 
+              className="w-full h-auto max-h-[70vh] rounded-2xl shadow-2xl border-4 border-white/10 object-contain animate-in zoom-in-95 duration-300"
+              alt="Zoomed Avatar"
+            />
+            <button 
+              className="absolute -top-12 right-0 p-3 text-white/70 hover:text-white transition-colors"
+              onClick={() => setZoomedAvatar(null)}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
         </div>
       )}
     </div>
