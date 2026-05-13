@@ -173,7 +173,11 @@ export const MessageList: React.FC<MessageListProps> = ({
               {group.messages.map((m) => {
                 const isMe = m.createdBy.trim().toLowerCase() === currentUser.trim().toLowerCase();
                 const partnerUsername = currentUser.trim().toLowerCase() === "alpha 1" ? "delta 1" : "alpha 1";
+                const userObj = users.find((u) => u.username.trim().toLowerCase() === m.createdBy.trim().toLowerCase());
                 const partner = users.find((u) => u.username.trim().toLowerCase() === partnerUsername);
+                
+                const isOnline = userObj ? (Date.now() - new Date(userObj.lastSeen).getTime() < 20000) : false;
+
                 const isRead =
                   isMe &&
                   !!partner?.lastReadAt &&
@@ -232,12 +236,15 @@ export const MessageList: React.FC<MessageListProps> = ({
                     
                     <div className={`flex items-start gap-1.5 max-w-[95%] sm:max-w-[85%] ${isMe ? "flex-row-reverse" : "flex-row"}`}>
                       <div 
-                        className="flex-shrink-0 cursor-pointer active:scale-95 transition-transform mt-0.5"
+                        className="flex-shrink-0 cursor-pointer active:scale-95 transition-transform mt-0.5 relative"
                         onClick={() => setZoomedAvatar(avatarSrc)}
                       >
                         <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full border border-zinc-800/50 overflow-hidden shadow-md">
                           <img src={avatarSrc} className="w-full h-full object-cover" alt="avatar" />
                         </div>
+                        {isOnline && (
+                          <div className="absolute bottom-0 right-0 w-2 h-2 bg-green-500 rounded-full border-2 border-zinc-950 shadow-sm"></div>
+                        )}
                       </div>
 
                       <div
