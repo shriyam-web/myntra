@@ -230,195 +230,204 @@ export const MessageList: React.FC<MessageListProps> = ({
                       </div>
                     )}
                     
-                    <div className={`flex items-end gap-2 max-w-[95%] sm:max-w-[85%] ${isMe ? "flex-row-reverse" : "flex-row"}`}>
+                    <div className={`flex items-end gap-1.5 max-w-[95%] sm:max-w-[85%] ${isMe ? "flex-row-reverse" : "flex-row"}`}>
                       <div 
-                        className="flex-shrink-0 mb-1 cursor-pointer active:scale-95 transition-transform"
+                        className="flex-shrink-0 cursor-pointer active:scale-95 transition-transform"
                         onClick={() => setZoomedAvatar(avatarSrc)}
                       >
-                        <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 border-zinc-800/50 overflow-hidden shadow-lg">
+                        <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full border border-zinc-800/50 overflow-hidden shadow-md">
                           <img src={avatarSrc} className="w-full h-full object-cover" alt="avatar" />
                         </div>
                       </div>
 
                       <div
-                        className={`flex flex-col gap-1 mb-1 relative ${
+                        className={`flex flex-col gap-0.5 relative ${
                           isMe ? "items-end" : "items-start"
                         }`}
                       >
-                      {/* Message bubble content logic from HomeClient would go here */}
-                      {/* For brevity, I'll keep the structure and let the user refactor further if needed */}
-                      <div
-                        className={`relative rounded-3xl p-3 sm:p-4 text-sm font-medium shadow-sm border border-zinc-800/20 ${
-                          isMe ? `${activeTheme.bubbleMe} ${activeTheme.textMe || "text-white"}` : activeTheme.bubblePartner
-                        }`}
-                      >
-                         {m.repliedTo && (
-                            <div className={`mb-3 p-3 rounded-2xl border-l-4 border-white/20 ${isMe ? 'bg-white/10' : 'bg-zinc-950/50'} text-[11px] opacity-80 backdrop-blur-md`}>
-                                <p className="font-black uppercase tracking-widest mb-1 text-[8px] opacity-50">
-                                    {m.repliedTo.createdBy}
-                                </p>
-                                <p className="line-clamp-2 italic font-bold leading-relaxed">{m.repliedTo.text || 'Media'}</p>
-                            </div>
-                         )}
+                        <div
+                          className={`relative rounded-2xl p-2.5 sm:p-3 text-sm font-medium shadow-sm border border-zinc-800/10 ${
+                            isMe ? `${activeTheme.bubbleMe} ${activeTheme.textMe || "text-white"}` : activeTheme.bubblePartner
+                          }`}
+                        >
+                           {m.repliedTo && (
+                              <div 
+                                onClick={() => {
+                                  const element = document.getElementById(`message-${m.repliedTo?._id}`);
+                                  if (element) {
+                                    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                    element.classList.add('ring-2', 'ring-white/50', 'bg-white/5');
+                                    setTimeout(() => {
+                                      element.classList.remove('ring-2', 'ring-white/50', 'bg-white/5');
+                                    }, 2000);
+                                  }
+                                }}
+                                className={`mb-2 p-2 rounded-xl border-l-2 border-white/20 ${isMe ? 'bg-white/10' : 'bg-zinc-950/50'} text-[10px] opacity-80 backdrop-blur-md cursor-pointer hover:bg-white/20 transition-all active:scale-95`}
+                              >
+                                  <p className="font-black uppercase tracking-widest mb-0.5 text-[7px] opacity-50">
+                                      {m.repliedTo.createdBy}
+                                  </p>
+                                  <p className="line-clamp-1 italic font-bold leading-relaxed">{m.repliedTo.text || 'Media'}</p>
+                              </div>
+                           )}
 
-                        {m.text && (
-                          editingMessage === m._id ? (
-                            <div className="flex flex-col gap-2">
-                                <textarea
-                                    value={editingMessageText}
-                                    onChange={(e) => setEditingMessageText(e.target.value)}
-                                    onKeyDown={(e) => {
-                                        if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-                                            e.preventDefault();
-                                            handleUpdateMessage(m._id, editingMessageText);
-                                        }
-                                        if (e.key === "Escape") {
-                                            setEditingMessage(null);
-                                            setEditingMessageText("");
-                                        }
-                                    }}
-                                    className="w-full bg-zinc-950/50 border border-white/20 rounded-xl p-2 text-sm text-white outline-none focus:border-white/40 min-h-[60px] resize-none"
-                                    autoFocus
-                                />
-                                <div className="flex justify-end gap-2">
-                                    <button 
-                                        onClick={() => {
-                                            setEditingMessage(null);
-                                            setEditingMessageText("");
-                                        }}
-                                        className="text-[10px] font-bold uppercase tracking-widest opacity-60 hover:opacity-100"
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button 
-                                        onClick={() => handleUpdateMessage(m._id, editingMessageText)}
-                                        className="text-[10px] font-bold uppercase tracking-widest text-blue-400 hover:text-blue-300"
-                                    >
-                                        Save
-                                    </button>
-                                </div>
-                            </div>
-                          ) : (
-                            <div className="leading-relaxed whitespace-pre-wrap">{renderMessage(m.text)}</div>
-                          )
-                        )}
-                        
-                        {(m.imageUrl || (m.imageUrls && m.imageUrls.length > 0)) && (
-                            <div className={`mt-2 grid gap-2 ${m.imageUrls && m.imageUrls.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                                {(m.imageUrls || [m.imageUrl]).map((url, idx) => (
-                                    <div key={idx} className="relative group/img overflow-hidden rounded-2xl border border-white/10 shadow-xl bg-zinc-950">
-                                        <img 
-                                            src={url!} 
-                                            alt="Shared content" 
-                                            className="w-full h-auto max-h-[300px] object-cover hover:scale-105 transition-transform duration-500 cursor-pointer"
-                                            onClick={() => {
-                                                setPreviewMessage(m);
-                                                setPreviewImageIndex(idx);
-                                            }}
-                                        />
-                                        <button 
-                                            onClick={() => handleDownloadMedia(url!)}
-                                            className="absolute top-2 right-2 p-2 bg-black/60 backdrop-blur-md rounded-full text-white opacity-0 group-hover/img:opacity-100 transition-all hover:bg-black"
-                                        >
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                                        </button>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
+                          {m.text && (
+                            editingMessage === m._id ? (
+                              <div className="flex flex-col gap-2">
+                                  <textarea
+                                      value={editingMessageText}
+                                      onChange={(e) => setEditingMessageText(e.target.value)}
+                                      onKeyDown={(e) => {
+                                          if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                                              e.preventDefault();
+                                              handleUpdateMessage(m._id, editingMessageText);
+                                          }
+                                          if (e.key === "Escape") {
+                                              setEditingMessage(null);
+                                              setEditingMessageText("");
+                                          }
+                                      }}
+                                      className="w-full bg-zinc-950/50 border border-white/20 rounded-xl p-2 text-sm text-white outline-none focus:border-white/40 min-h-[60px] resize-none"
+                                      autoFocus
+                                  />
+                                  <div className="flex justify-end gap-2">
+                                      <button 
+                                          onClick={() => {
+                                              setEditingMessage(null);
+                                              setEditingMessageText("");
+                                          }}
+                                          className="text-[10px] font-bold uppercase tracking-widest opacity-60 hover:opacity-100"
+                                      >
+                                          Cancel
+                                      </button>
+                                      <button 
+                                          onClick={() => handleUpdateMessage(m._id, editingMessageText)}
+                                          className="text-[10px] font-bold uppercase tracking-widest text-blue-400 hover:text-blue-300"
+                                      >
+                                          Save
+                                      </button>
+                                  </div>
+                              </div>
+                            ) : (
+                              <div className="leading-relaxed whitespace-pre-wrap">{renderMessage(m.text)}</div>
+                            )
+                          )}
+                          
+                          {(m.imageUrl || (m.imageUrls && m.imageUrls.length > 0)) && (
+                              <div className={`mt-1.5 grid gap-1.5 ${m.imageUrls && m.imageUrls.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                                  {(m.imageUrls || [m.imageUrl]).map((url, idx) => (
+                                      <div key={idx} className="relative group/img overflow-hidden rounded-xl border border-white/10 shadow-lg bg-zinc-950">
+                                          <img 
+                                              src={url!} 
+                                              alt="Shared content" 
+                                              className="w-full h-auto max-h-[250px] object-cover hover:scale-105 transition-transform duration-500 cursor-pointer"
+                                              onClick={() => {
+                                                  setPreviewMessage(m);
+                                                  setPreviewImageIndex(idx);
+                                              }}
+                                          />
+                                          <button 
+                                              onClick={() => handleDownloadMedia(url!)}
+                                              className="absolute top-1.5 right-1.5 p-1.5 bg-black/60 backdrop-blur-md rounded-full text-white opacity-0 group-hover/img:opacity-100 transition-all hover:bg-black"
+                                          >
+                                              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                          </button>
+                                      </div>
+                                  ))}
+                              </div>
+                          )}
 
-                        {(m.videoUrl || (m.videoUrls && m.videoUrls.length > 0)) && (
-                            <div className={`mt-2 grid gap-2 ${m.videoUrls && m.videoUrls.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                                {(m.videoUrls || [m.videoUrl]).map((url, idx) => (
-                                    <div key={idx} className="relative group/vid overflow-hidden rounded-2xl border border-white/10 shadow-xl bg-zinc-950 aspect-video flex items-center justify-center">
-                                        <video 
-                                            src={url!} 
-                                            className="w-full h-full object-cover cursor-pointer"
-                                            onClick={() => {
-                                                setPreviewMessage(m);
-                                                setPreviewImageIndex(idx + (m.imageUrls?.length || (m.imageUrl ? 1 : 0)));
-                                            }}
-                                        />
-                                        <div 
-                                            className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover/vid:bg-black/40 transition-all cursor-pointer"
-                                            onClick={() => {
-                                                setPreviewMessage(m);
-                                                setPreviewImageIndex(idx + (m.imageUrls?.length || (m.imageUrl ? 1 : 0)));
-                                            }}
-                                        >
-                                            <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/30 group-hover/vid:scale-110 transition-transform">
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="white" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                                            </div>
-                                        </div>
-                                        <button 
-                                            onClick={() => handleDownloadMedia(url!)}
-                                            className="absolute top-2 right-2 p-2 bg-black/60 backdrop-blur-md rounded-full text-white opacity-0 group-hover/vid:opacity-100 transition-all hover:bg-black z-10"
-                                        >
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                                        </button>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
+                          {(m.videoUrl || (m.videoUrls && m.videoUrls.length > 0)) && (
+                              <div className={`mt-1.5 grid gap-1.5 ${m.videoUrls && m.videoUrls.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                                  {(m.videoUrls || [m.videoUrl]).map((url, idx) => (
+                                      <div key={idx} className="relative group/vid overflow-hidden rounded-xl border border-white/10 shadow-lg bg-zinc-950 aspect-video flex items-center justify-center">
+                                          <video 
+                                              src={url!} 
+                                              className="w-full h-full object-cover cursor-pointer"
+                                              onClick={() => {
+                                                  setPreviewMessage(m);
+                                                  setPreviewImageIndex(idx + (m.imageUrls?.length || (m.imageUrl ? 1 : 0)));
+                                              }}
+                                          />
+                                          <div 
+                                              className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover/vid:bg-black/40 transition-all cursor-pointer"
+                                              onClick={() => {
+                                                  setPreviewMessage(m);
+                                                  setPreviewImageIndex(idx + (m.imageUrls?.length || (m.imageUrl ? 1 : 0)));
+                                              }}
+                                          >
+                                              <div className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/30 group-hover/vid:scale-110 transition-transform">
+                                                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="white" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                                              </div>
+                                          </div>
+                                          <button 
+                                              onClick={() => handleDownloadMedia(url!)}
+                                              className="absolute top-1.5 right-1.5 p-1.5 bg-black/60 backdrop-blur-md rounded-full text-white opacity-0 group-hover/vid:opacity-100 transition-all hover:bg-black z-10"
+                                          >
+                                              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                          </button>
+                                      </div>
+                                  ))}
+                              </div>
+                          )}
 
-                        <div className={`text-[9px] mt-2 flex items-center gap-1.5 font-bold uppercase tracking-wider opacity-60 ${isMe ? 'justify-end' : 'justify-start'}`}>
-                            {new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            {isMe && !isOptimistic && (
-                                <span className={isRead ? "text-blue-300" : "text-white/50"}>
-                                    {isRead ? (
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 7 17l-5-5"/><path d="m22 10-7.5 7.5L13 16"/></svg>
-                                    ) : (
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
-                                    )}
-                                </span>
-                            )}
+                          <div className={`text-[8px] mt-1 flex items-center gap-1 font-bold uppercase tracking-wider opacity-60 ${isMe ? 'justify-end' : 'justify-start'}`}>
+                              {new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              {isMe && !isOptimistic && (
+                                  <span className={isRead ? "text-blue-300" : "text-white/50"}>
+                                      {isRead ? (
+                                          <svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 7 17l-5-5"/><path d="m22 10-7.5 7.5L13 16"/></svg>
+                                      ) : (
+                                          <svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                                      )}
+                                  </span>
+                              )}
+                          </div>
                         </div>
-                      </div>
 
-                      {/* Message Actions */}
-                      <div className={`absolute top-0 ${isMe ? 'right-full mr-2' : 'left-full ml-2'} opacity-0 group-hover/msg:opacity-100 transition-opacity flex items-center gap-1 h-full`}>
-                        <button 
-                            onClick={() => setReplyingTo(m)}
-                            className="p-2 bg-zinc-900 border border-zinc-800 rounded-full text-zinc-500 hover:text-white hover:border-zinc-700 transition-all active:scale-90"
-                            title="Reply"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
-                        </button>
-                        <button 
-                            onClick={() => handleToggleSaveMessage(m._id)}
-                            className={`p-2 bg-zinc-900 border border-zinc-800 rounded-full transition-all active:scale-90 ${
-                                (m.savedBy || []).includes(currentUser) ? 'text-yellow-500 border-yellow-500/50' : 'text-zinc-500 hover:text-white hover:border-zinc-700'
-                            }`}
-                            title={(m.savedBy || []).includes(currentUser) ? "Unsave" : "Save"}
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill={(m.savedBy || []).includes(currentUser) ? "currentColor" : "none"} stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>
-                        </button>
-                        {isMe && (
-                            <>
-                                <button 
-                                    onClick={() => {
-                                        setEditingMessage(m._id);
-                                        setEditingMessageText(m.text || '');
-                                    }}
-                                    className="p-2 bg-zinc-900 border border-zinc-800 rounded-full text-zinc-500 hover:text-white hover:border-zinc-700 transition-all active:scale-90"
-                                    title="Edit"
-                                >
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
-                                </button>
-                                <button 
-                                    onClick={() => handleDeleteMessage(m._id)}
-                                    className="p-2 bg-zinc-900 border border-zinc-800 rounded-full text-zinc-500 hover:text-red-500 hover:border-red-900/50 transition-all active:scale-90"
-                                    title="Delete"
-                                >
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-                                </button>
-                            </>
-                        )}
+                        {/* Message Actions - Now below the bubble */}
+                        <div className={`flex items-center gap-1 mt-1 px-1 transition-all duration-300 ${isMe ? 'flex-row-reverse' : 'flex-row'} opacity-0 group-hover/msg:opacity-100`}>
+                          <button 
+                              onClick={() => setReplyingTo(m)}
+                              className="p-1.5 bg-zinc-900/50 border border-zinc-800/50 rounded-full text-zinc-500 hover:text-white hover:border-zinc-700 transition-all active:scale-90"
+                              title="Reply"
+                          >
+                              <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
+                          </button>
+                          <button 
+                              onClick={() => handleToggleSaveMessage(m._id)}
+                              className={`p-1.5 bg-zinc-900/50 border border-zinc-800/50 rounded-full transition-all active:scale-90 ${
+                                  (m.savedBy || []).includes(currentUser) ? 'text-yellow-500 border-yellow-500/50' : 'text-zinc-500 hover:text-white hover:border-zinc-700'
+                              }`}
+                              title={(m.savedBy || []).includes(currentUser) ? "Unsave" : "Save"}
+                          >
+                              <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill={(m.savedBy || []).includes(currentUser) ? "currentColor" : "none"} stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>
+                          </button>
+                          {isMe && (
+                              <>
+                                  <button 
+                                      onClick={() => {
+                                          setEditingMessage(m._id);
+                                          setEditingMessageText(m.text || '');
+                                      }}
+                                      className="p-1.5 bg-zinc-900/50 border border-zinc-800/50 rounded-full text-zinc-500 hover:text-white hover:border-zinc-700 transition-all active:scale-90"
+                                      title="Edit"
+                                  >
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                                  </button>
+                                  <button 
+                                      onClick={() => handleDeleteMessage(m._id)}
+                                      className="p-1.5 bg-zinc-900/50 border border-zinc-800/50 rounded-full text-zinc-500 hover:text-red-500 hover:border-red-900/50 transition-all active:scale-90"
+                                      title="Delete"
+                                  >
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                                  </button>
+                              </>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-                );
               })}
             </div>
           ))}
