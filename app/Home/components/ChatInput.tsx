@@ -17,6 +17,7 @@ interface ChatInputProps {
   selectedFiles: File[];
   setSelectedFiles: React.Dispatch<React.SetStateAction<File[]>>;
   isUploading: boolean;
+  isMediaUploading?: boolean;
   uploadProgress: number;
 }
 

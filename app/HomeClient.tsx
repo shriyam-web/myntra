@@ -110,6 +110,7 @@ export default function HomeClient() {
   const [selectedVideos, setSelectedVideos] = useState<string[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [isMediaUploading, setIsMediaUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [previewMessage, setPreviewMessage] = useState<Message | null>(null);
   const [previewImageIndex, setPreviewImageIndex] = useState(0);
@@ -436,7 +437,9 @@ export default function HomeClient() {
     if (!newMessage.trim() && selectedFiles.length === 0) return;
 
     try {
+      const hasFiles = selectedFiles.length > 0;
       setIsUploading(true);
+      setIsMediaUploading(hasFiles);
       setUploadProgress(0);
       const optimisticId = Date.now().toString();
       const optimisticMsg: Message = {
@@ -466,28 +469,33 @@ export default function HomeClient() {
       setSelectedFiles([]);
       setReplyingTo(null);
 
-      // Upload files
+      // Upload files in parallel
       const uploadedImageUrls: string[] = [];
       const uploadedVideoUrls: string[] = [];
       
-      for (let i = 0; i < currentSelectedFiles.length; i++) {
-        const file = currentSelectedFiles[i];
-        
-        const url = await uploadToCloudinary(file, (percent) => {
-          // Calculate overall progress
-          const fileWeight = 100 / currentSelectedFiles.length;
-          const overallProgress = (i * fileWeight) + (percent * fileWeight / 100);
-          setUploadProgress(Math.min(Math.round(overallProgress), 99));
+      if (currentSelectedFiles.length > 0) {
+        const uploadPromises = currentSelectedFiles.map(async (file, i) => {
+          const url = await uploadToCloudinary(file, (percent) => {
+            // For parallel uploads, we just update progress based on the current file
+            // This is a bit simplified but gives feedback
+            if (currentSelectedFiles.length === 1) {
+              setUploadProgress(Math.min(Math.round(percent), 99));
+            }
+          });
+          return { url, type: file.type };
         });
 
-        if (file.type.startsWith('video/')) {
-          uploadedVideoUrls.push(url);
-        } else {
-          uploadedImageUrls.push(url);
-        }
+        const results = await Promise.all(uploadPromises);
+        results.forEach(res => {
+          if (res.type.startsWith('video/')) {
+            uploadedVideoUrls.push(res.url);
+          } else {
+            uploadedImageUrls.push(res.url);
+          }
+        });
+        setUploadProgress(99);
       }
 
-      setUploadProgress(99);
       const serverMsg = await actions.sendMessage(currentNewMessage, currentUser, uploadedImageUrls, uploadedVideoUrls, currentReplyingTo?._id);
       setUploadProgress(100);
       
@@ -938,6 +946,7 @@ export default function HomeClient() {
                     selectedFiles={selectedFiles}
                     setSelectedFiles={setSelectedFiles}
                     isUploading={isUploading}
+                    isMediaUploading={isMediaUploading}
                     uploadProgress={uploadProgress}
                 />
              </div>
