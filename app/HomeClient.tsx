@@ -509,6 +509,7 @@ export default function HomeClient() {
       console.error('Failed to send message:', error);
     } finally {
       setIsUploading(false);
+      setIsMediaUploading(false);
       setUploadProgress(0);
     }
   };

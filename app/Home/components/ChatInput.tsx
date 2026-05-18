@@ -37,6 +37,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   selectedFiles,
   setSelectedFiles,
   isUploading,
+  isMediaUploading,
   uploadProgress,
 }) => {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -228,15 +229,17 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           {isUploading && (
              <div className="w-full flex flex-col gap-1 mb-2">
                 <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-zinc-500 px-1">
-                    <span>Uploading Media...</span>
-                    <span>{uploadProgress}%</span>
+                    <span>{isMediaUploading ? "Uploading Media..." : "Sending Message..."}</span>
+                    {isMediaUploading && <span>{uploadProgress}%</span>}
                 </div>
-                <div className="w-full h-1.5 bg-zinc-900 rounded-full overflow-hidden">
-                    <div 
-                        className={`h-full ${activeTheme.bubbleMe} transition-all duration-300 shadow-[0_0_10px_rgba(255,255,255,0.2)]`} 
-                        style={{ width: `${uploadProgress}%` }}
-                    ></div>
-                </div>
+                {isMediaUploading && (
+                  <div className="w-full h-1.5 bg-zinc-900 rounded-full overflow-hidden">
+                      <div 
+                          className={`h-full ${activeTheme.bubbleMe} transition-all duration-300 shadow-[0_0_10px_rgba(255,255,255,0.2)]`} 
+                          style={{ width: `${uploadProgress}%` }}
+                      ></div>
+                  </div>
+                )}
              </div>
           )}
           <div className="relative group/input flex items-end bg-zinc-950 border border-zinc-800 rounded-[1.5rem] focus-within:border-zinc-700 transition-all shadow-inner overflow-hidden">
@@ -245,7 +248,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 onClick={() => fileInputRef.current?.click()}
                 className="p-4 text-zinc-600 hover:text-white transition-all active:scale-90 shrink-0"
                 title="Attach Media"
-                disabled={isUploading}
+                disabled={isUploading && isMediaUploading}
              >
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.59a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
              </button>
@@ -272,15 +275,14 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 rows={1}
                 autoFocus
                 spellCheck={false}
-                disabled={isUploading}
              />
           </div>
         </div>
         <button
           type="submit"
-          disabled={(!newMessage.trim() && selectedImages.length === 0 && selectedVideos.length === 0) || isUploading}
+          disabled={(!newMessage.trim() && selectedImages.length === 0 && selectedVideos.length === 0) || (isUploading && isMediaUploading)}
           className={`h-14 w-14 flex items-center justify-center rounded-2xl transition-all shadow-xl active:scale-90 shrink-0 ${
-            (newMessage.trim() || selectedImages.length > 0 || selectedVideos.length > 0) && !isUploading
+            (newMessage.trim() || selectedImages.length > 0 || selectedVideos.length > 0) && !(isUploading && isMediaUploading)
               ? `${activeTheme.bubbleMe} text-white hover:opacity-90`
               : "bg-zinc-800/50 text-zinc-700 cursor-not-allowed border border-zinc-800/50"
           }`}
