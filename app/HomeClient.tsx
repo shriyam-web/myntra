@@ -387,12 +387,57 @@ export default function HomeClient() {
     });
   };
 
+  const uploadToCloudinary = async (file: File, onProgress: (percent: number) => void): Promise<string> => {
+    try {
+      const { timestamp, signature, apiKey, cloudName, folder } = await actions.getCloudinarySignature();
+      
+      return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `https://api.cloudinary.com/v1_1/${cloudName}/upload`, true);
+        
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            const percent = Math.round((e.loaded / e.total) * 100);
+            onProgress(percent);
+          }
+        };
+        
+        xhr.onload = () => {
+          if (xhr.status === 200) {
+            const response = JSON.parse(xhr.responseText);
+            resolve(response.secure_url);
+          } else {
+            console.error('Cloudinary upload error:', xhr.responseText);
+            reject(new Error('Upload failed with status ' + xhr.status));
+          }
+        };
+        
+        xhr.onerror = () => reject(new Error('Network error during upload'));
+        
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('api_key', apiKey!);
+        formData.append('timestamp', timestamp.toString());
+        formData.append('signature', signature);
+        formData.append('folder', folder);
+        
+        xhr.send(formData);
+      });
+    } catch (err) {
+      console.error('Failed to get upload signature:', err);
+      // Fallback to server action if signature fails
+      const base64 = await fileToBase64(file);
+      return await actions.uploadImage(base64, file.type.startsWith('video/') ? 'video' : 'image');
+    }
+  };
+
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!newMessage.trim() && selectedFiles.length === 0) return;
 
     try {
       setIsUploading(true);
+      setUploadProgress(0);
       const optimisticId = Date.now().toString();
       const optimisticMsg: Message = {
         _id: optimisticId,
@@ -427,10 +472,14 @@ export default function HomeClient() {
       
       for (let i = 0; i < currentSelectedFiles.length; i++) {
         const file = currentSelectedFiles[i];
-        const base64 = await fileToBase64(file);
-        setUploadProgress(Math.round(((i + 1) / currentSelectedFiles.length) * 90));
         
-        const url = await actions.uploadImage(base64);
+        const url = await uploadToCloudinary(file, (percent) => {
+          // Calculate overall progress
+          const fileWeight = 100 / currentSelectedFiles.length;
+          const overallProgress = (i * fileWeight) + (percent * fileWeight / 100);
+          setUploadProgress(Math.min(Math.round(overallProgress), 99));
+        });
+
         if (file.type.startsWith('video/')) {
           uploadedVideoUrls.push(url);
         } else {
@@ -438,7 +487,7 @@ export default function HomeClient() {
         }
       }
 
-      setUploadProgress(95);
+      setUploadProgress(99);
       const serverMsg = await actions.sendMessage(currentNewMessage, currentUser, uploadedImageUrls, uploadedVideoUrls, currentReplyingTo?._id);
       setUploadProgress(100);
       

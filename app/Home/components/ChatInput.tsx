@@ -225,11 +225,17 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       >
         <div className="flex-1 flex flex-col gap-2">
           {isUploading && (
-             <div className="w-full h-1 bg-zinc-900 rounded-full overflow-hidden mb-2">
-                <div 
-                    className={`h-full ${activeTheme.bubbleMe} transition-all duration-300`} 
-                    style={{ width: `${uploadProgress}%` }}
-                ></div>
+             <div className="w-full flex flex-col gap-1 mb-2">
+                <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-zinc-500 px-1">
+                    <span>Uploading Media...</span>
+                    <span>{uploadProgress}%</span>
+                </div>
+                <div className="w-full h-1.5 bg-zinc-900 rounded-full overflow-hidden">
+                    <div 
+                        className={`h-full ${activeTheme.bubbleMe} transition-all duration-300 shadow-[0_0_10px_rgba(255,255,255,0.2)]`} 
+                        style={{ width: `${uploadProgress}%` }}
+                    ></div>
+                </div>
              </div>
           )}
           <div className="relative group/input flex items-end bg-zinc-950 border border-zinc-800 rounded-[1.5rem] focus-within:border-zinc-700 transition-all shadow-inner overflow-hidden">

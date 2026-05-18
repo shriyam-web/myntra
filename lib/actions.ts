@@ -25,22 +25,27 @@ interface UserDocument {
   chatWallpaper?: string;
 }
 
-// IMAGE UPLOAD
-export async function uploadImage(file: string) {
+// IMAGE/VIDEO UPLOAD
+export async function uploadImage(file: string, resourceType: "image" | "video" | "auto" = "auto") {
   const start = Date.now();
   try {
-    console.log(`📸 Starting Cloudinary upload (file size: ${Math.round(file.length / 1024)}KB)`);
+    const isVideo = resourceType === "video" || (typeof file === 'string' && file.startsWith('data:video/'));
+    const actualResourceType = isVideo ? "video" : (resourceType === "auto" ? "auto" : "image");
+    
+    console.log(`📸 Starting Cloudinary ${actualResourceType} upload (file size: ${Math.round(file.length / 1024)}KB)`);
     
     // Cloudinary upload with timeout and better options
     const result = await new Promise<CloudinaryResult>((resolve, reject) => {
+      const timeoutMs = actualResourceType === "video" ? 300000 : 60000; // 5 mins for video, 1 min for image
+      
       const uploadTimeout = setTimeout(() => {
-        reject(new Error("Cloudinary upload timed out after 30 seconds"));
-      }, 30000);
+        reject(new Error(`Cloudinary upload timed out after ${timeoutMs/1000} seconds`));
+      }, timeoutMs);
 
       cloudinary.uploader.upload(file, {
         folder: "messaging",
-        resource_type: "auto",
-        timeout: 60000, // internal cloudinary timeout
+        resource_type: actualResourceType,
+        timeout: timeoutMs,
       }, (error, result) => {
         clearTimeout(uploadTimeout);
         if (error) {
@@ -61,8 +66,27 @@ export async function uploadImage(file: string) {
     if (error instanceof Error) {
       throw new Error(`Upload failed: ${error.message}`);
     }
-    throw new Error("Failed to upload image. Please try a smaller image or check your connection.");
+    throw new Error("Failed to upload media. Please try a smaller file or check your connection.");
   }
+}
+
+// Get Cloudinary signature for client-side upload
+export async function getCloudinarySignature() {
+  const timestamp = Math.round((new Date()).getTime() / 1000);
+  const folder = "messaging";
+  
+  const signature = cloudinary.utils.api_sign_request({
+    timestamp: timestamp,
+    folder: folder,
+  }, process.env.CLOUDINARY_API_SECRET!);
+
+  return { 
+    timestamp, 
+    signature, 
+    apiKey: process.env.CLOUDINARY_API_KEY, 
+    cloudName: process.env.CLOUDINARY_CLOUD_NAME,
+    folder
+  };
 }
 
 // FETCH ALL DATA

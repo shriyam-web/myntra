@@ -1,6 +1,6 @@
 import React, { Fragment } from "react";
 import { Message, PresenceUser, Theme } from "../types";
-import { renderMessage } from "../../../lib/utils";
+import { renderMessage, getVideoPoster } from "../../../lib/utils";
 
 interface MessageListProps {
   messages: Message[];
@@ -352,6 +352,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                                       <div key={idx} className="relative group/vid overflow-hidden rounded-xl border border-white/10 shadow-lg bg-zinc-950 aspect-video flex items-center justify-center">
                                           <video 
                                               src={url!} 
+                                              poster={getVideoPoster(url!)}
                                               className="w-full h-full object-cover cursor-pointer"
                                               onClick={() => {
                                                   setPreviewMessage(m);
@@ -368,6 +369,9 @@ export const MessageList: React.FC<MessageListProps> = ({
                                               <div className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/30 group-hover/vid:scale-110 transition-transform">
                                                   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="white" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                                               </div>
+                                          </div>
+                                          <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-black/60 backdrop-blur-md rounded text-[8px] font-black uppercase tracking-widest text-white/80 border border-white/10 pointer-events-none">
+                                              Video Preview
                                           </div>
                                           <button 
                                               onClick={() => handleDownloadMedia(url!)}

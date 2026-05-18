@@ -60,6 +60,15 @@ const UrlPreview = ({ url }: { url: string }) => {
   );
 };
 
+export const getVideoPoster = (url: string) => {
+  if (!url) return undefined;
+  if (url.includes('cloudinary.com')) {
+    // Replace extension with jpg for Cloudinary video thumbnail
+    return url.replace(/\.[^/.]+$/, ".jpg");
+  }
+  return undefined;
+};
+
 export const renderMessage = (text: string) => {
   const trimmedText = text.trim();
   const upperText = trimmedText.toUpperCase();
