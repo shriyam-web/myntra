@@ -1,9 +1,10 @@
 import React, { Fragment } from "react";
 import { Message, PresenceUser, Theme, ReactionType } from "../types";
 import { renderMessage, getVideoPoster } from "../../../lib/utils";
-import { REACTION_EMOJIS, REACTION_OPTIONS } from "../constants";
+import { REACTION_EMOJIS } from "../constants";
 import { ReactionBurst } from "./ReactionBurst";
 import { MessageActionMenu } from "./MessageActionMenu";
+import { ReactionPickerBar } from "./ReactionPickerBar";
 
 interface MessageListProps {
   messages: Message[];
@@ -86,6 +87,8 @@ export const MessageList: React.FC<MessageListProps> = ({
   const [burstReaction, setBurstReaction] = React.useState<ReactionType | null>(null);
   const touchStartRef = React.useRef<{ x: number; y: number; time: number } | null>(null);
   const swipeMovedRef = React.useRef(false);
+  const swipeDistanceRef = React.useRef(0);
+  const swipingMessageIdRef = React.useRef<string | null>(null);
   const longPressTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressTriggeredRef = React.useRef(false);
   const listRootRef = React.useRef<HTMLDivElement>(null);
@@ -113,6 +116,9 @@ export const MessageList: React.FC<MessageListProps> = ({
       longPressTimerRef.current = null;
     }
   };
+
+  const isInteractiveTouchTarget = (target: EventTarget | null) =>
+    !!(target as HTMLElement)?.closest?.("a, button, textarea");
 
   const startLongPress = (messageId: string) => {
     if (/^\d+$/.test(messageId)) return;
@@ -190,15 +196,13 @@ export const MessageList: React.FC<MessageListProps> = ({
     }
   };
 
+  const reactionPickerMessage = React.useMemo(
+    () => (reactionPickerId ? messages.find((m) => m._id === reactionPickerId) : null),
+    [reactionPickerId, messages]
+  );
+
   return (
     <div ref={listRootRef} className="relative flex-1 flex flex-col min-h-0 overflow-hidden">
-      {reactionPickerId && (
-        <div
-          className="absolute inset-0 z-[10]"
-          aria-hidden
-          onClick={closeReactionPicker}
-        />
-      )}
       {actionMenuId && (
         <div
           className="absolute inset-0 z-[10]"
@@ -211,6 +215,16 @@ export const MessageList: React.FC<MessageListProps> = ({
         subtle={isPartnerBurst}
         onComplete={handleBurstComplete}
       />
+      {reactionPickerId && reactionPickerMessage && (
+        <ReactionPickerBar
+          messageId={reactionPickerId}
+          myReactionType={(reactionPickerMessage.reactions || []).find(
+            (r) => r.user === currentUser
+          )?.type}
+          onSelect={(type) => handleReactionSelect(reactionPickerId, type)}
+          onClose={closeReactionPicker}
+        />
+      )}
     <div
       ref={messagesContainerRef}
       onScroll={handleScroll}
@@ -331,12 +345,16 @@ export const MessageList: React.FC<MessageListProps> = ({
                     key={m._id}
                     id={`message-${m._id}`}
                     onTouchStart={(e) => {
+                      if (isInteractiveTouchTarget(e.target)) return;
                       swipeMovedRef.current = false;
+                      swipeDistanceRef.current = 0;
+                      swipingMessageIdRef.current = null;
                       touchStartRef.current = {
                         x: e.touches[0].clientX,
                         y: e.touches[0].clientY,
                         time: Date.now(),
                       };
+                      startLongPress(m._id);
                     }}
                     onTouchMove={(e) => {
                       if (!touchStartRef.current) return;
@@ -344,25 +362,35 @@ export const MessageList: React.FC<MessageListProps> = ({
                       const deltaY = e.touches[0].clientY - touchStartRef.current.y;
                       const distance = Math.hypot(deltaX, deltaY);
 
-                      if (distance > 10) swipeMovedRef.current = true;
-                      
-                      if (Math.abs(deltaX) > Math.abs(deltaY) && deltaX > 0) {
+                      if (distance > 8) {
+                        swipeMovedRef.current = true;
                         clearLongPressTimer();
+                      }
+
+                      if (Math.abs(deltaX) > Math.abs(deltaY) && deltaX > 0) {
+                        const nextDistance = Math.min(deltaX, 80);
+                        swipeDistanceRef.current = nextDistance;
+                        swipingMessageIdRef.current = m._id;
                         setSwipingMessageId(m._id);
-                        setSwipeDistance(Math.min(deltaX, 80));
+                        setSwipeDistance(nextDistance);
                       }
                     }}
                     onTouchEnd={() => {
                       const wasLongPress = longPressTriggeredRef.current;
-                      const currentSwipe = swipingMessageId === m._id ? swipeDistance : 0;
+                      const currentSwipe =
+                        swipingMessageIdRef.current === m._id
+                          ? swipeDistanceRef.current
+                          : 0;
                       clearLongPressTimer();
-                      if (!wasLongPress && currentSwipe > 60 && swipeMovedRef.current) {
+                      if (!wasLongPress && currentSwipe > 48 && swipeMovedRef.current) {
                         closeReactionPicker();
                         closeActionMenu();
                         setReplyingTo(m);
                         if (window.navigator.vibrate) window.navigator.vibrate(10);
                       }
                       if (wasLongPress) longPressTriggeredRef.current = false;
+                      swipingMessageIdRef.current = null;
+                      swipeDistanceRef.current = 0;
                       setSwipingMessageId(null);
                       setSwipeDistance(0);
                       touchStartRef.current = null;
@@ -374,7 +402,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                     }}
                     className={`flex flex-col w-full transition-all duration-300 relative group/msg mb-2.5 ${
                       isMe ? "items-end" : "items-start"
-                    } ${reactionPickerId === m._id || actionMenuId === m._id ? "z-20" : ""}`}
+                    } ${actionMenuId === m._id ? "z-30" : ""}`}
                   >
                     {swipingMessageId === m._id && swipeDistance > 20 && (
                       <div 
@@ -418,18 +446,8 @@ export const MessageList: React.FC<MessageListProps> = ({
                             closeReactionPicker();
                             setActionMenuId(m._id);
                           }}
-                          onTouchStart={(e) => {
-                            if ((e.target as HTMLElement).closest("a, button, img, video, textarea")) return;
-                            e.stopPropagation();
-                            startLongPress(m._id);
-                          }}
-                          onTouchMove={(e) => {
-                            if ((e.target as HTMLElement).closest("a, button, img, video, textarea")) return;
-                            clearLongPressTimer();
-                          }}
-                          onTouchEnd={() => clearLongPressTimer()}
                           onMouseDown={(e) => {
-                            if ((e.target as HTMLElement).closest("a, button, img, video, textarea")) return;
+                            if (isInteractiveTouchTarget(e.target)) return;
                             if (e.button !== 0) return;
                             startLongPress(m._id);
                           }}
@@ -600,31 +618,6 @@ export const MessageList: React.FC<MessageListProps> = ({
                             </div>
                           )}
                         </div>
-
-                        {reactionPickerId === m._id && !isMe && (
-                          <div
-                            data-reaction-picker
-                            className="absolute z-30 left-1/2 -translate-x-1/2 -top-14 flex items-center gap-0.5 px-2 py-1.5 bg-zinc-900/95 border border-zinc-600/60 rounded-full shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-200 max-w-[min(92vw,360px)] overflow-x-auto no-scrollbar"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            {REACTION_OPTIONS.map((opt) => {
-                              const myReaction = (m.reactions || []).find(r => r.user === currentUser);
-                              const isActive = myReaction?.type === opt.type;
-                              return (
-                                <button
-                                  key={opt.type}
-                                  onClick={() => handleReactionSelect(m._id, opt.type)}
-                                  className={`p-1.5 sm:p-2 rounded-full text-lg sm:text-xl shrink-0 transition-all active:scale-125 hover:scale-110 ${
-                                    isActive ? "bg-white/20 ring-2 ring-white/40 scale-110" : "hover:bg-zinc-800"
-                                  }`}
-                                  title={opt.label}
-                                >
-                                  {REACTION_EMOJIS[opt.type]}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        )}
 
                         {actionMenuId === m._id && !isOptimistic && (
                           <MessageActionMenu
