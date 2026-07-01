@@ -87,8 +87,48 @@ body {
   animation-name: fade-in;
 }
 
+@keyframes zoom-in-95 {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.zoom-in-95 {
+  animation-name: zoom-in-95;
+}
+
 .slide-in-from-bottom-4 {
   animation-name: slide-in-from-bottom;
+}
+
+@keyframes theme-settings-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.theme-settings-overlay {
+  animation: fade-in 0.22s ease-out forwards;
+}
+
+.theme-settings-panel {
+  animation: theme-settings-slide-up 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@media (min-width: 640px) {
+  .theme-settings-panel {
+    animation: zoom-in-95 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
 }
 
 @keyframes reaction-float {

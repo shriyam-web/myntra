@@ -37,7 +37,7 @@ const MessageSchema = new Schema({
   pinnedBy: [{ type: String }],
   reactions: [{
     user: { type: String, required: true },
-    type: { type: String, enum: ['sad', 'love', 'funny', 'confused', 'angry'], required: true },
+    type: { type: String, enum: ['love', 'adore', 'kiss', 'hearteyes', 'hug', 'rose', 'fire', 'sparkle', 'funny', 'missyou', 'sad', 'confused', 'angry'], required: true },
   }],
 });
 

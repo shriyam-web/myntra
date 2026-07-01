@@ -698,7 +698,7 @@ export default function HomeClient() {
     }
   };
 
-  const handleUpdateChatPreferences = async (updates: { 
+  const handleUpdateChatPreferences = useCallback(async (updates: { 
     chatBackgroundColor?: string; 
     chatBubbleColor?: string; 
     themeName?: string; 
@@ -706,11 +706,11 @@ export default function HomeClient() {
   }) => {
     try {
       await actions.updateChatPreferences(currentUser, updates);
-      fetchInitialData(true);
     } catch (error) {
       console.error('Failed to update preferences:', error);
+      fetchInitialData(true);
     }
-  };
+  }, [currentUser, fetchInitialData]);
 
   const handleLogout = () => {
     setView("login");

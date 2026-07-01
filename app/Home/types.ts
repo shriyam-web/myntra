@@ -1,6 +1,19 @@
 export type UserType = "alpha 1" | "delta 1";
 
-export type ReactionType = "sad" | "love" | "funny" | "confused" | "angry";
+export type ReactionType =
+  | "love"
+  | "adore"
+  | "kiss"
+  | "hearteyes"
+  | "hug"
+  | "rose"
+  | "fire"
+  | "sparkle"
+  | "funny"
+  | "missyou"
+  | "sad"
+  | "confused"
+  | "angry";
 
 export interface MessageReaction {
   user: string;
@@ -91,6 +104,7 @@ export interface Theme {
   shadow: string;
   glow: string;
   textMe?: string;
+  mood?: "love" | "peaceful" | "dark" | "signature";
 }
 
 export interface Wallpaper {
@@ -99,5 +113,5 @@ export interface Wallpaper {
   value: string;
   type: "emoji" | "image" | "gradient" | "animated";
   preview?: string;
-  category?: "pattern" | "gradient" | "scene" | "wild";
+  category?: "pattern" | "gradient" | "scene" | "wild" | "love" | "peaceful";
 }

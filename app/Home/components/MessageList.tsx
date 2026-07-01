@@ -604,7 +604,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                         {reactionPickerId === m._id && !isMe && (
                           <div
                             data-reaction-picker
-                            className="absolute z-30 left-1/2 -translate-x-1/2 -top-12 flex items-center gap-0.5 px-2 py-1.5 bg-zinc-900/95 border border-zinc-600/60 rounded-full shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-200"
+                            className="absolute z-30 left-1/2 -translate-x-1/2 -top-14 flex items-center gap-0.5 px-2 py-1.5 bg-zinc-900/95 border border-zinc-600/60 rounded-full shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-200 max-w-[min(92vw,360px)] overflow-x-auto no-scrollbar"
                             onClick={(e) => e.stopPropagation()}
                           >
                             {REACTION_OPTIONS.map((opt) => {
@@ -614,7 +614,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                                 <button
                                   key={opt.type}
                                   onClick={() => handleReactionSelect(m._id, opt.type)}
-                                  className={`p-2 rounded-full text-xl transition-all active:scale-125 hover:scale-110 ${
+                                  className={`p-1.5 sm:p-2 rounded-full text-lg sm:text-xl shrink-0 transition-all active:scale-125 hover:scale-110 ${
                                     isActive ? "bg-white/20 ring-2 ring-white/40 scale-110" : "hover:bg-zinc-800"
                                   }`}
                                   title={opt.label}
