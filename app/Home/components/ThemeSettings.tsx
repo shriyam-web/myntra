@@ -17,6 +17,45 @@ interface ThemeSettingsProps {
   handleUpdateChatPreferences: (updates: { chatBackgroundColor?: string; chatBubbleColor?: string; themeName?: string; chatWallpaper?: string }) => void;
 }
 
+const WALLPAPER_SECTIONS: { key: Wallpaper["category"]; label: string }[] = [
+  { key: "wild", label: "Wild Patterns" },
+  { key: "gradient", label: "Living Gradients" },
+  { key: "pattern", label: "Soft Patterns" },
+  { key: "scene", label: "Cinematic Scenes" },
+];
+
+function WallpaperPreview({ wallpaper }: { wallpaper: Wallpaper }) {
+  if (wallpaper.value === "") {
+    return <span className="text-[9px] font-black text-zinc-700 uppercase">None</span>;
+  }
+
+  if (wallpaper.type === "image") {
+    return (
+      <img
+        src={wallpaper.value}
+        alt={wallpaper.name}
+        className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity"
+      />
+    );
+  }
+
+  if (wallpaper.type === "gradient" || wallpaper.type === "animated") {
+    const gradient = wallpaper.value.replace(/^(gradient|animated):/, "");
+    return (
+      <div
+        className={`w-full h-full ${wallpaper.type === "animated" ? "chat-wallpaper-animated" : ""}`}
+        style={{ background: gradient }}
+      />
+    );
+  }
+
+  return (
+    <span className="text-2xl group-hover:scale-125 transition-transform duration-500">
+      {wallpaper.preview || wallpaper.value.replace(/^emoji:/, "")}
+    </span>
+  );
+}
+
 export const ThemeSettings: React.FC<ThemeSettingsProps> = ({
   showThemeSettings,
   setShowThemeSettings,
@@ -40,10 +79,10 @@ export const ThemeSettings: React.FC<ThemeSettingsProps> = ({
         <div className="p-8 border-b border-zinc-900 flex justify-between items-center bg-zinc-900/20">
           <div>
             <h2 className="text-xl font-black text-white uppercase tracking-widest mb-1">
-              Chat Appearance
+              Chat Vibes
             </h2>
             <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.2em]">
-              Customize your environment
+              Go wild with color & atmosphere
             </p>
           </div>
           <button
@@ -68,10 +107,9 @@ export const ThemeSettings: React.FC<ThemeSettingsProps> = ({
         </div>
 
         <div className="flex-1 overflow-y-auto p-8 space-y-10 no-scrollbar">
-          {/* Themes */}
           <section className="space-y-6">
             <h3 className="text-[10px] font-black text-zinc-600 uppercase tracking-[0.4em] px-1">
-              Core Presets
+              Color Themes
             </h3>
             <div className="grid grid-cols-2 gap-3">
               {themes.map((t) => (
@@ -87,61 +125,65 @@ export const ThemeSettings: React.FC<ThemeSettingsProps> = ({
                       themeName: t.name,
                     });
                   }}
-                  className={`relative p-5 rounded-3xl border transition-all duration-300 group overflow-hidden ${
-                    themeName === t.name ? "border-white bg-zinc-900" : "border-zinc-800/50 bg-zinc-950 hover:border-zinc-700"
+                  className={`relative p-4 rounded-3xl border transition-all duration-300 group overflow-hidden ${
+                    themeName === t.name ? "border-white bg-zinc-900 ring-1 ring-white/20" : "border-zinc-800/50 bg-zinc-950 hover:border-zinc-700"
                   }`}
                 >
-                  <div className={`absolute inset-0 opacity-10 ${t.bg}`}></div>
-                  <div className="flex items-center gap-3 relative z-10">
-                    <div className={`w-3 h-3 rounded-full ${t.bubbleMe} shadow-lg shadow-black/20`}></div>
-                    <span className={`text-xs font-black uppercase tracking-wider ${themeName === t.name ? "text-white" : "text-zinc-500"}`}>
+                  <div className={`absolute inset-0 opacity-20 ${t.bg}`}></div>
+                  <div className={`absolute inset-0 opacity-30 ${t.glow}`}></div>
+                  <div className="flex items-center gap-2.5 relative z-10">
+                    <div className={`w-5 h-5 rounded-full ${t.bubbleMe} shadow-lg ${t.shadow}`}></div>
+                    <span className={`text-[10px] font-black uppercase tracking-wider leading-tight text-left ${themeName === t.name ? "text-white" : "text-zinc-500"}`}>
                       {t.name}
                     </span>
                   </div>
                   {themeName === t.name && (
-                    <div className="absolute top-2 right-2 w-1.5 h-1.5 bg-white rounded-full"></div>
+                    <div className="absolute top-2 right-2 w-1.5 h-1.5 bg-white rounded-full animate-pulse"></div>
                   )}
                 </button>
               ))}
             </div>
           </section>
 
-          {/* Wallpapers */}
-          <section className="space-y-6">
-            <h3 className="text-[10px] font-black text-zinc-600 uppercase tracking-[0.4em] px-1">
-              Visual Overlays
-            </h3>
-            <div className="grid grid-cols-4 sm:grid-cols-5 gap-3">
-              {wallpapers.map((w) => (
-                <button
-                  key={w.id}
-                  onClick={() => {
-                    setChatWallpaper(w.value);
-                    handleUpdateChatPreferences({
-                      chatWallpaper: w.value,
-                    });
-                  }}
-                  className={`relative aspect-square rounded-2xl border flex items-center justify-center transition-all group overflow-hidden ${
-                    chatWallpaper === w.value ? "border-white scale-95" : "border-zinc-800/50 hover:border-zinc-700 active:scale-90"
-                  }`}
-                  title={w.name}
-                >
-                  {w.type === "image" ? (
-                    <img src={w.value} className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-opacity" />
-                  ) : w.value === "" ? (
-                    <span className="text-[9px] font-black text-zinc-700 uppercase">None</span>
-                  ) : (
-                    <span className="text-xl group-hover:scale-125 transition-transform duration-500">
-                      {w.value}
-                    </span>
-                  )}
-                  {chatWallpaper === w.value && (
-                    <div className="absolute inset-0 bg-white/10 backdrop-blur-[1px]"></div>
-                  )}
-                </button>
-              ))}
-            </div>
-          </section>
+          {WALLPAPER_SECTIONS.map((section) => {
+            const sectionWallpapers = wallpapers.filter(
+              (w) => w.category === section.key || (section.key === "pattern" && w.id === "none")
+            );
+            if (sectionWallpapers.length === 0) return null;
+
+            return (
+              <section key={section.key} className="space-y-4">
+                <h3 className="text-[10px] font-black text-zinc-600 uppercase tracking-[0.4em] px-1">
+                  {section.label}
+                </h3>
+                <div className="grid grid-cols-4 sm:grid-cols-5 gap-3">
+                  {sectionWallpapers.map((w) => (
+                    <button
+                      key={w.id}
+                      onClick={() => {
+                        setChatWallpaper(w.value);
+                        handleUpdateChatPreferences({ chatWallpaper: w.value });
+                      }}
+                      className={`relative aspect-square rounded-2xl border flex flex-col items-center justify-center transition-all group overflow-hidden ${
+                        chatWallpaper === w.value ? "border-white scale-95 ring-2 ring-white/30" : "border-zinc-800/50 hover:border-zinc-600 active:scale-90"
+                      }`}
+                      title={w.name}
+                    >
+                      <WallpaperPreview wallpaper={w} />
+                      {w.name !== "None" && (
+                        <span className="absolute bottom-0 inset-x-0 bg-black/70 text-[7px] font-bold uppercase tracking-wider text-zinc-300 py-1 px-0.5 truncate text-center">
+                          {w.name}
+                        </span>
+                      )}
+                      {chatWallpaper === w.value && (
+                        <div className="absolute inset-0 bg-white/10 backdrop-blur-[1px] pointer-events-none"></div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </section>
+            );
+          })}
         </div>
 
         <div className="p-8 bg-zinc-900/20 border-t border-zinc-900">
@@ -149,7 +191,7 @@ export const ThemeSettings: React.FC<ThemeSettingsProps> = ({
               onClick={() => setShowThemeSettings(false)}
               className="w-full py-5 bg-white text-black rounded-3xl font-black uppercase tracking-widest text-xs hover:bg-zinc-200 transition-all active:scale-95 shadow-xl shadow-white/5"
            >
-              Save Changes
+              Lock It In
            </button>
         </div>
       </div>

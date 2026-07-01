@@ -1,6 +1,8 @@
 import React, { Fragment } from "react";
-import { Message, PresenceUser, Theme } from "../types";
+import { Message, PresenceUser, Theme, ReactionType } from "../types";
 import { renderMessage, getVideoPoster } from "../../../lib/utils";
+import { REACTION_EMOJIS, REACTION_OPTIONS } from "../constants";
+import { ReactionBurst } from "./ReactionBurst";
 
 interface MessageListProps {
   messages: Message[];
@@ -26,6 +28,9 @@ interface MessageListProps {
   handleDeleteMessage: (id: string) => void;
   handleUpdateMessage: (id: string, text: string) => void;
   handleToggleSaveMessage: (id: string) => void;
+  handleReactToMessage: (id: string, reaction: ReactionType) => void;
+  partnerBurstReaction?: ReactionType | null;
+  onPartnerBurstComplete?: () => void;
   setReplyingTo: (m: Message | null) => void;
   editingMessage: string | null;
   setEditingMessage: (id: string | null) => void;
@@ -60,6 +65,9 @@ export const MessageList: React.FC<MessageListProps> = ({
   handleDeleteMessage,
   handleUpdateMessage,
   handleToggleSaveMessage,
+  handleReactToMessage,
+  partnerBurstReaction = null,
+  onPartnerBurstComplete,
   setReplyingTo,
   editingMessage,
   setEditingMessage,
@@ -72,9 +80,46 @@ export const MessageList: React.FC<MessageListProps> = ({
   const [swipingMessageId, setSwipingMessageId] = React.useState<string | null>(null);
   const [swipeDistance, setSwipeDistance] = React.useState(0);
   const [zoomedAvatar, setZoomedAvatar] = React.useState<string | null>(null);
+  const [reactionPickerId, setReactionPickerId] = React.useState<string | null>(null);
+  const [burstReaction, setBurstReaction] = React.useState<ReactionType | null>(null);
+  const [longPressPickerId, setLongPressPickerId] = React.useState<string | null>(null);
   const touchStartRef = React.useRef<{ x: number; y: number } | null>(null);
+  const longPressTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressTriggeredRef = React.useRef(false);
+
+  const clearLongPressTimer = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  const handleReactionSelect = (messageId: string, reaction: ReactionType) => {
+    setReactionPickerId(null);
+    setLongPressPickerId(null);
+    setBurstReaction(reaction);
+    handleReactToMessage(messageId, reaction);
+    if (window.navigator.vibrate) window.navigator.vibrate(15);
+  };
+
+  const activeBurst = burstReaction || partnerBurstReaction;
+  const isPartnerBurst = !burstReaction && !!partnerBurstReaction;
+
+  const handleBurstComplete = () => {
+    if (burstReaction) {
+      setBurstReaction(null);
+    } else if (partnerBurstReaction) {
+      onPartnerBurstComplete?.();
+    }
+  };
 
   return (
+    <div className="relative flex-1 flex flex-col min-h-0">
+      <ReactionBurst
+        reaction={activeBurst}
+        subtle={isPartnerBurst}
+        onComplete={handleBurstComplete}
+      />
     <div
       ref={messagesContainerRef}
       onScroll={handleScroll}
@@ -157,7 +202,7 @@ export const MessageList: React.FC<MessageListProps> = ({
           <div className="w-16 h-16 bg-zinc-950 rounded-full flex items-center justify-center mx-auto border border-zinc-800 mb-6 shadow-inner">
             <span className={`text-xl ${activeTheme.accent}`}>✉</span>
           </div>
-          <p className="text-zinc-400 font-medium text-sm tracking-tight px-4 max-w-[200px]">
+          <p className="text-zinc-400 font-normal text-sm tracking-tight px-4 max-w-[200px]">
             Encrypted bridge active. Send a message to start.
           </p>
         </div>
@@ -166,7 +211,7 @@ export const MessageList: React.FC<MessageListProps> = ({
           {groupedMessages.map((group) => (
             <div key={group.date} className="flex flex-col relative">
               <div className="flex justify-center mb-4 sticky top-0 z-[40] -mx-4 py-2 pointer-events-none">
-                <div className="bg-zinc-800/80 text-zinc-400 text-[11px] font-bold uppercase tracking-widest px-4 py-1.5 rounded-full border border-zinc-700/50 shadow-sm backdrop-blur-sm pointer-events-auto">
+                <div className="bg-zinc-800/80 text-zinc-400 text-[11px] font-medium uppercase tracking-widest px-4 py-1.5 rounded-full border border-zinc-700/50 shadow-sm backdrop-blur-sm pointer-events-auto">
                   {group.label}
                 </div>
               </div>
@@ -190,30 +235,50 @@ export const MessageList: React.FC<MessageListProps> = ({
                     key={m._id}
                     id={`message-${m._id}`}
                     onTouchStart={(e) => {
+                      longPressTriggeredRef.current = false;
+                      clearLongPressTimer();
                       touchStartRef.current = {
                         x: e.touches[0].clientX,
                         y: e.touches[0].clientY
                       };
+                      if (!isMe && !isOptimistic) {
+                        longPressTimerRef.current = setTimeout(() => {
+                          longPressTriggeredRef.current = true;
+                          setLongPressPickerId(m._id);
+                          setReactionPickerId(m._id);
+                          if (window.navigator.vibrate) window.navigator.vibrate(20);
+                        }, 450);
+                      }
                     }}
                     onTouchMove={(e) => {
                       if (!touchStartRef.current) return;
                       const deltaX = e.touches[0].clientX - touchStartRef.current.x;
                       const deltaY = e.touches[0].clientY - touchStartRef.current.y;
+                      const distance = Math.hypot(deltaX, deltaY);
+
+                      if (distance > 10) {
+                        clearLongPressTimer();
+                      }
                       
                       // If horizontal swipe is dominant
-                      if (Math.abs(deltaX) > Math.abs(deltaY) && deltaX > 0) {
+                      if (!longPressTriggeredRef.current && Math.abs(deltaX) > Math.abs(deltaY) && deltaX > 0) {
                         setSwipingMessageId(m._id);
                         setSwipeDistance(Math.min(deltaX, 80));
                       }
                     }}
                     onTouchEnd={() => {
-                      if (swipeDistance > 60) {
+                      clearLongPressTimer();
+                      if (!longPressTriggeredRef.current && swipeDistance > 60) {
                         setReplyingTo(m);
                         if (window.navigator.vibrate) window.navigator.vibrate(10);
                       }
                       setSwipingMessageId(null);
                       setSwipeDistance(0);
                       touchStartRef.current = null;
+                      if (!longPressTriggeredRef.current) {
+                        setLongPressPickerId(null);
+                      }
+                      longPressTriggeredRef.current = false;
                     }}
                     style={{
                       transform: swipingMessageId === m._id ? `translateX(${swipeDistance}px)` : 'none',
@@ -253,7 +318,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                         }`}
                       >
                         <div
-                          className={`relative p-2.5 sm:p-3 text-sm font-medium shadow-sm border border-zinc-800/10 ${
+                          className={`relative p-2.5 sm:p-3 text-sm font-normal shadow-sm border border-zinc-800/10 ${
                             isMe 
                               ? `${activeTheme.bubbleMe} ${activeTheme.textMe || "text-white"} rounded-2xl rounded-tr-none` 
                               : `${activeTheme.bubblePartner} rounded-2xl rounded-tl-none`
@@ -273,10 +338,10 @@ export const MessageList: React.FC<MessageListProps> = ({
                                 }}
                                 className={`mb-2 p-2 rounded-xl border-l-2 border-white/20 ${isMe ? 'bg-white/10' : 'bg-zinc-950/50'} text-[10px] opacity-80 backdrop-blur-md cursor-pointer hover:bg-white/20 transition-all active:scale-95`}
                               >
-                                  <p className="font-black uppercase tracking-widest mb-0.5 text-[7px] opacity-50">
+                                  <p className="font-medium uppercase tracking-widest mb-0.5 text-[7px] opacity-50">
                                       {m.repliedTo.createdBy}
                                   </p>
-                                  <p className="line-clamp-1 italic font-bold leading-relaxed">{m.repliedTo.text || 'Media'}</p>
+                                  <p className="line-clamp-1 italic font-normal leading-relaxed">{m.repliedTo.text || 'Media'}</p>
                               </div>
                            )}
 
@@ -384,7 +449,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                               </div>
                           )}
 
-                          <div className={`text-[8px] mt-1 flex items-center gap-1 font-bold uppercase tracking-wider opacity-60 ${isMe ? 'justify-end' : 'justify-start'}`}>
+                          <div className={`text-[8px] mt-1 flex items-center gap-1 font-normal uppercase tracking-wider opacity-60 ${isMe ? 'justify-end' : 'justify-start'}`}>
                               {new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                               {isMe && !isOptimistic && (
                                   <span className={isRead ? "text-blue-300" : "text-white/50"}>
@@ -396,7 +461,42 @@ export const MessageList: React.FC<MessageListProps> = ({
                                   </span>
                               )}
                           </div>
+
+                          {(m.reactions || []).length > 0 && (
+                            <div className={`absolute -bottom-2 ${isMe ? 'right-2' : 'left-2'} flex items-center gap-0.5 px-1.5 py-0.5 bg-zinc-900/90 border border-zinc-700/50 rounded-full shadow-lg backdrop-blur-sm reaction-badge-pop`}>
+                              {(m.reactions || []).map((r) => (
+                                <span key={r.user} className="text-sm leading-none" title={r.user}>
+                                  {REACTION_EMOJIS[r.type]}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
+
+                        {reactionPickerId === m._id && !isMe && (
+                          <div
+                            className={`absolute z-20 flex items-center gap-1 px-2 py-1.5 bg-zinc-900/95 border border-zinc-700/60 rounded-full shadow-2xl backdrop-blur-md animate-in fade-in duration-200 ${
+                              longPressPickerId === m._id ? "left-0 -top-12" : "left-0 top-full mt-1"
+                            }`}
+                          >
+                            {REACTION_OPTIONS.map((opt) => {
+                              const myReaction = (m.reactions || []).find(r => r.user === currentUser);
+                              const isActive = myReaction?.type === opt.type;
+                              return (
+                                <button
+                                  key={opt.type}
+                                  onClick={() => handleReactionSelect(m._id, opt.type)}
+                                  className={`p-1.5 rounded-full text-lg transition-all active:scale-125 hover:scale-110 ${
+                                    isActive ? 'bg-white/20 ring-2 ring-white/30 scale-110' : 'hover:bg-zinc-800'
+                                  }`}
+                                  title={opt.label}
+                                >
+                                  {REACTION_EMOJIS[opt.type]}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
 
                         {/* Message Actions - Now below the bubble */}
                         <div className={`flex items-center gap-1 mt-1 px-1 transition-all duration-300 ${isMe ? 'flex-row-reverse' : 'flex-row'} opacity-0 group-hover/msg:opacity-100`}>
@@ -407,6 +507,26 @@ export const MessageList: React.FC<MessageListProps> = ({
                           >
                               <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
                           </button>
+                          {!isMe && !isOptimistic && (
+                            <button
+                              onClick={() => {
+                                setLongPressPickerId(null);
+                                setReactionPickerId(reactionPickerId === m._id ? null : m._id);
+                              }}
+                              className={`p-1.5 bg-zinc-900/50 border border-zinc-800/50 rounded-full transition-all active:scale-90 ${
+                                reactionPickerId === m._id || (m.reactions || []).some(r => r.user === currentUser)
+                                  ? 'text-pink-400 border-pink-500/50'
+                                  : 'text-zinc-500 hover:text-white hover:border-zinc-700'
+                              }`}
+                              title="React"
+                            >
+                              <span className="text-[10px] leading-none">
+                                {(m.reactions || []).find(r => r.user === currentUser)
+                                  ? REACTION_EMOJIS[(m.reactions || []).find(r => r.user === currentUser)!.type]
+                                  : '😊'}
+                              </span>
+                            </button>
+                          )}
                           <button 
                               onClick={() => handleToggleSaveMessage(m._id)}
                               className={`p-1.5 bg-zinc-900/50 border border-zinc-800/50 rounded-full transition-all active:scale-90 ${
@@ -478,6 +598,7 @@ export const MessageList: React.FC<MessageListProps> = ({
           </div>
         </div>
       )}
+    </div>
     </div>
   );
 }; 

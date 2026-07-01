@@ -53,7 +53,8 @@ export function useAppData(view: ViewType, messageLimit: number) {
         const hasChange = prev.some((m, i) => 
           m._id !== finalMessages[i]._id || 
           m.text !== finalMessages[i].text ||
-          (m.savedBy?.length || 0) !== (finalMessages[i].savedBy?.length || 0)
+          (m.savedBy?.length || 0) !== (finalMessages[i].savedBy?.length || 0) ||
+          JSON.stringify(m.reactions || []) !== JSON.stringify(finalMessages[i].reactions || [])
         );
         if (!hasChange) return prev;
       }

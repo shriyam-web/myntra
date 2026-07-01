@@ -105,10 +105,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           <div className="flex items-center gap-4 overflow-hidden">
             <div className={`w-1.5 h-10 rounded-full ${activeTheme.bubbleMe} shrink-0`}></div>
             <div className="overflow-hidden">
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500 mb-1">
+              <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-zinc-500 mb-1">
                 Replying to {replyingTo.createdBy}
               </p>
-              <p className="text-xs text-white/80 line-clamp-1 font-bold italic">
+              <p className="text-xs text-white/80 line-clamp-1 font-normal italic">
                 {replyingTo.text || "Media Content"}
               </p>
             </div>
@@ -228,7 +228,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         <div className="flex-1 flex flex-col gap-2">
           {isUploading && (
              <div className="w-full flex flex-col gap-1 mb-2">
-                <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-zinc-500 px-1">
+                <div className="flex justify-between items-center text-[10px] font-medium uppercase tracking-widest text-zinc-500 px-1">
                     <span>{isMediaUploading ? "Uploading Media..." : "Sending Message..."}</span>
                     {isMediaUploading && <span>{uploadProgress}%</span>}
                 </div>
@@ -270,7 +270,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                     handleSendMessage();
                   }
                 }}
-                className="w-full bg-transparent text-white text-sm font-bold py-4 px-1 outline-none no-scrollbar resize-none max-h-40 placeholder:text-zinc-800"
+                className="w-full bg-transparent text-white text-sm font-normal py-4 px-1 outline-none no-scrollbar resize-none max-h-40 placeholder:text-zinc-800"
                 placeholder="Say, Hello!"
                 rows={1}
                 autoFocus

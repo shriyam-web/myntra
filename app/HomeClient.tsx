@@ -6,7 +6,7 @@ import { useAppData } from "./Home/hooks/useAppData";
 import { useAudio } from "./Home/hooks/useAudio";
 import { usePresence } from "./Home/hooks/usePresence";
 import { themes, wallpapers } from "./Home/constants";
-import { ViewType, Message, UserType, TabType } from "./Home/types";
+import { ViewType, Message, UserType, TabType, ReactionType, MessageReaction } from "./Home/types";
 
 // Components
 import { LoginView } from "./Home/components/LoginView";
@@ -19,12 +19,13 @@ import { PlansTab } from "./Home/components/PlansTab";
 import { TimelineTab } from "./Home/components/TimelineTab";
 import { MessageList } from "./Home/components/MessageList";
 import { ChatInput } from "./Home/components/ChatInput";
+import { ChatWallpaper } from "./Home/components/ChatWallpaper";
 import { ThemeSettings } from "./Home/components/ThemeSettings";
 import { ClearHistoryModal } from "./Home/components/ClearHistoryModal";
-import { SoundPrompt } from "./Home/components/SoundPrompt";
 import { MediaTab } from "./Home/components/MediaTab";
 import { CallOverlay } from "./Home/components/CallOverlay";
 import { useCall } from "./Home/hooks/useCall";
+import { useRealtimeSync } from "./Home/hooks/useRealtimeSync";
 import { CallLogsTab } from "./Home/components/CallLogsTab";
 
 export default function HomeClient() {
@@ -98,7 +99,6 @@ export default function HomeClient() {
   const [showThemeSettings, setShowThemeSettings] = useState(false);
   const [showClearHistoryModal, setShowClearHistoryModal] = useState(false);
   const [includeSavedInDelete, setIncludeSavedInDelete] = useState(false);
-  const [showSoundPrompt, setShowSoundPrompt] = useState(false);
   
   const [chatWallpaper, setChatWallpaper] = useState<string>("");
   const [chatBgColor, setChatBgColor] = useState<string>("bg-zinc-900/50");
@@ -124,6 +124,8 @@ export default function HomeClient() {
   const rafRef = useRef<number | null>(null);
   const lastMessageIdRef = useRef<string | null>(null);
   const prevLastMessageIdRef = useRef<string | null>(null);
+  const reactionsSnapshotRef = useRef<Map<string, string>>(new Map());
+  const [partnerBurstReaction, setPartnerBurstReaction] = useState<ReactionType | null>(null);
 
   const currentUser = view;
 
@@ -174,28 +176,24 @@ export default function HomeClient() {
     }
   }, [activeTab, messages, messageLimit, showScrollButton, currentUser]);
 
+  useRealtimeSync(view, useCallback(() => {
+    fetchMessagesOnly(true);
+  }, [fetchMessagesOnly]));
+
   useEffect(() => {
     if (view !== "login") {
       fetchInitialData();
-      // Initial presence update
       actions.updatePresence(view as string);
-      
-      // Separate presence update interval (every 10 seconds)
+
       const presenceInterval = setInterval(() => {
         actions.updatePresence(view as string);
       }, 10000);
 
-      // Data fetching interval (every 4 seconds)
-      const fetchInterval = setInterval(() => {
-        fetchMessagesOnly(true);
-      }, 4000);
-
       return () => {
         clearInterval(presenceInterval);
-        clearInterval(fetchInterval);
       };
     }
-  }, [view, fetchInitialData, fetchMessagesOnly]);
+  }, [view, fetchInitialData]);
 
   useEffect(() => {
     if (messages.length > 0) {
@@ -206,6 +204,38 @@ export default function HomeClient() {
       }
     }
   }, [messages, currentUser, playSound]);
+
+  useEffect(() => {
+    if (activeTab !== "messages" || view === "login") return;
+
+    const partnerUsername = currentUser.trim().toLowerCase() === "alpha 1" ? "delta 1" : "alpha 1";
+
+    for (const m of messages) {
+      const current = JSON.stringify(m.reactions || []);
+      const prev = reactionsSnapshotRef.current.get(m._id);
+
+      if (prev !== undefined && prev !== current) {
+        const prevReactions: MessageReaction[] = JSON.parse(prev);
+        const currReactions = m.reactions || [];
+        const partnerReaction = currReactions.find(
+          (r) => r.user.trim().toLowerCase() === partnerUsername
+        );
+        const prevPartnerReaction = prevReactions.find(
+          (r) => r.user.trim().toLowerCase() === partnerUsername
+        );
+
+        if (
+          partnerReaction &&
+          (!prevPartnerReaction || prevPartnerReaction.type !== partnerReaction.type)
+        ) {
+          setPartnerBurstReaction(partnerReaction.type);
+          break;
+        }
+      }
+
+      reactionsSnapshotRef.current.set(m._id, current);
+    }
+  }, [messages, currentUser, activeTab, view]);
 
   useEffect(() => {
     const checkIncognito = async () => {
@@ -256,10 +286,8 @@ export default function HomeClient() {
     const lowerPassword = password.toLowerCase().trim();
     if (lowerPassword === "icai") {
       setView("alpha 1");
-      setShowSoundPrompt(true);
     } else if (lowerPassword === "gamma2") {
       setView("delta 1");
-      setShowSoundPrompt(true);
     }
   };
 
@@ -576,6 +604,34 @@ export default function HomeClient() {
     }
   };
 
+  const handleReactToMessage = async (id: string, reaction: ReactionType) => {
+    try {
+      setMessages(prev => prev.map(m => {
+        if (m._id !== id) return m;
+        const existing = (m.reactions || []).find(r => r.user === currentUser);
+        let newReactions;
+        if (existing?.type === reaction) {
+          newReactions = (m.reactions || []).filter(r => r.user !== currentUser);
+        } else if (existing) {
+          newReactions = (m.reactions || []).map(r =>
+            r.user === currentUser ? { user: currentUser, type: reaction } : r
+          );
+        } else {
+          newReactions = [...(m.reactions || []), { user: currentUser, type: reaction }];
+        }
+        return { ...m, reactions: newReactions };
+      }));
+
+      const updated = await actions.reactToMessage(id, currentUser, reaction);
+      if (updated) {
+        setMessages(prev => prev.map(m => m._id === id ? updated : m));
+      }
+    } catch (error) {
+      console.error('Failed to react to message:', error);
+      fetchInitialData();
+    }
+  };
+
   const handleDeleteAllMessages = async () => {
     try {
       // Optimistic clear for messages only
@@ -808,7 +864,7 @@ export default function HomeClient() {
              <div className={`flex items-center justify-between px-1 ${isMessageExpanded ? "p-4 pb-0" : ""}`}>
                 <div className="flex flex-col items-start gap-1">
                   <div className="flex items-center gap-2">
-                    <span className={`text-[10px] font-bold uppercase tracking-wider ${getPartnerStatus() === "Online" ? "text-green-500/80" : "text-zinc-500"}`}>
+                    <span className={`text-[10px] font-medium uppercase tracking-wider ${getPartnerStatus() === "Online" ? "text-green-500/80" : "text-zinc-500"}`}>
                       {getPartnerStatus() || "Offline"}
                     </span>
                     {lastRefreshedAt && (
@@ -894,7 +950,7 @@ export default function HomeClient() {
 
              <div className={`relative flex-1 flex flex-col bg-zinc-900/50 rounded-[2.5rem] border border-zinc-800/50 shadow-2xl overflow-hidden backdrop-blur-xl ${isMessageExpanded ? "rounded-none border-none" : ""}`}>
                 {chatWallpaper && (
-                    <div className="absolute inset-0 pointer-events-none opacity-20" style={{ backgroundImage: `url(${chatWallpaper})`, backgroundSize: 'cover', backgroundPosition: 'center' }}></div>
+                    <ChatWallpaper wallpaperValue={chatWallpaper} wallpapers={wallpapers} />
                 )}
                 
                 <MessageList 
@@ -921,6 +977,9 @@ export default function HomeClient() {
                     handleDeleteMessage={handleDeleteMessage}
                     handleUpdateMessage={handleUpdateMessage}
                     handleToggleSaveMessage={handleToggleSaveMessage}
+                    handleReactToMessage={handleReactToMessage}
+                    partnerBurstReaction={partnerBurstReaction}
+                    onPartnerBurstComplete={() => setPartnerBurstReaction(null)}
                     setReplyingTo={setReplyingTo}
                     editingMessage={editingMessage}
                     setEditingMessage={setEditingMessage}
@@ -977,12 +1036,6 @@ export default function HomeClient() {
         includeSavedInDelete={includeSavedInDelete}
         setIncludeSavedInDelete={setIncludeSavedInDelete}
         handleDeleteAllMessages={handleDeleteAllMessages}
-      />
-
-      <SoundPrompt 
-        showSoundPrompt={showSoundPrompt}
-        setShowSoundPrompt={setShowSoundPrompt}
-        handleToggleSound={handleToggleSound}
       />
 
       <CallOverlay 

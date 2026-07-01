@@ -1,6 +1,7 @@
 "use server";
 
 import dbConnect from "./mongodb";
+import { notifyRealtime } from "./realtime-hub";
 import { Ticket, Wishlist, Plan, TimelineDate, Message, User, CallLog } from "../models/schemas";
 import { revalidatePath, unstable_noStore as noStore } from "next/cache";
 import { v2 as cloudinary } from "cloudinary";
@@ -409,6 +410,7 @@ export async function sendMessage(text: string, createdBy: string, imageUrls?: s
       })();
     }
 
+    notifyRealtime();
     return JSON.parse(JSON.stringify(message));
   } catch (error) {
     console.error('Failed to create message:', error);
@@ -421,6 +423,7 @@ export async function updateMessage(id: string, text: string) {
     await dbConnect();
     const message = await Message.findByIdAndUpdate(id, { text }, { new: true });
     revalidatePath('/');
+    notifyRealtime();
     return JSON.parse(JSON.stringify(message));
   } catch (error) {
     console.error('Failed to update message:', error);
@@ -473,6 +476,7 @@ export async function deleteMessage(id: string, deleteFromCloudinaryToo: boolean
 
     await Message.findByIdAndDelete(id);
     revalidatePath('/');
+    notifyRealtime();
   } catch (error) {
     console.error('Failed to delete message:', error);
     throw new Error('Failed to delete message. Database connection error.');
@@ -492,10 +496,45 @@ export async function toggleSaveMessage(id: string, username: string) {
       await Message.findByIdAndUpdate(id, { $addToSet: { savedBy: username } });
     }
     revalidatePath('/');
+    notifyRealtime();
     return { saved: !isSaved };
   } catch (error) {
     console.error('Failed to toggle save message:', error);
     throw new Error('Failed to toggle save message.');
+  }
+}
+
+export async function reactToMessage(id: string, username: string, reactionType: string) {
+  try {
+    await dbConnect();
+    const message = await Message.findById(id);
+    if (!message) throw new Error("Message not found");
+
+    const existing = (message.reactions || []).find((r: { user: string }) => r.user === username);
+    let updatedReactions;
+
+    if (existing && existing.type === reactionType) {
+      updatedReactions = (message.reactions || []).filter((r: { user: string }) => r.user !== username);
+    } else if (existing) {
+      updatedReactions = (message.reactions || []).map((r: { user: string; type: string }) =>
+        r.user === username ? { user: username, type: reactionType } : r
+      );
+    } else {
+      updatedReactions = [...(message.reactions || []), { user: username, type: reactionType }];
+    }
+
+    const updated = await Message.findByIdAndUpdate(
+      id,
+      { reactions: updatedReactions },
+      { new: true }
+    ).populate('repliedTo');
+
+    revalidatePath('/');
+    notifyRealtime();
+    return JSON.parse(JSON.stringify(updated));
+  } catch (error) {
+    console.error('Failed to react to message:', error);
+    throw new Error('Failed to react to message.');
   }
 }
 
@@ -559,6 +598,7 @@ export async function deleteAllMessages(deleteForEveryone = false, username?: st
       }
     }
     revalidatePath('/');
+    notifyRealtime();
   } catch (error) {
     console.error('Failed to clear chat:', error);
     throw new Error('Failed to clear chat. Database connection error.');

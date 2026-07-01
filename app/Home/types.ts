@@ -1,5 +1,12 @@
 export type UserType = "alpha 1" | "delta 1";
 
+export type ReactionType = "sad" | "love" | "funny" | "confused" | "angry";
+
+export interface MessageReaction {
+  user: string;
+  type: ReactionType;
+}
+
 export interface Ticket {
   _id: string;
   description: string;
@@ -18,6 +25,7 @@ export interface Message {
   createdAt: string;
   createdBy: UserType;
   savedBy?: string[];
+  reactions?: MessageReaction[];
   repliedTo?: {
     _id: string;
     text?: string;
@@ -88,5 +96,7 @@ export interface Wallpaper {
   id: string;
   name: string;
   value: string;
-  type: string;
+  type: "emoji" | "image" | "gradient" | "animated";
+  preview?: string;
+  category?: "pattern" | "gradient" | "scene" | "wild";
 }
