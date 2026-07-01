@@ -857,7 +857,7 @@ export default function HomeClient() {
         {activeTab === "messages" && (
           <>
             {currentUser.trim().toLowerCase() === "alpha 1" && (
-              <EmeButton isMessageExpanded={isMessageExpanded} />
+              <EmeButton />
             )}
           <div className={`flex flex-col ${
             isMessageExpanded
