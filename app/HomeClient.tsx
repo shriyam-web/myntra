@@ -123,7 +123,12 @@ export default function HomeClient() {
   const lastMessageIdRef = useRef<string | null>(null);
   const prevLastMessageIdRef = useRef<string | null>(null);
   const reactionsSnapshotRef = useRef<Map<string, string>>(new Map());
+  const shownReactionBurstsRef = useRef<Set<string>>(new Set());
   const [partnerBurstReaction, setPartnerBurstReaction] = useState<ReactionType | null>(null);
+
+  const handlePartnerBurstComplete = useCallback(() => {
+    setPartnerBurstReaction(null);
+  }, []);
 
   const currentUser = view;
 
@@ -215,32 +220,26 @@ export default function HomeClient() {
   useEffect(() => {
     if (activeTab !== "messages" || view === "login") return;
 
-    const partnerUsername = currentUser.trim().toLowerCase() === "alpha 1" ? "delta 1" : "alpha 1";
+    const partnerUsername =
+      currentUser.trim().toLowerCase() === "alpha 1" ? "delta 1" : "alpha 1";
 
     for (const m of messages) {
-      const current = JSON.stringify(m.reactions || []);
-      const prev = reactionsSnapshotRef.current.get(m._id);
+      const partnerReaction = (m.reactions || []).find(
+        (r) => r.user.trim().toLowerCase() === partnerUsername
+      );
+      const partnerSig = partnerReaction?.type ?? "";
+      const prevSig = reactionsSnapshotRef.current.get(m._id);
 
-      if (prev !== undefined && prev !== current) {
-        const prevReactions: MessageReaction[] = JSON.parse(prev);
-        const currReactions = m.reactions || [];
-        const partnerReaction = currReactions.find(
-          (r) => r.user.trim().toLowerCase() === partnerUsername
-        );
-        const prevPartnerReaction = prevReactions.find(
-          (r) => r.user.trim().toLowerCase() === partnerUsername
-        );
-
-        if (
-          partnerReaction &&
-          (!prevPartnerReaction || prevPartnerReaction.type !== partnerReaction.type)
-        ) {
-          setPartnerBurstReaction(partnerReaction.type);
+      if (prevSig !== undefined && partnerSig && partnerSig !== prevSig) {
+        const burstKey = `${m._id}:${partnerSig}`;
+        if (!shownReactionBurstsRef.current.has(burstKey)) {
+          shownReactionBurstsRef.current.add(burstKey);
+          setPartnerBurstReaction(partnerReaction!.type);
           break;
         }
       }
 
-      reactionsSnapshotRef.current.set(m._id, current);
+      reactionsSnapshotRef.current.set(m._id, partnerSig);
     }
   }, [messages, currentUser, activeTab, view]);
 
@@ -996,7 +995,7 @@ export default function HomeClient() {
                     handleTogglePinMessage={handleTogglePinMessage}
                     handleReactToMessage={handleReactToMessage}
                     partnerBurstReaction={partnerBurstReaction}
-                    onPartnerBurstComplete={() => setPartnerBurstReaction(null)}
+                    onPartnerBurstComplete={handlePartnerBurstComplete}
                     setReplyingTo={setReplyingTo}
                     editingMessage={editingMessage}
                     setEditingMessage={setEditingMessage}

@@ -188,13 +188,13 @@ export const MessageList: React.FC<MessageListProps> = ({
   const activeBurst = burstReaction || partnerBurstReaction;
   const isPartnerBurst = !burstReaction && !!partnerBurstReaction;
 
-  const handleBurstComplete = () => {
+  const handleBurstComplete = React.useCallback(() => {
     if (burstReaction) {
       setBurstReaction(null);
     } else if (partnerBurstReaction) {
       onPartnerBurstComplete?.();
     }
-  };
+  }, [burstReaction, partnerBurstReaction, onPartnerBurstComplete]);
 
   const reactionPickerMessage = React.useMemo(
     () => (reactionPickerId ? messages.find((m) => m._id === reactionPickerId) : null),
