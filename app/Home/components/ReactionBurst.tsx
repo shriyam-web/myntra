@@ -29,22 +29,22 @@ export const ReactionBurst: React.FC<ReactionBurstProps> = ({ reaction, onComple
 
     burstKeyRef.current += 1;
     const emoji = REACTION_EMOJIS[reaction];
-    const count = subtle ? 8 : 18;
+    const count = subtle ? 2 : 3;
     const newParticles: Particle[] = Array.from({ length: count }, (_, i) => ({
       id: burstKeyRef.current * 100 + i,
       emoji,
-      left: 10 + Math.random() * 80,
-      delay: Math.random() * (subtle ? 0.3 : 0.4),
-      duration: (subtle ? 1.4 : 1.8) + Math.random() * (subtle ? 0.8 : 1.2),
-      size: (subtle ? 0.9 : 1.2) + Math.random() * (subtle ? 0.8 : 1.6),
-      drift: (Math.random() - 0.5) * (subtle ? 80 : 120),
+      left: 20 + (i / Math.max(count - 1, 1)) * 60 + (Math.random() - 0.5) * 12,
+      delay: i * 0.08 + Math.random() * 0.06,
+      duration: 0.85 + Math.random() * 0.25,
+      size: 1.1 + Math.random() * 0.5,
+      drift: (Math.random() - 0.5) * 50,
     }));
     setParticles(newParticles);
 
     const timer = setTimeout(() => {
       setParticles([]);
       onComplete();
-    }, subtle ? 2400 : 3200);
+    }, 1150);
 
     return () => clearTimeout(timer);
   }, [reaction, onComplete, subtle]);

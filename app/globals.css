@@ -133,15 +133,15 @@ body {
 
 @keyframes reaction-float {
   0% {
-    transform: translateY(0) translateX(0) scale(0.3) rotate(0deg);
+    transform: translateY(0) translateX(0) scale(0.4) rotate(0deg);
     opacity: 0;
   }
-  15% {
+  20% {
     opacity: 1;
-    transform: translateY(-10vh) translateX(0) scale(1.2) rotate(10deg);
+    transform: translateY(-6vh) translateX(0) scale(1.15) rotate(8deg);
   }
   100% {
-    transform: translateY(-90vh) translateX(var(--drift, 0px)) scale(0.6) rotate(360deg);
+    transform: translateY(-32vh) translateX(var(--drift, 0px)) scale(0.7) rotate(24deg);
     opacity: 0;
   }
 }
