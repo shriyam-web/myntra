@@ -100,6 +100,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     URL.revokeObjectURL(urlToRemove);
   };
 
+  const canSend =
+    (newMessage.trim().length > 0 ||
+      selectedImages.length > 0 ||
+      selectedVideos.length > 0) &&
+    !(isUploading && isMediaUploading);
+
   return (
     <div className={`shrink-0 bg-zinc-900/70 backdrop-blur-3xl border-t border-zinc-800/50 z-20 ${
       isMessageExpanded
@@ -286,17 +292,26 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         </div>
         <button
           type="submit"
-          disabled={(!newMessage.trim() && selectedImages.length === 0 && selectedVideos.length === 0) || (isUploading && isMediaUploading)}
-          className={`h-14 w-14 flex items-center justify-center rounded-2xl transition-all shadow-xl active:scale-90 shrink-0 ${
-            (newMessage.trim() || selectedImages.length > 0 || selectedVideos.length > 0) && !(isUploading && isMediaUploading)
-              ? `${activeTheme.bubbleMe} text-white hover:opacity-90`
-              : "bg-zinc-800/50 text-zinc-700 cursor-not-allowed border border-zinc-800/50"
+          disabled={!canSend}
+          aria-label="Send message"
+          className={`relative h-12 w-12 flex items-center justify-center rounded-full shrink-0 transition-all duration-300 ease-out ${
+            canSend
+              ? `${activeTheme.bubbleMe} text-white shadow-lg ${activeTheme.shadow} hover:brightness-110 active:scale-90`
+              : "bg-zinc-800/35 text-zinc-600 opacity-45 cursor-not-allowed"
           }`}
         >
           {isUploading ? (
-             <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
+            <div className="w-5 h-5 border-2 border-white/25 border-t-white rounded-full animate-spin" />
           ) : (
-             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="translate-x-0.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              className={`w-5 h-5 transition-transform duration-300 ${canSend ? "translate-x-px" : ""}`}
+              aria-hidden
+            >
+              <path d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z" />
+            </svg>
           )}
         </button>
       </form>
