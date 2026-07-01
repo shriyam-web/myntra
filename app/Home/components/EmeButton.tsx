@@ -4,29 +4,56 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import * as actions from "../../../lib/actions";
 import { MAINTENANCE_REDIRECT_URL } from "../../../lib/maintenance";
 
-const STORAGE_KEY = "eme_button_position";
 const TAP_THRESHOLD_PX = 8;
+const BUTTON_WIDTH = 72;
+const BUTTON_HEIGHT = 40;
 
 interface Position {
   x: number;
   y: number;
 }
 
-function getDefaultPosition(): Position {
+interface EmeButtonProps {
+  isMessageExpanded: boolean;
+}
+
+function storageKey(expanded: boolean) {
+  return expanded ? "eme_button_position_max" : "eme_button_position_min";
+}
+
+function getDefaultPosition(expanded: boolean): Position {
   if (typeof window === "undefined") return { x: 0, y: 0 };
-  const width = 72;
-  const height = 40;
+
+  const x = Math.max(12, window.innerWidth - BUTTON_WIDTH - 16);
+
+  if (expanded) {
+    return {
+      x,
+      y: Math.max(12, window.innerHeight / 2 - BUTTON_HEIGHT / 2),
+    };
+  }
+
   return {
-    x: Math.max(12, window.innerWidth - width - 16),
-    y: Math.max(12, window.innerHeight - height - 100),
+    x,
+    y: Math.max(12, window.innerHeight - BUTTON_HEIGHT - 88),
   };
 }
 
-function loadPosition(): Position {
+function clampPosition(pos: Position): Position {
+  if (typeof window === "undefined") return pos;
+  const maxX = window.innerWidth - BUTTON_WIDTH - 8;
+  const maxY = window.innerHeight - BUTTON_HEIGHT - 8;
+  return {
+    x: Math.min(Math.max(8, pos.x), maxX),
+    y: Math.min(Math.max(8, pos.y), maxY),
+  };
+}
+
+function loadPosition(expanded: boolean): Position {
   if (typeof window === "undefined") return { x: 0, y: 0 };
   try {
-    const raw = sessionStorage.getItem(STORAGE_KEY);
-    if (!raw) return getDefaultPosition();
+    const raw = sessionStorage.getItem(storageKey(expanded));
+    if (!raw) return getDefaultPosition(expanded);
     const parsed = JSON.parse(raw) as Position;
     if (typeof parsed.x === "number" && typeof parsed.y === "number") {
       return clampPosition(parsed);
@@ -34,22 +61,10 @@ function loadPosition(): Position {
   } catch {
     // ignore
   }
-  return getDefaultPosition();
+  return getDefaultPosition(expanded);
 }
 
-function clampPosition(pos: Position): Position {
-  if (typeof window === "undefined") return pos;
-  const width = 72;
-  const height = 40;
-  const maxX = window.innerWidth - width - 8;
-  const maxY = window.innerHeight - height - 8;
-  return {
-    x: Math.min(Math.max(8, pos.x), maxX),
-    y: Math.min(Math.max(8, pos.y), maxY),
-  };
-}
-
-export const EmeButton: React.FC = () => {
+export const EmeButton: React.FC<EmeButtonProps> = ({ isMessageExpanded }) => {
   const [position, setPosition] = useState<Position | null>(null);
   const [isEnabling, setIsEnabling] = useState(false);
   const dragRef = useRef<{
@@ -62,21 +77,28 @@ export const EmeButton: React.FC = () => {
   } | null>(null);
 
   useEffect(() => {
-    setPosition(loadPosition());
+    setPosition(loadPosition(isMessageExpanded));
+  }, [isMessageExpanded]);
 
+  useEffect(() => {
     const handleResize = () => {
-      setPosition((prev) => (prev ? clampPosition(prev) : getDefaultPosition()));
+      setPosition((prev) =>
+        prev ? clampPosition(prev) : getDefaultPosition(isMessageExpanded)
+      );
     };
 
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
-  }, []);
+  }, [isMessageExpanded]);
 
-  const persistPosition = useCallback((pos: Position) => {
-    const next = clampPosition(pos);
-    setPosition(next);
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-  }, []);
+  const persistPosition = useCallback(
+    (pos: Position) => {
+      const next = clampPosition(pos);
+      setPosition(next);
+      sessionStorage.setItem(storageKey(isMessageExpanded), JSON.stringify(next));
+    },
+    [isMessageExpanded]
+  );
 
   const triggerEmergency = useCallback(async () => {
     if (isEnabling) return;

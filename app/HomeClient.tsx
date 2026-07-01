@@ -29,6 +29,7 @@ import { CallOverlay } from "./Home/components/CallOverlay";
 import { useCall } from "./Home/hooks/useCall";
 import { useRealtimeSync } from "./Home/hooks/useRealtimeSync";
 import { CallLogsTab } from "./Home/components/CallLogsTab";
+import { MAINTENANCE_REDIRECT_URL } from "../lib/maintenance";
 
 export default function HomeClient() {
   const [isIncognito, setIsIncognito] = useState<boolean | null>(null);
@@ -52,7 +53,6 @@ export default function HomeClient() {
     hasMoreMessages,
     isRefreshing,
     maintenanceMode,
-    maintenanceEnabledAt,
     fetchInitialData,
     fetchMessagesOnly,
     fetchAllMedia
@@ -209,6 +209,20 @@ export default function HomeClient() {
       };
     }
   }, [view, fetchInitialData]);
+
+  useEffect(() => {
+    void actions.getMaintenanceStatus().then((status) => {
+      if (status.maintenanceMode) {
+        window.location.replace(MAINTENANCE_REDIRECT_URL);
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    if (maintenanceMode) {
+      window.location.replace(MAINTENANCE_REDIRECT_URL);
+    }
+  }, [maintenanceMode]);
 
   useEffect(() => {
     if (messages.length > 0) {
@@ -857,30 +871,13 @@ export default function HomeClient() {
         {activeTab === "messages" && (
           <>
             {currentUser.trim().toLowerCase() === "alpha 1" && (
-              <EmeButton />
+              <EmeButton isMessageExpanded={isMessageExpanded} />
             )}
           <div className={`flex flex-col ${
             isMessageExpanded
               ? "fixed inset-0 z-[60] bg-zinc-950 h-[100dvh] max-h-[100dvh] overflow-hidden pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)]"
               : "gap-4 animate-in fade-in slide-in-from-bottom-4 duration-700"
           }`}>
-             {maintenanceMode && currentUser.trim().toLowerCase() === "delta 1" && (
-               <div className={`shrink-0 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 ${
-                 isMessageExpanded ? "mx-4 mt-3" : "mb-3"
-               }`}>
-                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-300 mb-1">
-                   Maintenance mode active
-                 </p>
-                 <p className="text-xs text-amber-100/80 leading-relaxed">
-                   Alpha 1 turned on the decoy redirect. New visits go elsewhere — you can still chat here until you refresh.
-                   {maintenanceEnabledAt && (
-                     <span className="block mt-1 text-amber-200/50">
-                       Since {new Date(maintenanceEnabledAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                     </span>
-                   )}
-                 </p>
-               </div>
-             )}
              <div className={`flex items-center justify-between shrink-0 ${
                isMessageExpanded ? "px-4 py-3 border-b border-zinc-800/60 bg-zinc-950/90 backdrop-blur-xl" : "px-1"
              }`}>
