@@ -22,6 +22,7 @@ import { MessageList } from "./Home/components/MessageList";
 import { ChatInput } from "./Home/components/ChatInput";
 import { ChatWallpaper } from "./Home/components/ChatWallpaper";
 import { ThemeSettings } from "./Home/components/ThemeSettings";
+import { EmeButton } from "./Home/components/EmeButton";
 import { ClearHistoryModal } from "./Home/components/ClearHistoryModal";
 import { MediaTab } from "./Home/components/MediaTab";
 import { CallOverlay } from "./Home/components/CallOverlay";
@@ -50,6 +51,8 @@ export default function HomeClient() {
     users, setUsers,
     hasMoreMessages,
     isRefreshing,
+    maintenanceMode,
+    maintenanceEnabledAt,
     fetchInitialData,
     fetchMessagesOnly,
     fetchAllMedia
@@ -852,11 +855,32 @@ export default function HomeClient() {
         )}
 
         {activeTab === "messages" && (
+          <>
+            {currentUser.trim().toLowerCase() === "alpha 1" && (
+              <EmeButton isMessageExpanded={isMessageExpanded} />
+            )}
           <div className={`flex flex-col ${
             isMessageExpanded
               ? "fixed inset-0 z-[60] bg-zinc-950 h-[100dvh] max-h-[100dvh] overflow-hidden pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)]"
               : "gap-4 animate-in fade-in slide-in-from-bottom-4 duration-700"
           }`}>
+             {maintenanceMode && currentUser.trim().toLowerCase() === "delta 1" && (
+               <div className={`shrink-0 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 ${
+                 isMessageExpanded ? "mx-4 mt-3" : "mb-3"
+               }`}>
+                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-300 mb-1">
+                   Maintenance mode active
+                 </p>
+                 <p className="text-xs text-amber-100/80 leading-relaxed">
+                   Alpha 1 turned on the decoy redirect. New visits go elsewhere — you can still chat here until you refresh.
+                   {maintenanceEnabledAt && (
+                     <span className="block mt-1 text-amber-200/50">
+                       Since {new Date(maintenanceEnabledAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                     </span>
+                   )}
+                 </p>
+               </div>
+             )}
              <div className={`flex items-center justify-between shrink-0 ${
                isMessageExpanded ? "px-4 py-3 border-b border-zinc-800/60 bg-zinc-950/90 backdrop-blur-xl" : "px-1"
              }`}>
@@ -1029,6 +1053,7 @@ export default function HomeClient() {
                 />
              </div>
           </div>
+          </>
         )}
       </main>
 

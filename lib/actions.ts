@@ -3,9 +3,10 @@
 import dbConnect from "./mongodb";
 import { notifyRealtime } from "./realtime-hub";
 import { withTimeout } from "./with-timeout";
-import { Ticket, Wishlist, Plan, TimelineDate, Message, User, CallLog } from "../models/schemas";
+import { Ticket, Wishlist, Plan, TimelineDate, Message, User, CallLog, AppSettings } from "../models/schemas";
 import { revalidatePath, unstable_noStore as noStore } from "next/cache";
 import { v2 as cloudinary } from "cloudinary";
+import { APP_SETTINGS_KEY } from "./maintenance";
 
 // Configure Cloudinary
 cloudinary.config({
@@ -25,6 +26,78 @@ interface UserDocument {
   chatBubbleColor?: string;
   themeName?: string;
   chatWallpaper?: string;
+}
+
+async function getMaintenancePayload() {
+  const settings = await AppSettings.findOne({ key: APP_SETTINGS_KEY }).lean();
+  return {
+    maintenanceMode: Boolean(settings?.maintenanceMode),
+    maintenanceEnabledAt: settings?.maintenanceEnabledAt
+      ? new Date(settings.maintenanceEnabledAt).toISOString()
+      : null,
+    maintenanceEnabledBy: settings?.maintenanceEnabledBy ?? null,
+  };
+}
+
+export async function getMaintenanceStatus() {
+  noStore();
+  try {
+    await dbConnect();
+    return await getMaintenancePayload();
+  } catch {
+    return {
+      maintenanceMode: false,
+      maintenanceEnabledAt: null,
+      maintenanceEnabledBy: null,
+    };
+  }
+}
+
+export async function enableMaintenanceMode(actor: string) {
+  if (actor.trim().toLowerCase() !== "alpha 1") {
+    throw new Error("Only Alpha 1 can enable maintenance mode.");
+  }
+
+  await dbConnect();
+  await AppSettings.findOneAndUpdate(
+    { key: APP_SETTINGS_KEY },
+    {
+      maintenanceMode: true,
+      maintenanceEnabledAt: new Date(),
+      maintenanceEnabledBy: "alpha 1",
+    },
+    { upsert: true }
+  );
+
+  await Message.create({
+    text: "[SYSTEM:MAINTENANCE_ON] Maintenance mode is on. The portal is showing the decoy page.",
+    createdBy: "alpha 1",
+  });
+
+  notifyRealtime();
+  revalidatePath("/");
+  return { success: true };
+}
+
+export async function disableMaintenanceMode(actor: string) {
+  if (actor.trim().toLowerCase() !== "alpha 1") {
+    throw new Error("Only Alpha 1 can disable maintenance mode.");
+  }
+
+  await dbConnect();
+  await AppSettings.findOneAndUpdate(
+    { key: APP_SETTINGS_KEY },
+    {
+      maintenanceMode: false,
+      maintenanceEnabledAt: null,
+      maintenanceEnabledBy: null,
+    },
+    { upsert: true }
+  );
+
+  notifyRealtime();
+  revalidatePath("/");
+  return { success: true };
 }
 
 // IMAGE/VIDEO UPLOAD
@@ -141,6 +214,7 @@ export async function fetchData(messageLimit = 50, currentUser?: string) {
 
     // Reverse messages to show chronological order (oldest to newest)
     const sortedMessages = messages.reverse();
+    const maintenance = await getMaintenancePayload();
 
     return {
       tickets: JSON.parse(JSON.stringify(tickets)),
@@ -149,7 +223,8 @@ export async function fetchData(messageLimit = 50, currentUser?: string) {
       dates: JSON.parse(JSON.stringify(dates)),
       messages: JSON.parse(JSON.stringify(sortedMessages)),
       users: JSON.parse(JSON.stringify(users)),
-      callLogs: JSON.parse(JSON.stringify(callLogs))
+      callLogs: JSON.parse(JSON.stringify(callLogs)),
+      ...maintenance,
     };
   } catch (error) {
     console.error('Database fetch error:', error);
@@ -192,11 +267,13 @@ export async function fetchMessages(messageLimit = 50, currentUser?: string) {
       }
     });
     const users = Array.from(userMap.values());
+    const maintenance = await getMaintenancePayload();
 
     return {
       messages: JSON.parse(JSON.stringify(messages.reverse())),
       users: JSON.parse(JSON.stringify(users)),
-      callLogs: JSON.parse(JSON.stringify(callLogs))
+      callLogs: JSON.parse(JSON.stringify(callLogs)),
+      ...maintenance,
     };
   } catch (error) {
     console.error('Fetch messages error:', error);

@@ -14,6 +14,25 @@ export function useAppData(view: ViewType, messageLimit: number) {
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [isConnected, setIsConnected] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [maintenanceMode, setMaintenanceMode] = useState(false);
+  const [maintenanceEnabledAt, setMaintenanceEnabledAt] = useState<string | null>(null);
+  const [maintenanceEnabledBy, setMaintenanceEnabledBy] = useState<string | null>(null);
+
+  const applyMaintenance = useCallback((data: {
+    maintenanceMode?: boolean;
+    maintenanceEnabledAt?: string | null;
+    maintenanceEnabledBy?: string | null;
+  }) => {
+    if (typeof data.maintenanceMode === "boolean") {
+      setMaintenanceMode(data.maintenanceMode);
+    }
+    if (data.maintenanceEnabledAt !== undefined) {
+      setMaintenanceEnabledAt(data.maintenanceEnabledAt);
+    }
+    if (data.maintenanceEnabledBy !== undefined) {
+      setMaintenanceEnabledBy(data.maintenanceEnabledBy);
+    }
+  }, []);
 
   const updateMessagesState = useCallback((newMessagesFromData: Message[]) => {
     setMessages(prev => {
@@ -73,6 +92,7 @@ export function useAppData(view: ViewType, messageLimit: number) {
       setCallLogs(data.callLogs || []);
       setHasMoreMessages(data.messages.length >= messageLimit);
       updateMessagesState(data.messages);
+      applyMaintenance(data);
       setIsConnected(true);
     } catch (error) {
       console.error('Failed to fetch messages:', error);
@@ -80,7 +100,7 @@ export function useAppData(view: ViewType, messageLimit: number) {
     } finally {
       if (!silent) setIsRefreshing(false);
     }
-  }, [messageLimit, view, updateMessagesState]);
+  }, [messageLimit, view, updateMessagesState, applyMaintenance]);
 
   const fetchInitialData = useCallback(async (silent = false) => {
     if (view === "login") return;
@@ -95,6 +115,7 @@ export function useAppData(view: ViewType, messageLimit: number) {
       setCallLogs(data.callLogs || []);
       setHasMoreMessages(data.messages.length >= messageLimit);
       updateMessagesState(data.messages);
+      applyMaintenance(data);
       setIsConnected(true);
     } catch (error) {
       console.error('Failed to fetch data:', error);
@@ -103,7 +124,7 @@ export function useAppData(view: ViewType, messageLimit: number) {
     } finally {
       if (!silent) setIsRefreshing(false);
     }
-  }, [messageLimit, view, updateMessagesState]);
+  }, [messageLimit, view, updateMessagesState, applyMaintenance]);
 
   const fetchAllMedia = useCallback(async (silent = false) => {
     if (view === "login") return;
@@ -132,6 +153,9 @@ export function useAppData(view: ViewType, messageLimit: number) {
     hasMoreMessages,
     isConnected,
     isRefreshing,
+    maintenanceMode,
+    maintenanceEnabledAt,
+    maintenanceEnabledBy,
     fetchInitialData,
     fetchMessagesOnly,
     fetchAllMedia

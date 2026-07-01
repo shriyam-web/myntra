@@ -1,11 +1,12 @@
 import dbConnect from "../../../lib/mongodb";
-import { Message } from "../../../models/schemas";
+import { Message, AppSettings } from "../../../models/schemas";
 import { subscribeRealtime } from "../../../lib/realtime-hub";
+import { APP_SETTINGS_KEY } from "../../../lib/maintenance";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-async function getMessagesFingerprint(): Promise<string> {
+async function getSyncFingerprint(): Promise<string> {
   await dbConnect();
   const [stats] = await Message.aggregate([
     {
@@ -19,7 +20,12 @@ async function getMessagesFingerprint(): Promise<string> {
       },
     },
   ]);
-  return JSON.stringify(stats || { count: 0, maxCreatedAt: null, reactionCount: 0 });
+  const settings = await AppSettings.findOne({ key: APP_SETTINGS_KEY }).lean();
+  return JSON.stringify({
+    messages: stats || { count: 0, maxCreatedAt: null, reactionCount: 0 },
+    maintenanceMode: Boolean(settings?.maintenanceMode),
+    maintenanceEnabledAt: settings?.maintenanceEnabledAt ?? null,
+  });
 }
 
 export async function GET(request: Request) {
@@ -43,7 +49,7 @@ export async function GET(request: Request) {
       const checkAndPush = async () => {
         if (closed) return;
         try {
-          const fingerprint = await getMessagesFingerprint();
+          const fingerprint = await getSyncFingerprint();
           if (fingerprint !== lastFingerprint) {
             lastFingerprint = fingerprint;
             send("messages");

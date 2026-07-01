@@ -65,6 +65,13 @@ const CallLogSchema = new Schema({
   createdAt: { type: Date, default: Date.now },
 });
 
+const AppSettingsSchema = new Schema({
+  key: { type: String, required: true, unique: true, default: "global" },
+  maintenanceMode: { type: Boolean, default: false },
+  maintenanceEnabledAt: { type: Date },
+  maintenanceEnabledBy: { type: String },
+});
+
 export const Ticket = models.Ticket || model('Ticket', TicketSchema);
 export const Wishlist = models.Wishlist || model('Wishlist', WishlistSchema);
 export const Plan = models.Plan || model('Plan', PlanSchema);
@@ -72,3 +79,4 @@ export const TimelineDate = models.TimelineDate || model('TimelineDate', DateSch
 export const Message = models.Message || model('Message', MessageSchema);
 export const User = models.User || model('User', UserSchema);
 export const CallLog = models.CallLog || model('CallLog', CallLogSchema);
+export const AppSettings = models.AppSettings || model('AppSettings', AppSettingsSchema);
