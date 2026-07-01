@@ -1,5 +1,5 @@
 import React, { Fragment } from "react";
-import { Message, PresenceUser, Theme, ReactionType } from "../types";
+import { Message, PresenceUser, Theme, ReactionType, isOptimisticMessageId } from "../types";
 import { renderMessage, getVideoPoster } from "../../../lib/utils";
 import { REACTION_EMOJIS } from "../constants";
 import { ReactionBurst } from "./ReactionBurst";
@@ -121,7 +121,7 @@ export const MessageList: React.FC<MessageListProps> = ({
     !!(target as HTMLElement)?.closest?.("a, button, textarea");
 
   const startLongPress = (messageId: string) => {
-    if (/^\d+$/.test(messageId)) return;
+    if (isOptimisticMessageId(messageId)) return;
     clearLongPressTimer();
     longPressTriggeredRef.current = false;
     longPressTimerRef.current = setTimeout(() => {
@@ -337,7 +337,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                   isMe &&
                   !!partner?.lastReadAt &&
                   new Date(m.createdAt).getTime() <= new Date(partner.lastReadAt).getTime();
-                const isOptimistic = /^\d+$/.test(m._id);
+                const isOptimistic = isOptimisticMessageId(m._id);
                 const avatarSrc = m.createdBy.trim().toLowerCase() === "alpha 1" ? "/female.png" : "/male.png";
 
                 return (
@@ -597,6 +597,9 @@ export const MessageList: React.FC<MessageListProps> = ({
 
                           <div className={`text-[8px] mt-1 flex items-center gap-1 font-normal uppercase tracking-wider opacity-60 ${isMe ? 'justify-end' : 'justify-start'}`}>
                               {new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              {isMe && isOptimistic && (
+                                <span className="text-[7px] text-zinc-400 normal-case tracking-normal italic">Sending…</span>
+                              )}
                               {isMe && !isOptimistic && (
                                   <span className={isRead ? "text-blue-300" : "text-white/50"}>
                                       {isRead ? (

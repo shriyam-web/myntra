@@ -115,3 +115,8 @@ export interface Wallpaper {
   preview?: string;
   category?: "pattern" | "gradient" | "scene" | "wild" | "love" | "peaceful";
 }
+
+/** Client-side optimistic message ids (timestamp-based, not MongoDB ObjectIds). */
+export function isOptimisticMessageId(id: string) {
+  return /^\d+-[a-z0-9]+$/.test(id);
+}

@@ -2,6 +2,7 @@
 
 import dbConnect from "./mongodb";
 import { notifyRealtime } from "./realtime-hub";
+import { withTimeout } from "./with-timeout";
 import { Ticket, Wishlist, Plan, TimelineDate, Message, User, CallLog } from "../models/schemas";
 import { revalidatePath, unstable_noStore as noStore } from "next/cache";
 import { v2 as cloudinary } from "cloudinary";
@@ -383,14 +384,22 @@ async function sendTelegramNotification(text: string) {
 }
 
 export async function sendMessage(text: string, createdBy: string, imageUrls?: string[], videoUrls?: string[], repliedTo?: string) {
+  const MAX_TEXT_LENGTH = 50000;
+  if (text && text.length > MAX_TEXT_LENGTH) {
+    throw new Error(`Message is too long (${text.length} characters). Please shorten it to under ${MAX_TEXT_LENGTH} characters.`);
+  }
+
   try {
-    await dbConnect();
-    
-    // Run presence update and notifications in background to keep message sending fast
+    await withTimeout(dbConnect(), 15000, "Database connection timed out. Please try again.");
+
     updatePresence(createdBy).catch(err => console.error("Background presence update error:", err));
 
     const data = { text, createdBy, imageUrls, videoUrls, repliedTo };
-    const message = await Message.create(data);
+    const message = await withTimeout(
+      Message.create(data),
+      20000,
+      "Saving message timed out. Please check your connection and try again."
+    );
 
     if (data.createdBy === "alpha 1") {
       (async () => {

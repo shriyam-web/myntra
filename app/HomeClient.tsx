@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import * as actions from "../lib/actions";
 import { useAppData } from "./Home/hooks/useAppData";
+import { useMessageSendQueue } from "./Home/hooks/useMessageSendQueue";
 import { useAudio } from "./Home/hooks/useAudio";
 import { usePresence } from "./Home/hooks/usePresence";
 import { themes, wallpapers } from "./Home/constants";
@@ -109,9 +110,6 @@ export default function HomeClient() {
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [selectedVideos, setSelectedVideos] = useState<string[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-  const [isUploading, setIsUploading] = useState(false);
-  const [isMediaUploading, setIsMediaUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
   const [previewMessage, setPreviewMessage] = useState<Message | null>(null);
   const [previewImageIndex, setPreviewImageIndex] = useState(0);
   const [pullUpDistance, setPullUpDistance] = useState(0);
@@ -416,16 +414,16 @@ export default function HomeClient() {
     }
   };
 
-  const fileToBase64 = (file: File): Promise<string> => {
+  const fileToBase64 = useCallback((file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.readAsDataURL(file);
       reader.onload = () => resolve(reader.result as string);
       reader.onerror = error => reject(error);
     });
-  };
+  }, []);
 
-  const uploadToCloudinary = async (file: File, onProgress: (percent: number) => void): Promise<string> => {
+  const uploadToCloudinary = useCallback(async (file: File, onProgress: (percent: number) => void): Promise<string> => {
     try {
       const { timestamp, signature, apiKey, cloudName, folder } = await actions.getCloudinarySignature();
       
@@ -463,93 +461,52 @@ export default function HomeClient() {
       });
     } catch (err) {
       console.error('Failed to get upload signature:', err);
-      // Fallback to server action if signature fails
       const base64 = await fileToBase64(file);
       return await actions.uploadImage(base64, file.type.startsWith('video/') ? 'video' : 'image');
     }
-  };
+  }, [fileToBase64]);
 
-  const handleSendMessage = async (e?: React.FormEvent) => {
+  const {
+    enqueueMessage,
+    sendQueueStatus,
+    sendError,
+    lastFailedText,
+    dismissSendError,
+  } = useMessageSendQueue({
+    currentUser,
+    setMessages,
+    fetchMessagesOnly,
+    uploadToCloudinary,
+  });
+
+  const handleSendMessage = useCallback((e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!newMessage.trim() && selectedFiles.length === 0) return;
 
-    try {
-      const hasFiles = selectedFiles.length > 0;
-      setIsUploading(true);
-      setIsMediaUploading(hasFiles);
-      setUploadProgress(0);
-      const optimisticId = Date.now().toString();
-      const optimisticMsg: Message = {
-        _id: optimisticId,
-        text: newMessage,
-        createdAt: new Date().toISOString(),
-        createdBy: currentUser as UserType,
-        repliedTo: replyingTo ? {
-            _id: replyingTo._id,
-            text: replyingTo.text,
-            imageUrl: replyingTo.imageUrl,
-            imageUrls: replyingTo.imageUrls,
-            videoUrl: replyingTo.videoUrl,
-            videoUrls: replyingTo.videoUrls,
-            createdBy: replyingTo.createdBy
-        } : undefined
-      };
+    const payload = {
+      text: newMessage,
+      files: [...selectedFiles],
+      imagePreviewUrls: [...selectedImages],
+      videoPreviewUrls: [...selectedVideos],
+      replyingTo,
+    };
 
-      setMessages(prev => [...prev, optimisticMsg]);
-      const currentNewMessage = newMessage;
-      const currentSelectedFiles = [...selectedFiles];
-      const currentReplyingTo = replyingTo;
+    setNewMessage("");
+    setSelectedImages([]);
+    setSelectedVideos([]);
+    setSelectedFiles([]);
+    setReplyingTo(null);
 
-      setNewMessage("");
-      setSelectedImages([]);
-      setSelectedVideos([]);
-      setSelectedFiles([]);
-      setReplyingTo(null);
-
-      // Upload files in parallel
-      const uploadedImageUrls: string[] = [];
-      const uploadedVideoUrls: string[] = [];
-      
-      if (currentSelectedFiles.length > 0) {
-        const uploadPromises = currentSelectedFiles.map(async (file, i) => {
-          const url = await uploadToCloudinary(file, (percent) => {
-            // For parallel uploads, we just update progress based on the current file
-            // This is a bit simplified but gives feedback
-            if (currentSelectedFiles.length === 1) {
-              setUploadProgress(Math.min(Math.round(percent), 99));
-            }
-          });
-          return { url, type: file.type };
-        });
-
-        const results = await Promise.all(uploadPromises);
-        results.forEach(res => {
-          if (res.type.startsWith('video/')) {
-            uploadedVideoUrls.push(res.url);
-          } else {
-            uploadedImageUrls.push(res.url);
-          }
-        });
-        setUploadProgress(99);
-      }
-
-      const serverMsg = await actions.sendMessage(currentNewMessage, currentUser, uploadedImageUrls, uploadedVideoUrls, currentReplyingTo?._id);
-      setUploadProgress(100);
-      
-      // Update the optimistic message with the real one from the server
-      if (serverMsg) {
-        setMessages(prev => prev.map(m => m._id === optimisticId ? serverMsg : m));
-      } else {
-        fetchMessagesOnly(true);
-      }
-    } catch (error) {
-      console.error('Failed to send message:', error);
-    } finally {
-      setIsUploading(false);
-      setIsMediaUploading(false);
-      setUploadProgress(0);
-    }
-  };
+    enqueueMessage(payload);
+  }, [
+    newMessage,
+    selectedFiles,
+    selectedImages,
+    selectedVideos,
+    replyingTo,
+    enqueueMessage,
+    setReplyingTo,
+  ]);
 
   const handleDeleteMessage = async (id: string) => {
     try {
@@ -1066,9 +1023,10 @@ export default function HomeClient() {
                     setSelectedVideos={setSelectedVideos}
                     selectedFiles={selectedFiles}
                     setSelectedFiles={setSelectedFiles}
-                    isUploading={isUploading}
-                    isMediaUploading={isMediaUploading}
-                    uploadProgress={uploadProgress}
+                    sendQueueStatus={sendQueueStatus}
+                    sendError={sendError}
+                    lastFailedText={lastFailedText}
+                    onDismissSendError={dismissSendError}
                 />
              </div>
           </div>

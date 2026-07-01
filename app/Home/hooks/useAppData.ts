@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import * as actions from "../../../lib/actions";
-import { Ticket, Message, WishlistItem, PlanItem, TimelineDate, PresenceUser, ViewType, CallLog } from "../types";
+import { Ticket, Message, WishlistItem, PlanItem, TimelineDate, PresenceUser, ViewType, CallLog, isOptimisticMessageId } from "../types";
 
 export function useAppData(view: ViewType, messageLimit: number) {
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -21,7 +21,7 @@ export function useAppData(view: ViewType, messageLimit: number) {
       const prevMap = new Map(prev.map(m => [m._id, m]));
       
       // 2. Identify optimistic messages (not yet in server)
-      const optimistic = prev.filter(m => /^\d+$/.test(m._id));
+      const optimistic = prev.filter(m => isOptimisticMessageId(m._id));
       const pendingOptimistic = optimistic.filter(opt => 
         !newMessagesFromData.some((m: Message) => 
           m.text === opt.text && 
