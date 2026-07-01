@@ -8,6 +8,7 @@ interface ChatInputProps {
   replyingTo: Message | null;
   setReplyingTo: React.Dispatch<React.SetStateAction<Message | null>>;
   activeTheme: Theme;
+  isMessageExpanded?: boolean;
   messageInputRef: React.RefObject<HTMLTextAreaElement | null>;
   fileInputRef: React.RefObject<HTMLInputElement | null>;
   selectedImages: string[];
@@ -28,6 +29,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   replyingTo,
   setReplyingTo,
   activeTheme,
+  isMessageExpanded = false,
   messageInputRef,
   fileInputRef,
   selectedImages,
@@ -99,7 +101,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   return (
-    <div className="p-4 sm:p-6 bg-zinc-900/60 backdrop-blur-3xl border-t border-zinc-800/50 z-20">
+    <div className={`shrink-0 bg-zinc-900/70 backdrop-blur-3xl border-t border-zinc-800/50 z-20 ${
+      isMessageExpanded
+        ? "p-3 sm:p-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+        : "p-4 sm:p-5"
+    }`}>
       {replyingTo && (
         <div className="mb-4 p-4 bg-zinc-950/80 rounded-[2rem] border border-zinc-800 flex items-center justify-between animate-in slide-in-from-bottom-2 duration-300 backdrop-blur-xl">
           <div className="flex items-center gap-4 overflow-hidden">
@@ -242,7 +248,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 )}
              </div>
           )}
-          <div className="relative group/input flex items-end bg-zinc-950 border border-zinc-800 rounded-[1.5rem] focus-within:border-zinc-700 transition-all shadow-inner overflow-hidden">
+          <div className="relative group/input flex items-end bg-zinc-950/90 border border-zinc-700/50 rounded-2xl sm:rounded-[1.5rem] focus-within:border-zinc-500/60 focus-within:ring-1 focus-within:ring-white/10 transition-all shadow-inner overflow-hidden">
              <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}

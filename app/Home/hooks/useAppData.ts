@@ -54,6 +54,7 @@ export function useAppData(view: ViewType, messageLimit: number) {
           m._id !== finalMessages[i]._id || 
           m.text !== finalMessages[i].text ||
           (m.savedBy?.length || 0) !== (finalMessages[i].savedBy?.length || 0) ||
+          (m.pinnedBy?.length || 0) !== (finalMessages[i].pinnedBy?.length || 0) ||
           JSON.stringify(m.reactions || []) !== JSON.stringify(finalMessages[i].reactions || [])
         );
         if (!hasChange) return prev;

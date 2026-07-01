@@ -149,6 +149,15 @@ export default function HomeClient() {
   }, [activeTab, fetchAllMedia]);
 
   useEffect(() => {
+    if (isMessageExpanded && activeTab === "messages") {
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = "";
+      };
+    }
+  }, [isMessageExpanded, activeTab]);
+
+  useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setIsMenuOpen(false);
@@ -604,6 +613,25 @@ export default function HomeClient() {
     }
   };
 
+  const handleTogglePinMessage = async (id: string) => {
+    try {
+      setMessages(prev => prev.map(m => {
+        if (m._id === id) {
+          const isPinned = (m.pinnedBy || []).includes(currentUser);
+          const newPinnedBy = isPinned
+            ? (m.pinnedBy || []).filter(u => u !== currentUser)
+            : [...(m.pinnedBy || []), currentUser];
+          return { ...m, pinnedBy: newPinnedBy };
+        }
+        return m;
+      }));
+      await actions.togglePinMessage(id, currentUser);
+    } catch (error) {
+      console.error('Failed to toggle pin message:', error);
+      fetchInitialData();
+    }
+  };
+
   const handleReactToMessage = async (id: string, reaction: ReactionType) => {
     try {
       setMessages(prev => prev.map(m => {
@@ -742,6 +770,8 @@ export default function HomeClient() {
   }, [messages, formatDateLabel]);
 
   const activeTheme = themes.find(t => t.name === themeName) || themes[0];
+  const partnerUsername = currentUser.trim().toLowerCase() === "alpha 1" ? "delta 1" : "alpha 1";
+  const partnerAvatar = partnerUsername === "alpha 1" ? "/female.png" : "/male.png";
 
   if (isIncognito === null) return <IncognitoVerify status="verifying" />;
   if (isIncognito === false) return <IncognitoVerify status="blocked" />;
@@ -750,6 +780,7 @@ export default function HomeClient() {
   return (
     <div className="flex flex-col min-h-[100svh] bg-zinc-950 text-zinc-100 font-sans pb-2 selection:bg-white selection:text-black">
       <div className="sticky top-0 z-50">
+        {!(isMessageExpanded && activeTab === "messages") && (
         <ChatHeader 
           connectionStatusDisplay={connectionStatusDisplay}
           currentUser={currentUser}
@@ -759,7 +790,9 @@ export default function HomeClient() {
           fetchInitialData={handleManualRefresh}
           handleLogout={handleLogout}
         />
+        )}
 
+        {!(isMessageExpanded && activeTab === "messages") && (
         <TabNavigation 
           activeTab={activeTab}
           setActiveTab={setActiveTab}
@@ -769,9 +802,12 @@ export default function HomeClient() {
           messages={messages}
           currentUser={currentUser}
         />
+        )}
       </div>
 
-      <main className="flex-1 max-w-md mx-auto w-full px-4 pt-4 pb-10 md:pb-16">
+      <main className={`flex-1 w-full px-4 pt-4 pb-10 md:pb-16 ${
+        isMessageExpanded && activeTab === "messages" ? "overflow-hidden" : "max-w-md mx-auto"
+      }`}>
         {activeTab === "complaints" && (
           <ComplaintsTab 
             tickets={tickets}
@@ -860,18 +896,35 @@ export default function HomeClient() {
         )}
 
         {activeTab === "messages" && (
-          <div className={`flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-700 ${isMessageExpanded ? "fixed inset-0 z-[60] bg-zinc-950 gap-0" : "gap-4"}`}>
-             <div className={`flex items-center justify-between px-1 ${isMessageExpanded ? "p-4 pb-0" : ""}`}>
-                <div className="flex flex-col items-start gap-1">
-                  <div className="flex items-center gap-2">
-                    <span className={`text-[10px] font-medium uppercase tracking-wider ${getPartnerStatus() === "Online" ? "text-green-500/80" : "text-zinc-500"}`}>
-                      {getPartnerStatus() || "Offline"}
-                    </span>
-                    {lastRefreshedAt && (
-                      <span className="text-[9px] font-medium text-zinc-600 italic animate-in fade-in duration-500">
-                        • Updated at {lastRefreshedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })}
-                      </span>
+          <div className={`flex flex-col ${
+            isMessageExpanded
+              ? "fixed inset-0 z-[60] bg-zinc-950 h-[100dvh] max-h-[100dvh] overflow-hidden pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)]"
+              : "gap-4 animate-in fade-in slide-in-from-bottom-4 duration-700"
+          }`}>
+             <div className={`flex items-center justify-between shrink-0 ${
+               isMessageExpanded ? "px-4 py-3 border-b border-zinc-800/60 bg-zinc-950/90 backdrop-blur-xl" : "px-1"
+             }`}>
+                <div className="flex items-center gap-3 min-w-0">
+                  {isMessageExpanded && (
+                    <div className="w-9 h-9 rounded-full border border-zinc-700 overflow-hidden shrink-0 shadow-lg">
+                      <img src={partnerAvatar} alt="" className="w-full h-full object-cover" />
+                    </div>
+                  )}
+                  <div className="flex flex-col items-start gap-0.5 min-w-0">
+                    {isMessageExpanded && (
+                      <span className="text-sm font-medium text-white truncate capitalize">{partnerUsername}</span>
                     )}
+                    <div className="flex items-center gap-2">
+                      <span className={`inline-flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider ${getPartnerStatus() === "Online" ? "text-green-500" : "text-zinc-500"}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${getPartnerStatus() === "Online" ? "bg-green-500 animate-pulse" : "bg-zinc-600"}`} />
+                        {getPartnerStatus() || "Offline"}
+                      </span>
+                      {!isMessageExpanded && lastRefreshedAt && (
+                        <span className="text-[9px] font-medium text-zinc-600 italic">
+                          • {lastRefreshedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true })}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -948,7 +1001,13 @@ export default function HomeClient() {
                 </div>
              </div>
 
-             <div className={`relative flex-1 flex flex-col ${chatBgColor} rounded-[2.5rem] border border-zinc-800/50 shadow-2xl overflow-hidden backdrop-blur-xl ${isMessageExpanded ? "rounded-none border-none" : ""}`}>
+             <div className={`relative flex flex-col min-h-0 flex-1 w-full mx-auto ${
+               isMessageExpanded ? "max-w-lg" : "max-w-full"
+             } ${chatBgColor} ${
+               isMessageExpanded
+                 ? "border-none shadow-none rounded-none"
+                 : "rounded-[2rem] sm:rounded-[2.5rem] border border-zinc-800/50 shadow-2xl"
+             } overflow-hidden backdrop-blur-xl`}>
                 <div className={`absolute inset-0 pointer-events-none opacity-40 ${activeTheme.glow}`} />
                 {chatWallpaper && (
                     <ChatWallpaper wallpaperValue={chatWallpaper} wallpapers={wallpapers} />
@@ -978,6 +1037,7 @@ export default function HomeClient() {
                     handleDeleteMessage={handleDeleteMessage}
                     handleUpdateMessage={handleUpdateMessage}
                     handleToggleSaveMessage={handleToggleSaveMessage}
+                    handleTogglePinMessage={handleTogglePinMessage}
                     handleReactToMessage={handleReactToMessage}
                     partnerBurstReaction={partnerBurstReaction}
                     onPartnerBurstComplete={() => setPartnerBurstReaction(null)}
@@ -998,6 +1058,7 @@ export default function HomeClient() {
                     replyingTo={replyingTo}
                     setReplyingTo={setReplyingTo}
                     activeTheme={activeTheme}
+                    isMessageExpanded={isMessageExpanded}
                     messageInputRef={messageInputRef}
                     fileInputRef={fileInputRef}
                     selectedImages={selectedImages}

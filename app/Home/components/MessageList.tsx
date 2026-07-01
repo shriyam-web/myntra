@@ -3,6 +3,7 @@ import { Message, PresenceUser, Theme, ReactionType } from "../types";
 import { renderMessage, getVideoPoster } from "../../../lib/utils";
 import { REACTION_EMOJIS, REACTION_OPTIONS } from "../constants";
 import { ReactionBurst } from "./ReactionBurst";
+import { MessageActionMenu } from "./MessageActionMenu";
 
 interface MessageListProps {
   messages: Message[];
@@ -28,6 +29,7 @@ interface MessageListProps {
   handleDeleteMessage: (id: string) => void;
   handleUpdateMessage: (id: string, text: string) => void;
   handleToggleSaveMessage: (id: string) => void;
+  handleTogglePinMessage: (id: string) => void;
   handleReactToMessage: (id: string, reaction: ReactionType) => void;
   partnerBurstReaction?: ReactionType | null;
   onPartnerBurstComplete?: () => void;
@@ -65,6 +67,7 @@ export const MessageList: React.FC<MessageListProps> = ({
   handleDeleteMessage,
   handleUpdateMessage,
   handleToggleSaveMessage,
+  handleTogglePinMessage,
   handleReactToMessage,
   partnerBurstReaction = null,
   onPartnerBurstComplete,
@@ -81,11 +84,30 @@ export const MessageList: React.FC<MessageListProps> = ({
   const [swipeDistance, setSwipeDistance] = React.useState(0);
   const [zoomedAvatar, setZoomedAvatar] = React.useState<string | null>(null);
   const [reactionPickerId, setReactionPickerId] = React.useState<string | null>(null);
+  const [actionMenuId, setActionMenuId] = React.useState<string | null>(null);
   const [burstReaction, setBurstReaction] = React.useState<ReactionType | null>(null);
-  const [longPressPickerId, setLongPressPickerId] = React.useState<string | null>(null);
-  const touchStartRef = React.useRef<{ x: number; y: number } | null>(null);
+  const touchStartRef = React.useRef<{ x: number; y: number; time: number } | null>(null);
+  const swipeMovedRef = React.useRef(false);
   const longPressTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressTriggeredRef = React.useRef(false);
+  const listRootRef = React.useRef<HTMLDivElement>(null);
+
+  const pinnedMessages = React.useMemo(
+    () => messages.filter((m) => (m.pinnedBy || []).includes(currentUser)),
+    [messages, currentUser]
+  );
+  const pinnedIds = React.useMemo(
+    () => new Set(pinnedMessages.map((m) => m._id)),
+    [pinnedMessages]
+  );
+
+  const closeReactionPicker = React.useCallback(() => {
+    setReactionPickerId(null);
+  }, []);
+
+  const closeActionMenu = React.useCallback(() => {
+    setActionMenuId(null);
+  }, []);
 
   const clearLongPressTimer = () => {
     if (longPressTimerRef.current) {
@@ -94,12 +116,53 @@ export const MessageList: React.FC<MessageListProps> = ({
     }
   };
 
+  const startLongPress = (messageId: string) => {
+    if (/^\d+$/.test(messageId)) return;
+    clearLongPressTimer();
+    longPressTriggeredRef.current = false;
+    longPressTimerRef.current = setTimeout(() => {
+      longPressTriggeredRef.current = true;
+      closeReactionPicker();
+      setActionMenuId(messageId);
+      if (window.navigator.vibrate) window.navigator.vibrate(20);
+    }, 500);
+  };
+
+  React.useEffect(() => {
+    if (!reactionPickerId && !actionMenuId) return;
+    const handleOutside = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.closest("[data-reaction-picker]") || target.closest("[data-action-menu]")) return;
+      if (reactionPickerId && target.closest(`#message-${reactionPickerId}`)) return;
+      if (actionMenuId && target.closest(`#message-${actionMenuId}`)) return;
+      closeReactionPicker();
+      closeActionMenu();
+    };
+    document.addEventListener("mousedown", handleOutside);
+    document.addEventListener("touchstart", handleOutside, { passive: true });
+    return () => {
+      document.removeEventListener("mousedown", handleOutside);
+      document.removeEventListener("touchstart", handleOutside);
+    };
+  }, [reactionPickerId, actionMenuId, closeReactionPicker, closeActionMenu]);
+
   const handleReactionSelect = (messageId: string, reaction: ReactionType) => {
-    setReactionPickerId(null);
-    setLongPressPickerId(null);
+    closeReactionPicker();
+    closeActionMenu();
     setBurstReaction(reaction);
     handleReactToMessage(messageId, reaction);
     if (window.navigator.vibrate) window.navigator.vibrate(15);
+  };
+
+  const toggleReactionPicker = (messageId: string) => {
+    closeActionMenu();
+    setReactionPickerId((prev) => (prev === messageId ? null : messageId));
+  };
+
+  const handlePartnerBubbleTap = (messageId: string, e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest("a, button, img, video, textarea")) return;
+    e.stopPropagation();
+    toggleReactionPicker(messageId);
   };
 
   const activeBurst = burstReaction || partnerBurstReaction;
@@ -114,7 +177,21 @@ export const MessageList: React.FC<MessageListProps> = ({
   };
 
   return (
-    <div className="relative flex-1 flex flex-col min-h-0">
+    <div ref={listRootRef} className="relative flex-1 flex flex-col min-h-0 overflow-hidden">
+      {reactionPickerId && (
+        <div
+          className="absolute inset-0 z-[10]"
+          aria-hidden
+          onClick={closeReactionPicker}
+        />
+      )}
+      {actionMenuId && (
+        <div
+          className="absolute inset-0 z-[10]"
+          aria-hidden
+          onClick={closeActionMenu}
+        />
+      )}
       <ReactionBurst
         reaction={activeBurst}
         subtle={isPartnerBurst}
@@ -161,31 +238,10 @@ export const MessageList: React.FC<MessageListProps> = ({
         setPullUpDistance(0);
         setIsPullingUp(false);
       }}
-      className={`flex-1 overflow-y-auto no-scrollbar scroll-smooth px-4 ${
-        isMessageExpanded ? "py-6 h-full" : "py-4 max-h-[35vh] min-h-[250px]"
+      className={`flex-1 min-h-0 overflow-y-auto no-scrollbar scroll-smooth px-3 sm:px-4 ${
+        isMessageExpanded ? "py-4 pb-2" : "py-4 max-h-[38vh] min-h-[220px]"
       }`}
     >
-      {showScrollButton && (
-        <button
-          onClick={() => scrollToBottom()}
-          className={`fixed bottom-32 right-10 z-[70] p-4 ${activeTheme.bubbleMe} text-white rounded-full shadow-2xl animate-bounce hover:opacity-90 active:scale-90 transition-all border-4 border-zinc-950`}
-          title="Scroll to bottom"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="4"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="m7 13 5 5 5-5M7 6l5 5 5-5" />
-          </svg>
-        </button>
-      )}
       {hasMoreMessages && messages.length >= 50 && (
         <div className="flex justify-center mb-6">
           <button
@@ -208,6 +264,32 @@ export const MessageList: React.FC<MessageListProps> = ({
         </div>
       ) : (
         <div className="flex flex-col">
+          {pinnedMessages.length > 0 && (
+            <div className="mb-4 pb-3 border-b border-zinc-800/60">
+              <div className="flex items-center gap-2 mb-3 px-1">
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-amber-400"><path d="M12 17v5" /><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2z" /></svg>
+                <span className="text-[10px] font-medium uppercase tracking-widest text-amber-400/80">Pinned</span>
+              </div>
+              <div className="flex flex-col gap-2">
+                {pinnedMessages.map((m) => {
+                  const isMe = m.createdBy.trim().toLowerCase() === currentUser.trim().toLowerCase();
+                  return (
+                    <button
+                      key={`pin-${m._id}`}
+                      onClick={() => {
+                        const el = document.getElementById(`message-${m._id}`);
+                        el?.scrollIntoView({ behavior: "smooth", block: "center" });
+                      }}
+                      className={`w-full text-left p-3 rounded-2xl border border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10 transition-colors ${isMe ? "ml-auto max-w-[85%]" : "max-w-[85%]"}`}
+                    >
+                      <p className="text-[9px] font-medium uppercase tracking-wider text-amber-400/70 mb-1">{m.createdBy}</p>
+                      <p className="text-xs text-zinc-300 line-clamp-2">{m.text || "📎 Media message"}</p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           {groupedMessages.map((group) => (
             <div key={group.date} className="flex flex-col relative">
               <div className="flex justify-center mb-4 sticky top-0 z-[40] -mx-4 py-2 pointer-events-none">
@@ -215,7 +297,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                   {group.label}
                 </div>
               </div>
-              {group.messages.map((m) => {
+              {group.messages.filter((m) => !pinnedIds.has(m._id)).map((m) => {
                 const isMe = m.createdBy.trim().toLowerCase() === currentUser.trim().toLowerCase();
                 const partnerUsername = currentUser.trim().toLowerCase() === "alpha 1" ? "delta 1" : "alpha 1";
                 const userObj = users.find((u) => u.username.trim().toLowerCase() === m.createdBy.trim().toLowerCase());
@@ -235,20 +317,12 @@ export const MessageList: React.FC<MessageListProps> = ({
                     key={m._id}
                     id={`message-${m._id}`}
                     onTouchStart={(e) => {
-                      longPressTriggeredRef.current = false;
-                      clearLongPressTimer();
+                      swipeMovedRef.current = false;
                       touchStartRef.current = {
                         x: e.touches[0].clientX,
-                        y: e.touches[0].clientY
+                        y: e.touches[0].clientY,
+                        time: Date.now(),
                       };
-                      if (!isMe && !isOptimistic) {
-                        longPressTimerRef.current = setTimeout(() => {
-                          longPressTriggeredRef.current = true;
-                          setLongPressPickerId(m._id);
-                          setReactionPickerId(m._id);
-                          if (window.navigator.vibrate) window.navigator.vibrate(20);
-                        }, 450);
-                      }
                     }}
                     onTouchMove={(e) => {
                       if (!touchStartRef.current) return;
@@ -256,37 +330,37 @@ export const MessageList: React.FC<MessageListProps> = ({
                       const deltaY = e.touches[0].clientY - touchStartRef.current.y;
                       const distance = Math.hypot(deltaX, deltaY);
 
-                      if (distance > 10) {
-                        clearLongPressTimer();
-                      }
+                      if (distance > 10) swipeMovedRef.current = true;
                       
-                      // If horizontal swipe is dominant
-                      if (!longPressTriggeredRef.current && Math.abs(deltaX) > Math.abs(deltaY) && deltaX > 0) {
+                      if (Math.abs(deltaX) > Math.abs(deltaY) && deltaX > 0) {
                         setSwipingMessageId(m._id);
                         setSwipeDistance(Math.min(deltaX, 80));
                       }
                     }}
                     onTouchEnd={() => {
+                      const wasLongPress = longPressTriggeredRef.current;
                       clearLongPressTimer();
-                      if (!longPressTriggeredRef.current && swipeDistance > 60) {
+                      if (!wasLongPress && !swipeMovedRef.current && swipeDistance <= 10 && !isMe && !isOptimistic && touchStartRef.current) {
+                        const elapsed = Date.now() - touchStartRef.current.time;
+                        if (elapsed < 300) toggleReactionPicker(m._id);
+                      }
+                      if (!wasLongPress && swipeDistance > 60 && swipeMovedRef.current) {
                         setReplyingTo(m);
                         if (window.navigator.vibrate) window.navigator.vibrate(10);
                       }
+                      if (wasLongPress) longPressTriggeredRef.current = false;
                       setSwipingMessageId(null);
                       setSwipeDistance(0);
                       touchStartRef.current = null;
-                      if (!longPressTriggeredRef.current) {
-                        setLongPressPickerId(null);
-                      }
-                      longPressTriggeredRef.current = false;
+                      swipeMovedRef.current = false;
                     }}
                     style={{
                       transform: swipingMessageId === m._id ? `translateX(${swipeDistance}px)` : 'none',
                       transition: swipingMessageId === m._id ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)'
                     }}
-                    className={`flex flex-col w-full transition-all duration-300 relative group/msg ${
+                    className={`flex flex-col w-full transition-all duration-300 relative group/msg mb-2.5 ${
                       isMe ? "items-end" : "items-start"
-                    }`}
+                    } ${reactionPickerId === m._id || actionMenuId === m._id ? "z-20" : ""}`}
                   >
                     {swipingMessageId === m._id && swipeDistance > 20 && (
                       <div 
@@ -318,12 +392,44 @@ export const MessageList: React.FC<MessageListProps> = ({
                         }`}
                       >
                         <div
-                          className={`relative p-2.5 sm:p-3 text-sm font-normal shadow-sm border border-zinc-800/10 ${
+                          data-message-bubble
+                          onClick={(e) => !isMe && !isOptimistic && handlePartnerBubbleTap(m._id, e)}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            if (isOptimistic) return;
+                            closeReactionPicker();
+                            setActionMenuId(m._id);
+                          }}
+                          onTouchStart={(e) => {
+                            if ((e.target as HTMLElement).closest("a, button, img, video, textarea")) return;
+                            startLongPress(m._id);
+                          }}
+                          onTouchMove={() => clearLongPressTimer()}
+                          onTouchEnd={() => clearLongPressTimer()}
+                          onMouseDown={(e) => {
+                            if ((e.target as HTMLElement).closest("a, button, img, video, textarea")) return;
+                            if (e.button !== 0) return;
+                            startLongPress(m._id);
+                          }}
+                          onMouseUp={clearLongPressTimer}
+                          onMouseLeave={clearLongPressTimer}
+                          className={`relative p-2.5 sm:p-3 text-sm font-normal shadow-md border transition-all duration-200 ${
                             isMe 
-                              ? `${activeTheme.bubbleMe} ${activeTheme.textMe || "text-white"} rounded-2xl rounded-tr-none` 
-                              : `${activeTheme.bubblePartner} rounded-2xl rounded-tl-none`
+                              ? `${activeTheme.bubbleMe} ${activeTheme.textMe || "text-white"} rounded-2xl rounded-tr-sm border-white/10` 
+                              : `${activeTheme.bubblePartner} rounded-2xl rounded-tl-sm border-zinc-700/30 cursor-pointer active:scale-[0.98]`
+                          } ${
+                            reactionPickerId === m._id && !isMe
+                              ? "ring-2 ring-white/40 shadow-lg scale-[1.02]"
+                              : ""
+                          } ${
+                            actionMenuId === m._id ? "ring-2 ring-amber-400/50 shadow-lg" : ""
                           }`}
                         >
+                          {(m.pinnedBy || []).includes(currentUser) && (
+                            <span className="absolute -top-1.5 right-2 text-amber-400" title="Pinned">
+                              <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1"><path d="M12 17v5" /><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2z" /></svg>
+                            </span>
+                          )}
                            {m.repliedTo && (
                               <div 
                                 onClick={() => {
@@ -475,9 +581,9 @@ export const MessageList: React.FC<MessageListProps> = ({
 
                         {reactionPickerId === m._id && !isMe && (
                           <div
-                            className={`absolute z-20 flex items-center gap-1 px-2 py-1.5 bg-zinc-900/95 border border-zinc-700/60 rounded-full shadow-2xl backdrop-blur-md animate-in fade-in duration-200 ${
-                              longPressPickerId === m._id ? "left-0 -top-12" : "left-0 top-full mt-1"
-                            }`}
+                            data-reaction-picker
+                            className="absolute z-30 left-1/2 -translate-x-1/2 -top-12 flex items-center gap-0.5 px-2 py-1.5 bg-zinc-900/95 border border-zinc-600/60 rounded-full shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-200"
+                            onClick={(e) => e.stopPropagation()}
                           >
                             {REACTION_OPTIONS.map((opt) => {
                               const myReaction = (m.reactions || []).find(r => r.user === currentUser);
@@ -486,8 +592,8 @@ export const MessageList: React.FC<MessageListProps> = ({
                                 <button
                                   key={opt.type}
                                   onClick={() => handleReactionSelect(m._id, opt.type)}
-                                  className={`p-1.5 rounded-full text-lg transition-all active:scale-125 hover:scale-110 ${
-                                    isActive ? 'bg-white/20 ring-2 ring-white/30 scale-110' : 'hover:bg-zinc-800'
+                                  className={`p-2 rounded-full text-xl transition-all active:scale-125 hover:scale-110 ${
+                                    isActive ? "bg-white/20 ring-2 ring-white/40 scale-110" : "hover:bg-zinc-800"
                                   }`}
                                   title={opt.label}
                                 >
@@ -498,37 +604,44 @@ export const MessageList: React.FC<MessageListProps> = ({
                           </div>
                         )}
 
-                        {/* Message Actions - Now below the bubble */}
-                        <div className={`flex items-center gap-1 mt-1 px-1 transition-all duration-300 ${isMe ? 'flex-row-reverse' : 'flex-row'} opacity-0 group-hover/msg:opacity-100`}>
+                        {actionMenuId === m._id && !isOptimistic && (
+                          <MessageActionMenu
+                            message={m}
+                            isMe={isMe}
+                            isPinned={(m.pinnedBy || []).includes(currentUser)}
+                            align={isMe ? "right" : "left"}
+                            onPin={() => handleTogglePinMessage(m._id)}
+                            onEdit={isMe && m.text ? () => {
+                              setEditingMessage(m._id);
+                              setEditingMessageText(m.text || "");
+                            } : undefined}
+                            onDelete={isMe ? () => handleDeleteMessage(m._id) : undefined}
+                            onClose={closeActionMenu}
+                          />
+                        )}
+
+                        {/* Message Actions */}
+                        <div className={`flex items-center gap-1 mt-1 px-1 transition-all duration-300 ${isMe ? "flex-row-reverse" : "flex-row"} ${
+                          reactionPickerId === m._id || actionMenuId === m._id ? "opacity-100" : "opacity-0 group-hover/msg:opacity-100 max-sm:opacity-70"
+                        }`}>
                           <button 
-                              onClick={() => setReplyingTo(m)}
+                              onClick={(e) => { e.stopPropagation(); setReplyingTo(m); closeReactionPicker(); closeActionMenu(); }}
                               className="p-1.5 bg-zinc-900/50 border border-zinc-800/50 rounded-full text-zinc-500 hover:text-white hover:border-zinc-700 transition-all active:scale-90"
                               title="Reply"
                           >
                               <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
                           </button>
-                          {!isMe && !isOptimistic && (
-                            <button
-                              onClick={() => {
-                                setLongPressPickerId(null);
-                                setReactionPickerId(reactionPickerId === m._id ? null : m._id);
-                              }}
-                              className={`p-1.5 bg-zinc-900/50 border border-zinc-800/50 rounded-full transition-all active:scale-90 ${
-                                reactionPickerId === m._id || (m.reactions || []).some(r => r.user === currentUser)
-                                  ? 'text-pink-400 border-pink-500/50'
-                                  : 'text-zinc-500 hover:text-white hover:border-zinc-700'
-                              }`}
-                              title="React"
-                            >
-                              <span className="text-[10px] leading-none">
-                                {(m.reactions || []).find(r => r.user === currentUser)
-                                  ? REACTION_EMOJIS[(m.reactions || []).find(r => r.user === currentUser)!.type]
-                                  : '😊'}
-                              </span>
-                            </button>
-                          )}
                           <button 
-                              onClick={() => handleToggleSaveMessage(m._id)}
+                              onClick={(e) => { e.stopPropagation(); handleTogglePinMessage(m._id); }}
+                              className={`p-1.5 bg-zinc-900/50 border border-zinc-800/50 rounded-full transition-all active:scale-90 ${
+                                  (m.pinnedBy || []).includes(currentUser) ? "text-amber-400 border-amber-500/50" : "text-zinc-500 hover:text-white hover:border-zinc-700"
+                              }`}
+                              title={(m.pinnedBy || []).includes(currentUser) ? "Unpin" : "Pin"}
+                          >
+                              <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 17v5" /><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2z" /></svg>
+                          </button>
+                          <button 
+                              onClick={(e) => { e.stopPropagation(); handleToggleSaveMessage(m._id); }}
                               className={`p-1.5 bg-zinc-900/50 border border-zinc-800/50 rounded-full transition-all active:scale-90 ${
                                   (m.savedBy || []).includes(currentUser) ? 'text-yellow-500 border-yellow-500/50' : 'text-zinc-500 hover:text-white hover:border-zinc-700'
                               }`}
@@ -576,6 +689,18 @@ export const MessageList: React.FC<MessageListProps> = ({
             </div>
           )}
         </div>
+      )}
+
+      {showScrollButton && (
+        <button
+          onClick={() => scrollToBottom()}
+          className={`absolute z-[25] p-3 ${activeTheme.bubbleMe} text-white rounded-full shadow-2xl hover:opacity-90 active:scale-90 transition-all border-2 border-zinc-950/80 bottom-3 right-3`}
+          title="Scroll to bottom"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+            <path d="m7 13 5 5 5-5M7 6l5 5 5-5" />
+          </svg>
+        </button>
       )}
 
       {zoomedAvatar && (

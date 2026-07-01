@@ -504,6 +504,27 @@ export async function toggleSaveMessage(id: string, username: string) {
   }
 }
 
+export async function togglePinMessage(id: string, username: string) {
+  try {
+    await dbConnect();
+    const message = await Message.findById(id);
+    if (!message) throw new Error("Message not found");
+
+    const isPinned = (message.pinnedBy || []).includes(username);
+    if (isPinned) {
+      await Message.findByIdAndUpdate(id, { $pull: { pinnedBy: username } });
+    } else {
+      await Message.findByIdAndUpdate(id, { $addToSet: { pinnedBy: username } });
+    }
+    revalidatePath('/');
+    notifyRealtime();
+    return { pinned: !isPinned };
+  } catch (error) {
+    console.error('Failed to toggle pin message:', error);
+    throw new Error('Failed to toggle pin message.');
+  }
+}
+
 export async function reactToMessage(id: string, username: string, reactionType: string) {
   try {
     await dbConnect();

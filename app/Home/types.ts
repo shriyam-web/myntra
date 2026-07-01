@@ -25,6 +25,7 @@ export interface Message {
   createdAt: string;
   createdBy: UserType;
   savedBy?: string[];
+  pinnedBy?: string[];
   reactions?: MessageReaction[];
   repliedTo?: {
     _id: string;

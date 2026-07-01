@@ -34,6 +34,7 @@ const MessageSchema = new Schema({
   repliedTo: { type: Schema.Types.ObjectId, ref: 'Message' },
   deletedFor: [{ type: String }],
   savedBy: [{ type: String }],
+  pinnedBy: [{ type: String }],
   reactions: [{
     user: { type: String, required: true },
     type: { type: String, enum: ['sad', 'love', 'funny', 'confused', 'angry'], required: true },
