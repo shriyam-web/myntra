@@ -28,7 +28,6 @@ interface MessageListProps {
   isMessageExpanded: boolean;
   handleDeleteMessage: (id: string) => void;
   handleUpdateMessage: (id: string, text: string) => void;
-  handleToggleSaveMessage: (id: string) => void;
   handleTogglePinMessage: (id: string) => void;
   handleReactToMessage: (id: string, reaction: ReactionType) => void;
   partnerBurstReaction?: ReactionType | null;
@@ -66,7 +65,6 @@ export const MessageList: React.FC<MessageListProps> = ({
   isMessageExpanded,
   handleDeleteMessage,
   handleUpdateMessage,
-  handleToggleSaveMessage,
   handleTogglePinMessage,
   handleReactToMessage,
   partnerBurstReaction = null,
@@ -160,9 +158,25 @@ export const MessageList: React.FC<MessageListProps> = ({
   };
 
   const handlePartnerBubbleTap = (messageId: string, e: React.MouseEvent) => {
+    if (longPressTriggeredRef.current) {
+      longPressTriggeredRef.current = false;
+      return;
+    }
     if ((e.target as HTMLElement).closest("a, button, img, video, textarea")) return;
     e.stopPropagation();
+    closeActionMenu();
     toggleReactionPicker(messageId);
+  };
+
+  const handleOwnBubbleTap = (e: React.MouseEvent) => {
+    if (longPressTriggeredRef.current) {
+      longPressTriggeredRef.current = false;
+      return;
+    }
+    if ((e.target as HTMLElement).closest("a, button, img, video, textarea")) return;
+    e.stopPropagation();
+    closeReactionPicker();
+    closeActionMenu();
   };
 
   const activeBurst = burstReaction || partnerBurstReaction;
@@ -333,18 +347,18 @@ export const MessageList: React.FC<MessageListProps> = ({
                       if (distance > 10) swipeMovedRef.current = true;
                       
                       if (Math.abs(deltaX) > Math.abs(deltaY) && deltaX > 0) {
+                        clearLongPressTimer();
                         setSwipingMessageId(m._id);
                         setSwipeDistance(Math.min(deltaX, 80));
                       }
                     }}
                     onTouchEnd={() => {
                       const wasLongPress = longPressTriggeredRef.current;
+                      const currentSwipe = swipingMessageId === m._id ? swipeDistance : 0;
                       clearLongPressTimer();
-                      if (!wasLongPress && !swipeMovedRef.current && swipeDistance <= 10 && !isMe && !isOptimistic && touchStartRef.current) {
-                        const elapsed = Date.now() - touchStartRef.current.time;
-                        if (elapsed < 300) toggleReactionPicker(m._id);
-                      }
-                      if (!wasLongPress && swipeDistance > 60 && swipeMovedRef.current) {
+                      if (!wasLongPress && currentSwipe > 60 && swipeMovedRef.current) {
+                        closeReactionPicker();
+                        closeActionMenu();
                         setReplyingTo(m);
                         if (window.navigator.vibrate) window.navigator.vibrate(10);
                       }
@@ -393,7 +407,11 @@ export const MessageList: React.FC<MessageListProps> = ({
                       >
                         <div
                           data-message-bubble
-                          onClick={(e) => !isMe && !isOptimistic && handlePartnerBubbleTap(m._id, e)}
+                          onClick={(e) => {
+                            if (isOptimistic) return;
+                            if (!isMe) handlePartnerBubbleTap(m._id, e);
+                            else handleOwnBubbleTap(e);
+                          }}
                           onContextMenu={(e) => {
                             e.preventDefault();
                             if (isOptimistic) return;
@@ -402,9 +420,13 @@ export const MessageList: React.FC<MessageListProps> = ({
                           }}
                           onTouchStart={(e) => {
                             if ((e.target as HTMLElement).closest("a, button, img, video, textarea")) return;
+                            e.stopPropagation();
                             startLongPress(m._id);
                           }}
-                          onTouchMove={() => clearLongPressTimer()}
+                          onTouchMove={(e) => {
+                            if ((e.target as HTMLElement).closest("a, button, img, video, textarea")) return;
+                            clearLongPressTimer();
+                          }}
                           onTouchEnd={() => clearLongPressTimer()}
                           onMouseDown={(e) => {
                             if ((e.target as HTMLElement).closest("a, button, img, video, textarea")) return;
@@ -619,58 +641,6 @@ export const MessageList: React.FC<MessageListProps> = ({
                             onClose={closeActionMenu}
                           />
                         )}
-
-                        {/* Message Actions */}
-                        <div className={`flex items-center gap-1 mt-1 px-1 transition-all duration-300 ${isMe ? "flex-row-reverse" : "flex-row"} ${
-                          reactionPickerId === m._id || actionMenuId === m._id ? "opacity-100" : "opacity-0 group-hover/msg:opacity-100 max-sm:opacity-70"
-                        }`}>
-                          <button 
-                              onClick={(e) => { e.stopPropagation(); setReplyingTo(m); closeReactionPicker(); closeActionMenu(); }}
-                              className="p-1.5 bg-zinc-900/50 border border-zinc-800/50 rounded-full text-zinc-500 hover:text-white hover:border-zinc-700 transition-all active:scale-90"
-                              title="Reply"
-                          >
-                              <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
-                          </button>
-                          <button 
-                              onClick={(e) => { e.stopPropagation(); handleTogglePinMessage(m._id); }}
-                              className={`p-1.5 bg-zinc-900/50 border border-zinc-800/50 rounded-full transition-all active:scale-90 ${
-                                  (m.pinnedBy || []).includes(currentUser) ? "text-amber-400 border-amber-500/50" : "text-zinc-500 hover:text-white hover:border-zinc-700"
-                              }`}
-                              title={(m.pinnedBy || []).includes(currentUser) ? "Unpin" : "Pin"}
-                          >
-                              <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 17v5" /><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2z" /></svg>
-                          </button>
-                          <button 
-                              onClick={(e) => { e.stopPropagation(); handleToggleSaveMessage(m._id); }}
-                              className={`p-1.5 bg-zinc-900/50 border border-zinc-800/50 rounded-full transition-all active:scale-90 ${
-                                  (m.savedBy || []).includes(currentUser) ? 'text-yellow-500 border-yellow-500/50' : 'text-zinc-500 hover:text-white hover:border-zinc-700'
-                              }`}
-                              title={(m.savedBy || []).includes(currentUser) ? "Unsave" : "Save"}
-                          >
-                              <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill={(m.savedBy || []).includes(currentUser) ? "currentColor" : "none"} stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></svg>
-                          </button>
-                          {isMe && (
-                              <>
-                                  <button 
-                                      onClick={() => {
-                                          setEditingMessage(m._id);
-                                          setEditingMessageText(m.text || '');
-                                      }}
-                                      className="p-1.5 bg-zinc-900/50 border border-zinc-800/50 rounded-full text-zinc-500 hover:text-white hover:border-zinc-700 transition-all active:scale-90"
-                                      title="Edit"
-                                  >
-                                      <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
-                                  </button>
-                                  <button 
-                                      onClick={() => handleDeleteMessage(m._id)}
-                                      className="p-1.5 bg-zinc-900/50 border border-zinc-800/50 rounded-full text-zinc-500 hover:text-red-500 hover:border-red-900/50 transition-all active:scale-90"
-                                      title="Delete"
-                                  >
-                                      <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-                                  </button>
-                              </>
-                          )}
-                        </div>
                       </div>
                     </div>
                   </div>

@@ -1036,7 +1036,6 @@ export default function HomeClient() {
                     isMessageExpanded={isMessageExpanded}
                     handleDeleteMessage={handleDeleteMessage}
                     handleUpdateMessage={handleUpdateMessage}
-                    handleToggleSaveMessage={handleToggleSaveMessage}
                     handleTogglePinMessage={handleTogglePinMessage}
                     handleReactToMessage={handleReactToMessage}
                     partnerBurstReaction={partnerBurstReaction}
