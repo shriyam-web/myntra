@@ -948,7 +948,8 @@ export default function HomeClient() {
                 </div>
              </div>
 
-             <div className={`relative flex-1 flex flex-col bg-zinc-900/50 rounded-[2.5rem] border border-zinc-800/50 shadow-2xl overflow-hidden backdrop-blur-xl ${isMessageExpanded ? "rounded-none border-none" : ""}`}>
+             <div className={`relative flex-1 flex flex-col ${chatBgColor} rounded-[2.5rem] border border-zinc-800/50 shadow-2xl overflow-hidden backdrop-blur-xl ${isMessageExpanded ? "rounded-none border-none" : ""}`}>
+                <div className={`absolute inset-0 pointer-events-none opacity-40 ${activeTheme.glow}`} />
                 {chatWallpaper && (
                     <ChatWallpaper wallpaperValue={chatWallpaper} wallpapers={wallpapers} />
                 )}
