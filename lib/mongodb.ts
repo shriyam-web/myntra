@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import dns from 'dns';
 
 interface MongooseCache {
   conn: unknown;
@@ -16,12 +17,27 @@ if (!global.mongoose) {
   globalRef.mongoose = cached as MongooseCache;
 }
 
+let dnsConfigured = false;
+
+function configureDnsForSrvLookup(uri: string) {
+  if (dnsConfigured || !uri.startsWith('mongodb+srv://')) return;
+  try {
+    // Windows/local DNS often refuses SRV queries in Node while nslookup still works.
+    dns.setServers(['8.8.8.8', '8.8.4.4', '1.1.1.1']);
+    dnsConfigured = true;
+  } catch {
+    // ignore — fall back to system DNS
+  }
+}
+
 async function dbConnect() {
   const MONGODB_URI = process.env.MONGODB_URI;
 
   if (!MONGODB_URI) {
     throw new Error('MONGODB_URI environment variable is not set. Please configure .env.local');
   }
+
+  configureDnsForSrvLookup(MONGODB_URI);
 
   if (cached.conn) {
     return cached.conn;
