@@ -115,6 +115,7 @@ export default function HomeClient() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [previewMessage, setPreviewMessage] = useState<Message | null>(null);
   const [previewImageIndex, setPreviewImageIndex] = useState(0);
+  const [showCopyToast, setShowCopyToast] = useState(false);
   const [pullUpDistance, setPullUpDistance] = useState(0);
   const [isPullingUp, setIsPullingUp] = useState(false);
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
@@ -123,6 +124,7 @@ export default function HomeClient() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messageInputRef = useRef<HTMLTextAreaElement>(null);
   const rafRef = useRef<number | null>(null);
+  const copyToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastMessageIdRef = useRef<string | null>(null);
   const prevLastMessageIdRef = useRef<string | null>(null);
   const reactionsSnapshotRef = useRef<Map<string, string>>(new Map());
@@ -171,6 +173,14 @@ export default function HomeClient() {
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (copyToastTimerRef.current) {
+        clearTimeout(copyToastTimerRef.current);
+      }
+    };
   }, []);
 
   // Handlers
@@ -673,9 +683,18 @@ export default function HomeClient() {
 
   const handleCopyMessage = useCallback(async (text: string) => {
     if (!text?.trim()) return;
+    const showCopiedToast = () => {
+      setShowCopyToast(true);
+      if (copyToastTimerRef.current) clearTimeout(copyToastTimerRef.current);
+      copyToastTimerRef.current = setTimeout(() => {
+        setShowCopyToast(false);
+      }, 4500);
+    };
+
     try {
       await navigator.clipboard.writeText(text);
       if (window.navigator.vibrate) window.navigator.vibrate(8);
+      showCopiedToast();
     } catch {
       try {
         const el = document.createElement("textarea");
@@ -686,6 +705,7 @@ export default function HomeClient() {
         el.select();
         document.execCommand("copy");
         document.body.removeChild(el);
+        showCopiedToast();
       } catch (err) {
         console.error("Failed to copy message:", err);
       }
@@ -773,6 +793,13 @@ export default function HomeClient() {
 
   return (
     <div className="flex flex-col min-h-[100svh] bg-zinc-950 text-zinc-100 font-sans pb-2 selection:bg-white selection:text-black">
+      {showCopyToast && (
+        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[220] animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <div className="px-4 py-2 rounded-xl bg-zinc-900/95 border border-zinc-700 text-zinc-100 shadow-2xl backdrop-blur-xl text-[11px] font-bold uppercase tracking-wider">
+            Text copied
+          </div>
+        </div>
+      )}
       <div className="sticky top-0 z-50">
         {!(isMessageExpanded && activeTab === "messages") && (
         <ChatHeader 

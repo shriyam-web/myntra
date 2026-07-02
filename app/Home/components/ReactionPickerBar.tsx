@@ -9,6 +9,7 @@ interface ReactionPickerBarProps {
   messageId: string;
   myReactionType?: ReactionType;
   onSelect: (type: ReactionType) => void;
+  onRemove?: () => void;
   onClose: () => void;
 }
 
@@ -19,6 +20,7 @@ export const ReactionPickerBar: React.FC<ReactionPickerBarProps> = ({
   messageId,
   myReactionType,
   onSelect,
+  onRemove,
   onClose,
 }) => {
   const [position, setPosition] = useState<{
@@ -109,6 +111,16 @@ export const ReactionPickerBar: React.FC<ReactionPickerBarProps> = ({
             </button>
           );
         })}
+        {myReactionType && onRemove && (
+          <button
+            type="button"
+            onClick={onRemove}
+            className="ml-1 px-2.5 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider shrink-0 bg-red-500/20 text-red-200 border border-red-400/30 hover:bg-red-500/30 transition-colors"
+            title="Remove my reaction"
+          >
+            Remove
+          </button>
+        )}
       </div>
     </>,
     document.body

@@ -160,6 +160,13 @@ export const MessageList: React.FC<MessageListProps> = ({
     if (window.navigator.vibrate) window.navigator.vibrate(15);
   };
 
+  const handleReactionRemove = (messageId: string, reaction: ReactionType) => {
+    closeReactionPicker();
+    closeActionMenu();
+    handleReactToMessage(messageId, reaction);
+    if (window.navigator.vibrate) window.navigator.vibrate(10);
+  };
+
   const toggleReactionPicker = (messageId: string) => {
     closeActionMenu();
     setReactionPickerId((prev) => (prev === messageId ? null : messageId));
@@ -224,6 +231,12 @@ export const MessageList: React.FC<MessageListProps> = ({
             (r) => r.user === currentUser
           )?.type}
           onSelect={(type) => handleReactionSelect(reactionPickerId, type)}
+          onRemove={() => {
+            const mine = (reactionPickerMessage.reactions || []).find(
+              (r) => r.user === currentUser
+            )?.type;
+            if (mine) handleReactionRemove(reactionPickerId, mine);
+          }}
           onClose={closeReactionPicker}
         />
       )}
