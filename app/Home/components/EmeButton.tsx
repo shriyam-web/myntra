@@ -149,16 +149,12 @@ export const EmeButton: React.FC = () => {
       }}
       disabled={isEnabling}
       style={{ left: position.x, top: position.y, width: BUTTON_SIZE, height: BUTTON_SIZE }}
-      className="fixed z-[210] touch-none select-none rounded-full bg-red-600 text-white border-2 border-red-300/80 shadow-[0_0_28px_rgba(220,38,38,0.55)] hover:bg-red-500 hover:shadow-[0_0_36px_rgba(220,38,38,0.7)] active:scale-95 transition-[transform,background-color,box-shadow] disabled:opacity-75 cursor-grab active:cursor-grabbing flex items-center justify-center"
+      className="fixed z-[210] touch-none select-none rounded-full bg-red-600 text-white border-2 border-red-300/80 shadow-[0_0_28px_rgba(220,38,38,0.55)] hover:bg-red-500 disabled:opacity-75 cursor-grab active:cursor-grabbing flex items-center justify-center"
       title="Emergency — drag to move, tap to activate"
       aria-label="Emergency SOS"
     >
-      <span
-        className="absolute inset-0 rounded-full border-2 border-red-300/50 animate-ping pointer-events-none"
-        aria-hidden
-      />
       {isEnabling ? (
-        <span className="text-lg font-black animate-pulse">…</span>
+        <span className="text-lg font-black">…</span>
       ) : (
         <svg
           xmlns="http://www.w3.org/2000/svg"
