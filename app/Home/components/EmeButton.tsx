@@ -149,7 +149,7 @@ export const EmeButton: React.FC = () => {
       }}
       disabled={isEnabling}
       style={{ left: position.x, top: position.y, width: BUTTON_SIZE, height: BUTTON_SIZE }}
-      className="fixed z-[210] touch-none select-none rounded-full bg-red-600 text-white border-2 border-red-300/80 shadow-[0_0_28px_rgba(220,38,38,0.55)] hover:bg-red-500 disabled:opacity-75 cursor-grab active:cursor-grabbing flex items-center justify-center"
+      className="fixed z-[210] touch-none select-none rounded-full bg-[#7B1E3A] text-white border-2 border-[#9B3A55]/80 shadow-[0_0_20px_rgba(123,30,58,0.4)] hover:bg-[#6B1A32] disabled:opacity-75 cursor-grab active:cursor-grabbing flex items-center justify-center"
       title="Emergency — drag to move, tap to activate"
       aria-label="Emergency SOS"
     >
