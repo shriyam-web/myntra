@@ -788,7 +788,11 @@ export default function HomeClient() {
   const visibleMessages = useMemo(
     () =>
       showSavedMessagesOnly
-        ? messages.filter((m) => (m.savedBy || []).includes(currentUser))
+        ? messages.filter((m) => {
+            const isSaved = (m.savedBy || []).includes(currentUser);
+            const isPinned = (m.pinnedBy || []).includes(currentUser);
+            return isSaved || isPinned;
+          })
         : messages,
     [messages, showSavedMessagesOnly, currentUser]
   );
@@ -820,7 +824,7 @@ export default function HomeClient() {
     <div className="flex flex-col min-h-[100svh] bg-zinc-950 text-zinc-100 font-sans pb-2 selection:bg-white selection:text-black">
       {showCopyToast && (
         <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[220] animate-in fade-in slide-in-from-bottom-4 duration-300">
-          <div className="px-4 py-2 rounded-xl bg-zinc-900/95 border border-zinc-700 text-zinc-100 shadow-2xl backdrop-blur-xl text-[11px] font-bold uppercase tracking-wider">
+          <div className="px-6 py-3 rounded-2xl bg-red-600/95 border border-red-300/70 text-white shadow-2xl shadow-red-900/40 backdrop-blur-xl text-[13px] font-black uppercase tracking-[0.18em]">
             Text copied
           </div>
         </div>
