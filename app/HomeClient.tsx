@@ -362,9 +362,9 @@ export default function HomeClient() {
   }, [view, users]);
 
   // Handlers
-  const handleLogin = (e?: React.FormEvent) => {
+  const handleLogin = (e?: React.FormEvent, passwordOverride?: string) => {
     if (e) e.preventDefault();
-    const lowerPassword = password.toLowerCase().trim();
+    const lowerPassword = (passwordOverride ?? password).toLowerCase().trim();
     if (lowerPassword === "icai") {
       setView("alpha 1");
     } else if (lowerPassword === "gamma2") {
