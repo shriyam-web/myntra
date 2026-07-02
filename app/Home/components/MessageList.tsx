@@ -586,6 +586,10 @@ export const MessageList: React.FC<MessageListProps> = ({
                               ? `${activeTheme.bubbleMe} ${activeTheme.textMe || "text-white"} rounded-2xl rounded-tr-sm border-white/10` 
                               : `${activeTheme.bubblePartner} rounded-2xl rounded-tl-sm border-zinc-700/30 cursor-pointer active:scale-[0.98]`
                           } ${
+                            editingMessage === m._id
+                              ? "min-w-[260px] w-[min(80vw,460px)] sm:w-[min(65vw,520px)]"
+                              : ""
+                          } ${
                             reactionPickerId === m._id && !isMe
                               ? "ring-2 ring-white/40 shadow-lg scale-[1.02]"
                               : ""
