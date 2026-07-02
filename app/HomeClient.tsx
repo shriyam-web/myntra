@@ -130,6 +130,8 @@ export default function HomeClient() {
   const copyToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const unseenSeparatorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastShownUnseenSeparatorRef = useRef<string | null>(null);
+  const activeUnseenSeparatorRef = useRef<{ messageId: string; shownAt: number } | null>(null);
+  const UNSEEN_SEPARATOR_DURATION_MS = 30000;
   const lastMessageIdRef = useRef<string | null>(null);
   const prevLastMessageIdRef = useRef<string | null>(null);
   const reactionsSnapshotRef = useRef<Map<string, string>>(new Map());
@@ -218,6 +220,19 @@ export default function HomeClient() {
   useEffect(() => {
     if (activeTab !== "messages") return;
 
+    const active = activeUnseenSeparatorRef.current;
+    if (active) {
+      const elapsed = Date.now() - active.shownAt;
+      if (elapsed < UNSEEN_SEPARATOR_DURATION_MS) {
+        setUnseenSeparatorMessageId((prev) =>
+          prev === active.messageId ? prev : active.messageId
+        );
+        return;
+      }
+      activeUnseenSeparatorRef.current = null;
+      setUnseenSeparatorMessageId(null);
+    }
+
     const me = users.find(
       (u) => u.username.trim().toLowerCase() === currentUser.trim().toLowerCase()
     );
@@ -229,24 +244,22 @@ export default function HomeClient() {
       return new Date(m.createdAt).getTime() > lastReadAt;
     });
 
-    if (!firstUnseenIncoming) {
-      setUnseenSeparatorMessageId(null);
-      return;
-    }
+    if (!firstUnseenIncoming) return;
 
     if (lastShownUnseenSeparatorRef.current === firstUnseenIncoming._id) return;
 
-    setUnseenSeparatorMessageId(firstUnseenIncoming._id);
-    lastShownUnseenSeparatorRef.current = firstUnseenIncoming._id;
+    const messageId = firstUnseenIncoming._id;
+    activeUnseenSeparatorRef.current = { messageId, shownAt: Date.now() };
+    lastShownUnseenSeparatorRef.current = messageId;
+    setUnseenSeparatorMessageId(messageId);
 
     if (unseenSeparatorTimerRef.current) {
       clearTimeout(unseenSeparatorTimerRef.current);
     }
     unseenSeparatorTimerRef.current = setTimeout(() => {
-      setUnseenSeparatorMessageId((prev) =>
-        prev === firstUnseenIncoming._id ? null : prev
-      );
-    }, 35000);
+      activeUnseenSeparatorRef.current = null;
+      setUnseenSeparatorMessageId((prev) => (prev === messageId ? null : prev));
+    }, UNSEEN_SEPARATOR_DURATION_MS);
   }, [activeTab, messages, users, currentUser]);
 
   useRealtimeSync(view, useCallback(() => {
