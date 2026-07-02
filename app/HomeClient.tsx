@@ -31,6 +31,7 @@ import { useRealtimeSync } from "./Home/hooks/useRealtimeSync";
 import { useTypingSignal, usePartnerTypingState } from "./Home/hooks/useTypingIndicator";
 import { CallLogsTab } from "./Home/components/CallLogsTab";
 import { MAINTENANCE_REDIRECT_URL } from "../lib/maintenance";
+import { detectIncognitoMode } from "./Home/utils/detectIncognito";
 
 export default function HomeClient() {
   const [isIncognito, setIsIncognito] = useState<boolean | null>(null);
@@ -344,41 +345,12 @@ export default function HomeClient() {
       }
     };
 
-    const timeoutId = setTimeout(() => resolve(true), 1000);
+    const timeoutId = setTimeout(() => resolve(true), 1500);
 
-    const checkIncognito = async () => {
-      try {
-        if (navigator.storage?.estimate) {
-          const { quota } = await navigator.storage.estimate();
-          if (quota !== undefined) {
-            resolve(quota < 4_000_000_000);
-            return;
-          }
-        }
+    void detectIncognitoMode()
+      .then(resolve)
+      .catch(() => resolve(true));
 
-        const fs =
-          (window as Window & { RequestFileSystem?: unknown; webkitRequestFileSystem?: unknown })
-            .RequestFileSystem ||
-          (window as Window & { webkitRequestFileSystem?: unknown }).webkitRequestFileSystem;
-
-        if (typeof fs === "function") {
-          fs.call(
-            window,
-            (window as Window & { TEMPORARY?: number }).TEMPORARY,
-            100,
-            () => resolve(false),
-            () => resolve(true)
-          );
-          return;
-        }
-
-        resolve(true);
-      } catch {
-        resolve(true);
-      }
-    };
-
-    void checkIncognito();
     return () => {
       clearTimeout(timeoutId);
       resolved = true;
