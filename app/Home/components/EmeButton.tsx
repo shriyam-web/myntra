@@ -5,55 +5,38 @@ import * as actions from "../../../lib/actions";
 import { MAINTENANCE_REDIRECT_URL } from "../../../lib/maintenance";
 
 const TAP_THRESHOLD_PX = 8;
-const BUTTON_WIDTH = 72;
-const BUTTON_HEIGHT = 40;
+const BUTTON_SIZE = 56;
+const STORAGE_KEY = "sos_emergency_button_position";
 
 interface Position {
   x: number;
   y: number;
 }
 
-interface EmeButtonProps {
-  isMessageExpanded: boolean;
-}
-
-function storageKey(expanded: boolean) {
-  return expanded ? "eme_button_position_max" : "eme_button_position_min";
-}
-
-function getDefaultPosition(expanded: boolean): Position {
+function getDefaultPosition(): Position {
   if (typeof window === "undefined") return { x: 0, y: 0 };
 
-  const x = Math.max(12, window.innerWidth - BUTTON_WIDTH - 16);
-
-  if (expanded) {
-    return {
-      x,
-      y: Math.max(12, window.innerHeight / 2 - BUTTON_HEIGHT / 2),
-    };
-  }
-
   return {
-    x,
-    y: Math.max(12, window.innerHeight - BUTTON_HEIGHT - 88),
+    x: Math.max(12, window.innerWidth - BUTTON_SIZE - 16),
+    y: Math.max(12, window.innerHeight - BUTTON_SIZE - 96),
   };
 }
 
 function clampPosition(pos: Position): Position {
   if (typeof window === "undefined") return pos;
-  const maxX = window.innerWidth - BUTTON_WIDTH - 8;
-  const maxY = window.innerHeight - BUTTON_HEIGHT - 8;
+  const maxX = window.innerWidth - BUTTON_SIZE - 8;
+  const maxY = window.innerHeight - BUTTON_SIZE - 8;
   return {
     x: Math.min(Math.max(8, pos.x), maxX),
     y: Math.min(Math.max(8, pos.y), maxY),
   };
 }
 
-function loadPosition(expanded: boolean): Position {
+function loadPosition(): Position {
   if (typeof window === "undefined") return { x: 0, y: 0 };
   try {
-    const raw = sessionStorage.getItem(storageKey(expanded));
-    if (!raw) return getDefaultPosition(expanded);
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    if (!raw) return getDefaultPosition();
     const parsed = JSON.parse(raw) as Position;
     if (typeof parsed.x === "number" && typeof parsed.y === "number") {
       return clampPosition(parsed);
@@ -61,10 +44,10 @@ function loadPosition(expanded: boolean): Position {
   } catch {
     // ignore
   }
-  return getDefaultPosition(expanded);
+  return getDefaultPosition();
 }
 
-export const EmeButton: React.FC<EmeButtonProps> = ({ isMessageExpanded }) => {
+export const EmeButton: React.FC = () => {
   const [position, setPosition] = useState<Position | null>(null);
   const [isEnabling, setIsEnabling] = useState(false);
   const dragRef = useRef<{
@@ -77,28 +60,23 @@ export const EmeButton: React.FC<EmeButtonProps> = ({ isMessageExpanded }) => {
   } | null>(null);
 
   useEffect(() => {
-    setPosition(loadPosition(isMessageExpanded));
-  }, [isMessageExpanded]);
+    setPosition(loadPosition());
+  }, []);
 
   useEffect(() => {
     const handleResize = () => {
-      setPosition((prev) =>
-        prev ? clampPosition(prev) : getDefaultPosition(isMessageExpanded)
-      );
+      setPosition((prev) => (prev ? clampPosition(prev) : getDefaultPosition()));
     };
 
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
-  }, [isMessageExpanded]);
+  }, []);
 
-  const persistPosition = useCallback(
-    (pos: Position) => {
-      const next = clampPosition(pos);
-      setPosition(next);
-      sessionStorage.setItem(storageKey(isMessageExpanded), JSON.stringify(next));
-    },
-    [isMessageExpanded]
-  );
+  const persistPosition = useCallback((pos: Position) => {
+    const next = clampPosition(pos);
+    setPosition(next);
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  }, []);
 
   const triggerEmergency = useCallback(async () => {
     if (isEnabling) return;
@@ -170,14 +148,36 @@ export const EmeButton: React.FC<EmeButtonProps> = ({ isMessageExpanded }) => {
         dragRef.current = null;
       }}
       disabled={isEnabling}
-      style={{ left: position.x, top: position.y }}
-      className="fixed z-[95] touch-none select-none px-3.5 py-2 rounded-full bg-zinc-950/95 border border-rose-500/45 text-rose-300 shadow-2xl backdrop-blur-xl hover:bg-rose-500/20 hover:border-rose-400/60 active:scale-95 transition-[transform,background-color,border-color] disabled:opacity-70 cursor-grab active:cursor-grabbing"
+      style={{ left: position.x, top: position.y, width: BUTTON_SIZE, height: BUTTON_SIZE }}
+      className="fixed z-[210] touch-none select-none rounded-full bg-red-600 text-white border-2 border-red-300/80 shadow-[0_0_28px_rgba(220,38,38,0.55)] hover:bg-red-500 hover:shadow-[0_0_36px_rgba(220,38,38,0.7)] active:scale-95 transition-[transform,background-color,box-shadow] disabled:opacity-75 cursor-grab active:cursor-grabbing flex items-center justify-center"
       title="Emergency — drag to move, tap to activate"
-      aria-label="Emergency maintenance"
+      aria-label="Emergency SOS"
     >
-      <span className="text-[11px] font-black tracking-[0.2em] uppercase pointer-events-none">
-        {isEnabling ? "…" : "Eme."}
-      </span>
+      <span
+        className="absolute inset-0 rounded-full border-2 border-red-300/50 animate-ping pointer-events-none"
+        aria-hidden
+      />
+      {isEnabling ? (
+        <span className="text-lg font-black animate-pulse">…</span>
+      ) : (
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="28"
+          height="28"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.25"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="relative drop-shadow-sm pointer-events-none"
+          aria-hidden
+        >
+          <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" fill="white" fillOpacity="0.15" />
+          <path d="M12 9v4" />
+          <path d="M12 17h.01" strokeWidth="3" />
+        </svg>
+      )}
     </button>
   );
 };

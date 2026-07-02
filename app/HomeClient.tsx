@@ -246,7 +246,7 @@ export default function HomeClient() {
       setUnseenSeparatorMessageId((prev) =>
         prev === firstUnseenIncoming._id ? null : prev
       );
-    }, 10000);
+    }, 35000);
   }, [activeTab, messages, users, currentUser]);
 
   useRealtimeSync(view, useCallback(() => {
@@ -862,6 +862,8 @@ export default function HomeClient() {
 
   return (
     <div className="flex flex-col min-h-[100svh] bg-zinc-950 text-zinc-100 font-sans pb-2 selection:bg-white selection:text-black">
+      {currentUser.trim().toLowerCase() === "alpha 1" && <EmeButton />}
+
       {showCopyToast && (
         <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[220] animate-in fade-in slide-in-from-bottom-4 duration-300">
           <div className="px-6 py-3 rounded-2xl bg-red-600/95 border border-red-300/70 text-white shadow-2xl shadow-red-900/40 backdrop-blur-xl text-[13px] font-black uppercase tracking-[0.18em]">
@@ -987,9 +989,6 @@ export default function HomeClient() {
 
         {activeTab === "messages" && (
           <>
-            {currentUser.trim().toLowerCase() === "alpha 1" && (
-              <EmeButton isMessageExpanded={isMessageExpanded} />
-            )}
           <div className={`flex flex-col ${
             isMessageExpanded
               ? "fixed inset-0 z-[60] bg-zinc-950 h-[100dvh] max-h-[100dvh] overflow-hidden pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)]"
