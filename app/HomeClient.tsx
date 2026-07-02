@@ -97,6 +97,7 @@ export default function HomeClient() {
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [activeMessageActions, setActiveMessageActions] = useState<string | null>(null);
   const [isMessageExpanded, setIsMessageExpanded] = useState(false);
+  const [showSavedMessagesOnly, setShowSavedMessagesOnly] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
@@ -112,6 +113,7 @@ export default function HomeClient() {
   
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [selectedVideos, setSelectedVideos] = useState<string[]>([]);
+  const [selectedAudios, setSelectedAudios] = useState<string[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [previewMessage, setPreviewMessage] = useState<Message | null>(null);
   const [previewImageIndex, setPreviewImageIndex] = useState(0);
@@ -155,6 +157,12 @@ export default function HomeClient() {
       fetchAllMedia();
     }
   }, [activeTab, fetchAllMedia]);
+
+  useEffect(() => {
+    if (activeTab !== "messages") {
+      setShowSavedMessagesOnly(false);
+    }
+  }, [activeTab]);
 
   useEffect(() => {
     if (isMessageExpanded && activeTab === "messages") {
@@ -452,10 +460,13 @@ export default function HomeClient() {
   const uploadToCloudinary = useCallback(async (file: File, onProgress: (percent: number) => void): Promise<string> => {
     try {
       const { timestamp, signature, apiKey, cloudName, folder } = await actions.getCloudinarySignature();
+      const endpointResource = file.type.startsWith("video/") || file.type.startsWith("audio/")
+        ? "video"
+        : "image";
       
       return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
-        xhr.open('POST', `https://api.cloudinary.com/v1_1/${cloudName}/upload`, true);
+        xhr.open('POST', `https://api.cloudinary.com/v1_1/${cloudName}/${endpointResource}/upload`, true);
         
         xhr.upload.onprogress = (e) => {
           if (e.lengthComputable) {
@@ -488,7 +499,10 @@ export default function HomeClient() {
     } catch (err) {
       console.error('Failed to get upload signature:', err);
       const base64 = await fileToBase64(file);
-      return await actions.uploadImage(base64, file.type.startsWith('video/') ? 'video' : 'image');
+      return await actions.uploadImage(
+        base64,
+        file.type.startsWith("video/") || file.type.startsWith("audio/") ? "video" : "image"
+      );
     }
   }, [fileToBase64]);
 
@@ -514,12 +528,14 @@ export default function HomeClient() {
       files: [...selectedFiles],
       imagePreviewUrls: [...selectedImages],
       videoPreviewUrls: [...selectedVideos],
+      audioPreviewUrls: [...selectedAudios],
       replyingTo,
     };
 
     setNewMessage("");
     setSelectedImages([]);
     setSelectedVideos([]);
+    setSelectedAudios([]);
     setSelectedFiles([]);
     setReplyingTo(null);
 
@@ -529,6 +545,7 @@ export default function HomeClient() {
     selectedFiles,
     selectedImages,
     selectedVideos,
+    selectedAudios,
     replyingTo,
     enqueueMessage,
     setReplyingTo,
@@ -768,9 +785,17 @@ export default function HomeClient() {
     return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
   }, []);
 
+  const visibleMessages = useMemo(
+    () =>
+      showSavedMessagesOnly
+        ? messages.filter((m) => (m.savedBy || []).includes(currentUser))
+        : messages,
+    [messages, showSavedMessagesOnly, currentUser]
+  );
+
   const groupedMessages = useMemo(() => {
     const groups: { date: string; label: string; messages: Message[] }[] = [];
-    messages.forEach(m => {
+    visibleMessages.forEach(m => {
       const dateObj = new Date(m.createdAt);
       const dateKey = dateObj.toLocaleDateString('en-GB');
       const lastGroup = groups[groups.length - 1];
@@ -781,7 +806,7 @@ export default function HomeClient() {
       }
     });
     return groups;
-  }, [messages, formatDateLabel]);
+  }, [visibleMessages, formatDateLabel]);
 
   const activeTheme = themes.find(t => t.name === themeName) || themes[0];
   const partnerUsername = currentUser.trim().toLowerCase() === "alpha 1" ? "delta 1" : "alpha 1";
@@ -927,7 +952,7 @@ export default function HomeClient() {
               : "gap-4 animate-in fade-in slide-in-from-bottom-4 duration-700"
           }`}>
              <div className={`flex items-center justify-between shrink-0 ${
-               isMessageExpanded ? "px-4 py-3 border-b border-zinc-800/60 bg-zinc-950/90 backdrop-blur-xl" : "px-1"
+               isMessageExpanded ? "relative z-[170] px-4 py-3 border-b border-zinc-800/60 bg-zinc-950/90 backdrop-blur-xl" : "px-1"
              }`}>
                 <div className="flex items-center gap-3 min-w-0">
                   {isMessageExpanded && (
@@ -976,7 +1001,7 @@ export default function HomeClient() {
                         )}
                     </button>
 
-                    <div className="relative" ref={menuRef}>
+                    <div className="relative z-[170]" ref={menuRef}>
                       <button 
                         onClick={() => setIsMenuOpen(!isMenuOpen)}
                         className={`p-2 rounded-xl transition-all active:scale-90 border ${
@@ -988,7 +1013,7 @@ export default function HomeClient() {
                       </button>
 
                       {isMenuOpen && (
-                        <div className="absolute right-0 mt-2 w-48 bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl py-2 z-[60] animate-in fade-in zoom-in-95 duration-100 origin-top-right">
+                        <div className="absolute right-0 mt-2 w-52 bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl py-2 z-[180] animate-in fade-in zoom-in-95 duration-100 origin-top-right">
                           <button
                             onClick={() => {
                               setActiveTab("media");
@@ -998,6 +1023,18 @@ export default function HomeClient() {
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
                             <span className="text-[11px] font-bold uppercase tracking-wider">Media Gallery</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              setShowSavedMessagesOnly((prev) => !prev);
+                              setIsMenuOpen(false);
+                            }}
+                            className="w-full flex items-center gap-3 px-4 py-2.5 text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors text-left"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m19 21-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+                            <span className="text-[11px] font-bold uppercase tracking-wider">
+                              {showSavedMessagesOnly ? "All Messages" : "Saved Messages"}
+                            </span>
                           </button>
                           <button
                             onClick={() => {
@@ -1037,9 +1074,14 @@ export default function HomeClient() {
                 {chatWallpaper && (
                     <ChatWallpaper wallpaperValue={chatWallpaper} wallpapers={wallpapers} />
                 )}
+                {showSavedMessagesOnly && (
+                  <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[65] px-3 py-1.5 rounded-full bg-zinc-900/95 border border-zinc-700 text-zinc-200 text-[10px] font-bold uppercase tracking-wider">
+                    Saved Messages View
+                  </div>
+                )}
                 
                 <MessageList 
-                    messages={messages}
+                    messages={visibleMessages}
                     groupedMessages={groupedMessages}
                     currentUser={currentUser}
                     activeTheme={activeTheme}
@@ -1090,6 +1132,8 @@ export default function HomeClient() {
                     setSelectedImages={setSelectedImages}
                     selectedVideos={selectedVideos}
                     setSelectedVideos={setSelectedVideos}
+                    selectedAudios={selectedAudios}
+                    setSelectedAudios={setSelectedAudios}
                     selectedFiles={selectedFiles}
                     setSelectedFiles={setSelectedFiles}
                     sendQueueStatus={sendQueueStatus}

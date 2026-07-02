@@ -29,6 +29,8 @@ const MessageSchema = new Schema({
   imageUrls: [{ type: String }],
   videoUrl: { type: String, required: false },
   videoUrls: [{ type: String }],
+  audioUrl: { type: String, required: false },
+  audioUrls: [{ type: String }],
   createdBy: { type: String, required: true },
   createdAt: { type: Date, default: Date.now },
   repliedTo: { type: Schema.Types.ObjectId, ref: 'Message' },

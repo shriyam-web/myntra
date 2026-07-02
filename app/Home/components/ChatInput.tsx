@@ -16,6 +16,8 @@ interface ChatInputProps {
   setSelectedImages: React.Dispatch<React.SetStateAction<string[]>>;
   selectedVideos: string[];
   setSelectedVideos: React.Dispatch<React.SetStateAction<string[]>>;
+  selectedAudios: string[];
+  setSelectedAudios: React.Dispatch<React.SetStateAction<string[]>>;
   selectedFiles: File[];
   setSelectedFiles: React.Dispatch<React.SetStateAction<File[]>>;
   sendQueueStatus: SendQueueStatus;
@@ -38,6 +40,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   setSelectedImages,
   selectedVideos,
   setSelectedVideos,
+  selectedAudios,
+  setSelectedAudios,
   selectedFiles,
   setSelectedFiles,
   sendQueueStatus,
@@ -46,6 +50,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   onDismissSendError,
 }) => {
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const mediaRecorderRef = React.useRef<MediaRecorder | null>(null);
+  const recordingChunksRef = React.useRef<BlobPart[]>([]);
 
   const copyableText = newMessage.trim() || lastFailedText.trim();
 
@@ -85,6 +92,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       const url = URL.createObjectURL(file);
       if (file.type.startsWith("video/")) {
         setSelectedVideos((prev) => [...prev, url]);
+      } else if (file.type.startsWith("audio/")) {
+        setSelectedAudios((prev) => [...prev, url]);
       } else {
         setSelectedImages((prev) => [...prev, url]);
       }
@@ -133,10 +142,79 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     URL.revokeObjectURL(urlToRemove);
   };
 
+  const removeAudio = (idx: number) => {
+    const urlToRemove = selectedAudios[idx];
+    setSelectedAudios(selectedAudios.filter((_, i) => i !== idx));
+
+    let audioCount = 0;
+    setSelectedFiles(
+      selectedFiles.filter((file) => {
+        if (file.type.startsWith("audio/")) {
+          if (audioCount === idx) {
+            audioCount++;
+            return false;
+          }
+          audioCount++;
+        }
+        return true;
+      })
+    );
+
+    URL.revokeObjectURL(urlToRemove);
+  };
+
+  const stopRecording = useCallback(() => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+    }
+  }, []);
+
+  const startRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      recordingChunksRef.current = [];
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          recordingChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        const audioBlob = new Blob(recordingChunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        const extension = (recorder.mimeType || "audio/webm").includes("ogg") ? "ogg" : "webm";
+        const audioFile = new File([audioBlob], `voice-note-${Date.now()}.${extension}`, {
+          type: recorder.mimeType || "audio/webm",
+        });
+        const previewUrl = URL.createObjectURL(audioBlob);
+        setSelectedFiles((prev) => [...prev, audioFile]);
+        setSelectedAudios((prev) => [...prev, previewUrl]);
+        setIsRecording(false);
+        stream.getTracks().forEach((track) => track.stop());
+      };
+
+      recorder.start(200);
+      mediaRecorderRef.current = recorder;
+      setIsRecording(true);
+    } catch (err) {
+      console.error("Failed to start voice recording:", err);
+    }
+  }, [setSelectedAudios, setSelectedFiles]);
+
+  const toggleRecording = useCallback(() => {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      void startRecording();
+    }
+  }, [isRecording, startRecording, stopRecording]);
+
   const canSend =
     newMessage.trim().length > 0 ||
     selectedImages.length > 0 ||
-    selectedVideos.length > 0;
+    selectedVideos.length > 0 ||
+    selectedAudios.length > 0;
 
   const queueLabel = sendQueueStatus.isActive
     ? sendQueueStatus.waitingCount > 0
@@ -227,7 +305,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         </div>
       )}
 
-      {(selectedImages.length > 0 || selectedVideos.length > 0) && (
+      {(selectedImages.length > 0 || selectedVideos.length > 0 || selectedAudios.length > 0) && (
         <div className="mb-4 flex gap-3 overflow-x-auto no-scrollbar pb-2 animate-in slide-in-from-bottom-2 duration-300">
           {selectedImages.map((url, idx) => (
             <div key={`img-${idx}`} className="relative group shrink-0">
@@ -296,6 +374,21 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   <line x1="18" y1="6" x2="6" y2="18" />
                   <line x1="6" y1="6" x2="18" y2="18" />
                 </svg>
+              </button>
+            </div>
+          ))}
+          {selectedAudios.map((url, idx) => (
+            <div key={`aud-${idx}`} className="relative group shrink-0 w-48 h-24 rounded-[1.5rem] border-2 border-zinc-800 shadow-2xl bg-zinc-950 p-3 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-200">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19V5"/><path d="M8 9v6"/><path d="M16 9v6"/></svg>
+              </div>
+              <audio src={url} controls className="w-full max-w-[120px] h-8" />
+              <button
+                type="button"
+                onClick={() => removeAudio(idx)}
+                className="absolute -top-2 -right-2 p-2 bg-red-600 text-white rounded-full shadow-2xl opacity-0 group-hover:opacity-100 transition-all hover:scale-110 active:scale-90"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
               </button>
             </div>
           ))}
@@ -372,13 +465,22 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.59a2 2 0 0 1-2.83-2.83l8.49-8.48" />
               </svg>
             </button>
+            <button
+              type="button"
+              onClick={toggleRecording}
+              className={`p-3 transition-all active:scale-90 shrink-0 ${isRecording ? "text-red-400 animate-pulse" : "text-zinc-600 hover:text-white"}`}
+              title={isRecording ? "Stop voice note" : "Record voice note"}
+              aria-label={isRecording ? "Stop voice note" : "Record voice note"}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1v11" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" /></svg>
+            </button>
             <input
               type="file"
               ref={fileInputRef}
               onChange={handleFileChange}
               className="hidden"
               multiple
-              accept="image/*,video/*"
+              accept="image/*,video/*,audio/*"
             />
             <textarea
               ref={messageInputRef}

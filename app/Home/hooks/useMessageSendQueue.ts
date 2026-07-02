@@ -10,6 +10,7 @@ export interface EnqueueMessagePayload {
   files: File[];
   imagePreviewUrls: string[];
   videoPreviewUrls: string[];
+  audioPreviewUrls: string[];
   replyingTo: Message | null;
 }
 
@@ -43,14 +44,17 @@ function buildOptimisticMessage(
 ): Message {
   const imageUrls = job.imagePreviewUrls.length > 0 ? job.imagePreviewUrls : undefined;
   const videoUrls = job.videoPreviewUrls.length > 0 ? job.videoPreviewUrls : undefined;
+  const audioUrls = job.audioPreviewUrls.length > 0 ? job.audioPreviewUrls : undefined;
 
   return {
     _id: job.id,
     text: job.text || undefined,
     imageUrls,
     videoUrls,
+    audioUrls,
     imageUrl: imageUrls?.[0],
     videoUrl: videoUrls?.[0],
+    audioUrl: audioUrls?.[0],
     createdAt: job.createdAt,
     createdBy: currentUser as UserType,
     repliedTo: job.replyingTo
@@ -61,6 +65,8 @@ function buildOptimisticMessage(
           imageUrls: job.replyingTo.imageUrls,
           videoUrl: job.replyingTo.videoUrl,
           videoUrls: job.replyingTo.videoUrls,
+          audioUrl: job.replyingTo.audioUrl,
+          audioUrls: job.replyingTo.audioUrls,
           createdBy: job.replyingTo.createdBy,
         }
       : undefined,
@@ -68,7 +74,7 @@ function buildOptimisticMessage(
 }
 
 function revokePreviewUrls(job: QueuedSendJob) {
-  [...job.imagePreviewUrls, ...job.videoPreviewUrls].forEach((url) => {
+  [...job.imagePreviewUrls, ...job.videoPreviewUrls, ...job.audioPreviewUrls].forEach((url) => {
     if (url.startsWith("blob:")) URL.revokeObjectURL(url);
   });
 }
@@ -122,6 +128,7 @@ export function useMessageSendQueue({
     async (job: QueuedSendJob) => {
       const uploadedImageUrls: string[] = [];
       const uploadedVideoUrls: string[] = [];
+      const uploadedAudioUrls: string[] = [];
 
       try {
         if (job.files.length > 0) {
@@ -147,6 +154,7 @@ export function useMessageSendQueue({
             );
 
             if (file.type.startsWith("video/")) uploadedVideoUrls.push(url);
+            else if (file.type.startsWith("audio/")) uploadedAudioUrls.push(url);
             else uploadedImageUrls.push(url);
           }
 
@@ -161,7 +169,8 @@ export function useMessageSendQueue({
             currentUser,
             uploadedImageUrls,
             uploadedVideoUrls,
-            job.replyingTo?._id
+            job.replyingTo?._id,
+            uploadedAudioUrls
           ),
           35000,
           "Sending timed out after 35 seconds. Your message may not have been delivered."
@@ -227,6 +236,7 @@ export function useMessageSendQueue({
         files: [...payload.files],
         imagePreviewUrls: [...payload.imagePreviewUrls],
         videoPreviewUrls: [...payload.videoPreviewUrls],
+        audioPreviewUrls: [...payload.audioPreviewUrls],
         replyingTo: payload.replyingTo,
         createdAt: new Date().toISOString(),
       };

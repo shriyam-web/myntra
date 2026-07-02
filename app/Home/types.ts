@@ -35,6 +35,8 @@ export interface Message {
   imageUrls?: string[];
   videoUrl?: string;
   videoUrls?: string[];
+  audioUrl?: string;
+  audioUrls?: string[];
   createdAt: string;
   createdBy: UserType;
   savedBy?: string[];
@@ -47,6 +49,8 @@ export interface Message {
     imageUrls?: string[];
     videoUrl?: string;
     videoUrls?: string[];
+    audioUrl?: string;
+    audioUrls?: string[];
     createdBy: UserType;
   };
 }

@@ -460,7 +460,14 @@ async function sendTelegramNotification(text: string) {
   }
 }
 
-export async function sendMessage(text: string, createdBy: string, imageUrls?: string[], videoUrls?: string[], repliedTo?: string) {
+export async function sendMessage(
+  text: string,
+  createdBy: string,
+  imageUrls?: string[],
+  videoUrls?: string[],
+  repliedTo?: string,
+  audioUrls?: string[]
+) {
   const MAX_TEXT_LENGTH = 50000;
   if (text && text.length > MAX_TEXT_LENGTH) {
     throw new Error(`Message is too long (${text.length} characters). Please shorten it to under ${MAX_TEXT_LENGTH} characters.`);
@@ -471,7 +478,7 @@ export async function sendMessage(text: string, createdBy: string, imageUrls?: s
 
     updatePresence(createdBy).catch(err => console.error("Background presence update error:", err));
 
-    const data = { text, createdBy, imageUrls, videoUrls, repliedTo };
+    const data = { text, createdBy, imageUrls, videoUrls, audioUrls, repliedTo };
     const message = await withTimeout(
       Message.create(data),
       20000,
@@ -486,7 +493,10 @@ export async function sendMessage(text: string, createdBy: string, imageUrls?: s
           const isDelta1Online = delta1 && (Date.now() - new Date(delta1.lastSeen).getTime() < 15000);
           
           if (!isDelta1Online) {
-            const hasMedia = (data.imageUrls && data.imageUrls.length > 0) || (data.videoUrls && data.videoUrls.length > 0);
+            const hasMedia =
+              (data.imageUrls && data.imageUrls.length > 0) ||
+              (data.videoUrls && data.videoUrls.length > 0) ||
+              (data.audioUrls && data.audioUrls.length > 0);
             const notificationText = hasMedia ? "Sent media content" : data.text || "";
             await sendTelegramNotification(`Alpha 1 sent a new message: ${notificationText.substring(0, 100)}${notificationText.length > 100 ? "..." : ""}`);
           }
@@ -528,7 +538,9 @@ export async function deleteMessage(id: string, deleteFromCloudinaryToo: boolean
           message.imageUrl,
           ...(message.imageUrls || []),
           message.videoUrl,
-          ...(message.videoUrls || [])
+          ...(message.videoUrls || []),
+          message.audioUrl,
+          ...(message.audioUrls || [])
         ].filter(Boolean) as string[];
 
         for (const url of allUrls) {

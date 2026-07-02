@@ -6,6 +6,99 @@ import { ReactionBurst } from "./ReactionBurst";
 import { MessageActionMenu } from "./MessageActionMenu";
 import { ReactionPickerBar } from "./ReactionPickerBar";
 
+const VoiceNotePlayer: React.FC<{ url: string; isMe: boolean; themeClass: string }> = ({
+  url,
+  isMe,
+  themeClass,
+}) => {
+  const audioRef = React.useRef<HTMLAudioElement | null>(null);
+  const [isPlaying, setIsPlaying] = React.useState(false);
+  const [duration, setDuration] = React.useState(0);
+  const [currentTime, setCurrentTime] = React.useState(0);
+
+  React.useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const onLoaded = () => setDuration(audio.duration || 0);
+    const onTime = () => setCurrentTime(audio.currentTime || 0);
+    const onEnded = () => setIsPlaying(false);
+    audio.addEventListener("loadedmetadata", onLoaded);
+    audio.addEventListener("timeupdate", onTime);
+    audio.addEventListener("ended", onEnded);
+    return () => {
+      audio.removeEventListener("loadedmetadata", onLoaded);
+      audio.removeEventListener("timeupdate", onTime);
+      audio.removeEventListener("ended", onEnded);
+    };
+  }, []);
+
+  const togglePlay = async () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (isPlaying) {
+      audio.pause();
+      setIsPlaying(false);
+      return;
+    }
+    try {
+      await audio.play();
+      setIsPlaying(true);
+    } catch {
+      setIsPlaying(false);
+    }
+  };
+
+  const replay = async () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.currentTime = 0;
+    try {
+      await audio.play();
+      setIsPlaying(true);
+    } catch {
+      setIsPlaying(false);
+    }
+  };
+
+  const pct = duration > 0 ? Math.min((currentTime / duration) * 100, 100) : 0;
+  const fmt = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${sec.toString().padStart(2, "0")}`;
+  };
+
+  return (
+    <div className={`mt-1.5 min-w-[210px] rounded-xl border border-white/20 ${isMe ? "bg-white/10" : "bg-zinc-900/60"} p-2.5`}>
+      <audio ref={audioRef} src={url} preload="metadata" />
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={togglePlay}
+          className={`w-8 h-8 rounded-full flex items-center justify-center ${themeClass} text-white shadow-md active:scale-95`}
+        >
+          {isPlaying ? "❚❚" : "▶"}
+        </button>
+        <button
+          type="button"
+          onClick={replay}
+          className="w-7 h-7 rounded-full border border-white/20 text-[10px] text-white/80 hover:text-white active:scale-95"
+          title="Replay"
+        >
+          ↺
+        </button>
+        <div className="flex-1">
+          <div className="h-1.5 rounded-full bg-white/15 overflow-hidden">
+            <div className={`h-full ${themeClass}`} style={{ width: `${pct}%` }} />
+          </div>
+          <div className="mt-1 text-[9px] text-white/60 font-medium tracking-wide">
+            {fmt(currentTime)} / {fmt(duration || 0)}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 interface MessageListProps {
   messages: Message[];
   groupedMessages: { date: string; label: string; messages: Message[] }[];
@@ -94,15 +187,6 @@ export const MessageList: React.FC<MessageListProps> = ({
   const longPressTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressTriggeredRef = React.useRef(false);
   const listRootRef = React.useRef<HTMLDivElement>(null);
-
-  const pinnedMessages = React.useMemo(
-    () => messages.filter((m) => (m.pinnedBy || []).includes(currentUser)),
-    [messages, currentUser]
-  );
-  const pinnedIds = React.useMemo(
-    () => new Set(pinnedMessages.map((m) => m._id)),
-    [pinnedMessages]
-  );
 
   const closeReactionPicker = React.useCallback(() => {
     setReactionPickerId(null);
@@ -307,32 +391,6 @@ export const MessageList: React.FC<MessageListProps> = ({
         </div>
       ) : (
         <div className="flex flex-col">
-          {pinnedMessages.length > 0 && (
-            <div className="mb-4 pb-3 border-b border-zinc-800/60">
-              <div className="flex items-center gap-2 mb-3 px-1">
-                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-amber-400"><path d="M12 17v5" /><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2z" /></svg>
-                <span className="text-[10px] font-medium uppercase tracking-widest text-amber-400/80">Pinned</span>
-              </div>
-              <div className="flex flex-col gap-2">
-                {pinnedMessages.map((m) => {
-                  const isMe = m.createdBy.trim().toLowerCase() === currentUser.trim().toLowerCase();
-                  return (
-                    <button
-                      key={`pin-${m._id}`}
-                      onClick={() => {
-                        const el = document.getElementById(`message-${m._id}`);
-                        el?.scrollIntoView({ behavior: "smooth", block: "center" });
-                      }}
-                      className={`w-full text-left p-3 rounded-2xl border border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10 transition-colors ${isMe ? "ml-auto max-w-[85%]" : "max-w-[85%]"}`}
-                    >
-                      <p className="text-[9px] font-medium uppercase tracking-wider text-amber-400/70 mb-1">{m.createdBy}</p>
-                      <p className="text-xs text-zinc-300 line-clamp-2">{m.text || "📎 Media message"}</p>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
           {groupedMessages.map((group) => (
             <div key={group.date} className="flex flex-col relative">
               <div className="flex justify-center mb-4 sticky top-0 z-[40] -mx-4 py-2 pointer-events-none">
@@ -340,7 +398,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                   {group.label}
                 </div>
               </div>
-              {group.messages.filter((m) => !pinnedIds.has(m._id)).map((m) => {
+              {group.messages.map((m) => {
                 const isMe = m.createdBy.trim().toLowerCase() === currentUser.trim().toLowerCase();
                 const partnerUsername = currentUser.trim().toLowerCase() === "alpha 1" ? "delta 1" : "alpha 1";
                 const userObj = users.find((u) => u.username.trim().toLowerCase() === m.createdBy.trim().toLowerCase());
@@ -480,7 +538,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                             actionMenuId === m._id ? "ring-2 ring-amber-400/50 shadow-lg" : ""
                           } ${
                             (m.pinnedBy || []).includes(currentUser)
-                              ? "ring-1 ring-amber-300/50 shadow-[0_0_0_1px_rgba(251,191,36,0.15)]"
+                              ? "ring-2 ring-amber-300/70 border-amber-200/40 bg-gradient-to-br from-amber-400/20 via-amber-300/10 to-transparent shadow-[0_0_30px_rgba(251,191,36,0.22)]"
                               : ""
                           }`}
                         >
@@ -612,6 +670,19 @@ export const MessageList: React.FC<MessageListProps> = ({
                                       </div>
                                   ))}
                               </div>
+                          )}
+
+                          {(m.audioUrl || (m.audioUrls && m.audioUrls.length > 0)) && (
+                            <div className="mt-1.5 grid gap-1.5">
+                              {(m.audioUrls || [m.audioUrl]).filter(Boolean).map((url, idx) => (
+                                <VoiceNotePlayer
+                                  key={`audio-${idx}`}
+                                  url={url!}
+                                  isMe={isMe}
+                                  themeClass={activeTheme.bubbleMe}
+                                />
+                              ))}
+                            </div>
                           )}
 
                           <div className={`text-[8px] mt-1 flex items-center gap-1 font-normal uppercase tracking-wider opacity-60 ${isMe ? 'justify-end' : 'justify-start'}`}>
