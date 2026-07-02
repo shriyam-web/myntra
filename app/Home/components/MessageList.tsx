@@ -182,6 +182,7 @@ interface MessageListProps {
   handleCopyMessage: (text: string) => void;
   setPreviewMessage: (m: Message | null) => void;
   setPreviewImageIndex: (index: number) => void;
+  partnerIsTyping?: boolean;
 }
 
 export const MessageList: React.FC<MessageListProps> = ({
@@ -221,6 +222,7 @@ export const MessageList: React.FC<MessageListProps> = ({
   handleCopyMessage,
   setPreviewMessage,
   setPreviewImageIndex,
+  partnerIsTyping = false,
 }) => {
   const [swipingMessageId, setSwipingMessageId] = React.useState<string | null>(null);
   const [swipeDistance, setSwipeDistance] = React.useState(0);
@@ -236,6 +238,24 @@ export const MessageList: React.FC<MessageListProps> = ({
   const longPressTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressTriggeredRef = React.useRef(false);
   const listRootRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!editingMessage) return;
+    const el = document.getElementById(`message-${editingMessage}`);
+    if (!el) return;
+    requestAnimationFrame(() => {
+      el.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+    });
+  }, [editingMessage]);
+
+  React.useEffect(() => {
+    if (partnerIsTyping && !showScrollButton) {
+      scrollToBottom(true);
+    }
+  }, [partnerIsTyping, showScrollButton, scrollToBottom]);
+
+  const partnerAvatarSrc =
+    currentUser.trim().toLowerCase() === "alpha 1" ? "/male.png" : "/female.png";
 
   const closeReactionPicker = React.useCallback(() => {
     setReactionPickerId(null);
@@ -541,7 +561,9 @@ export const MessageList: React.FC<MessageListProps> = ({
                     }}
                       className={`flex flex-col w-full transition-all duration-300 relative group/msg mb-2.5 ${
                         isMe ? "items-end" : "items-start"
-                      } ${actionMenuId === m._id ? "z-[160]" : ""}`}
+                      } ${actionMenuId === m._id ? "z-[160]" : ""} ${
+                        editingMessage === m._id ? "max-sm:scroll-mt-16 scroll-mb-24" : ""
+                      }`}
                     >
                     {swipingMessageId === m._id && swipeDistance > 20 && (
                       <div 
@@ -554,7 +576,11 @@ export const MessageList: React.FC<MessageListProps> = ({
                       </div>
                     )}
                     
-                    <div className={`flex items-start gap-1.5 max-w-[95%] sm:max-w-[85%] ${isMe ? "flex-row-reverse" : "flex-row"}`}>
+                    <div className={`flex items-start gap-1.5 ${
+                      editingMessage === m._id
+                        ? "w-full max-w-full sm:max-w-[85%]"
+                        : "max-w-[95%] sm:max-w-[85%]"
+                    } ${isMe ? "flex-row-reverse" : "flex-row"}`}>
                       <div 
                         className="flex-shrink-0 cursor-pointer active:scale-95 transition-transform mt-0.5 relative"
                         onClick={() => setZoomedAvatar(avatarSrc)}
@@ -568,7 +594,9 @@ export const MessageList: React.FC<MessageListProps> = ({
                       </div>
 
                       <div
-                        className={`flex flex-col gap-0.5 relative ${
+                        className={`flex flex-col gap-0.5 relative min-w-0 ${
+                          editingMessage === m._id ? "flex-1 max-sm:w-full max-sm:max-w-full" : ""
+                        } ${
                           isMe ? "items-end" : "items-start"
                         }`}
                       >
@@ -598,7 +626,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                               : `${activeTheme.bubblePartner} rounded-2xl rounded-tl-sm border-zinc-700/30 cursor-pointer active:scale-[0.98]`
                           } ${
                             editingMessage === m._id
-                              ? "min-w-[260px] w-[min(80vw,460px)] sm:w-[min(65vw,520px)]"
+                              ? "w-full max-w-[calc(100vw-3.5rem)] sm:min-w-[260px] sm:w-[min(65vw,520px)] sm:max-w-[min(65vw,520px)]"
                               : ""
                           } ${
                             reactionPickerId === m._id && !isMe
@@ -654,7 +682,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                                               setEditingMessageText("");
                                           }
                                       }}
-                                      className="w-full bg-zinc-950/50 border border-white/20 rounded-xl p-2 text-sm text-white outline-none focus:border-white/40 min-h-[60px] resize-none"
+                                      className="w-full bg-zinc-950/50 border border-white/20 rounded-xl p-2 text-sm text-white outline-none focus:border-white/40 min-h-[60px] max-sm:max-h-[35vh] resize-none overflow-y-auto"
                                       autoFocus
                                   />
                                   <div className="flex justify-end gap-2">
@@ -807,6 +835,24 @@ export const MessageList: React.FC<MessageListProps> = ({
               })}
             </div>
           ))}
+          {partnerIsTyping && (
+            <div className="flex items-start gap-1.5 max-w-[95%] sm:max-w-[85%] mb-2.5 animate-in fade-in slide-in-from-bottom-2 duration-200">
+              <div className="flex-shrink-0 mt-0.5">
+                <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full border border-zinc-800/50 overflow-hidden shadow-md">
+                  <img src={partnerAvatarSrc} className="w-full h-full object-cover" alt="" />
+                </div>
+              </div>
+              <div
+                className={`relative px-3.5 py-2.5 ${activeTheme.bubblePartner} rounded-2xl rounded-tl-sm border border-zinc-700/30 shadow-md`}
+              >
+                <span className="flex items-center gap-1 h-4" aria-label="typing">
+                  <span className="w-1.5 h-1.5 rounded-full bg-zinc-400/90 animate-bounce [animation-delay:0ms]" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-zinc-400/90 animate-bounce [animation-delay:150ms]" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-zinc-400/90 animate-bounce [animation-delay:300ms]" />
+                </span>
+              </div>
+            </div>
+          )}
           {isPullingUp && (
             <div
               className="flex justify-center py-4 animate-bounce"

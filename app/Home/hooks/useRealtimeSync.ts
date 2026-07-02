@@ -1,6 +1,11 @@
 import { useEffect, useRef } from "react";
 import { ViewType } from "../types";
 
+type TypingPayload = {
+  user: string;
+  typing: boolean;
+};
+
 /**
  * Real-time message sync via Server-Sent Events (push channel).
  * Falls back to polling-worker.js if SSE is unavailable.
@@ -8,10 +13,13 @@ import { ViewType } from "../types";
 export function useRealtimeSync(
   view: ViewType,
   onSync: () => void,
-  enabled = true
+  enabled = true,
+  onTyping?: (payload: TypingPayload) => void
 ) {
   const onSyncRef = useRef(onSync);
   onSyncRef.current = onSync;
+  const onTypingRef = useRef(onTyping);
+  onTypingRef.current = onTyping;
 
   useEffect(() => {
     if (view === "login" || !enabled) return;
@@ -43,6 +51,17 @@ export function useRealtimeSync(
       eventSource = new EventSource(`/api/realtime?user=${encodeURIComponent(view)}`);
 
       eventSource.addEventListener("messages", sync);
+      eventSource.addEventListener("typing", (event) => {
+        if (disposed || !onTypingRef.current) return;
+        try {
+          const data = JSON.parse((event as MessageEvent<string>).data) as TypingPayload;
+          if (typeof data.user === "string") {
+            onTypingRef.current(data);
+          }
+        } catch {
+          // ignore malformed events
+        }
+      });
       eventSource.addEventListener("heartbeat", () => {
         // keep-alive only
       });

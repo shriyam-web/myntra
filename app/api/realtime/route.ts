@@ -1,6 +1,6 @@
 import dbConnect from "../../../lib/mongodb";
 import { Message, AppSettings } from "../../../models/schemas";
-import { subscribeRealtime } from "../../../lib/realtime-hub";
+import { subscribeRealtime, subscribeTyping } from "../../../lib/realtime-hub";
 import { APP_SETTINGS_KEY } from "../../../lib/maintenance";
 
 export const dynamic = "force-dynamic";
@@ -45,13 +45,16 @@ export async function GET(request: Request) {
   let lastFingerprint = "";
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   let unsubscribe: (() => void) | null = null;
+  let unsubscribeTyping: (() => void) | null = null;
 
   const stream = new ReadableStream({
     start(controller) {
-      const send = (event: string) => {
+      const send = (event: string, data: Record<string, unknown> = {}) => {
         if (closed) return;
         try {
-          controller.enqueue(encoder.encode(`event: ${event}\ndata: {}\n\n`));
+          controller.enqueue(
+            encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+          );
         } catch {
           closed = true;
         }
@@ -71,6 +74,7 @@ export async function GET(request: Request) {
       };
 
       unsubscribe = subscribeRealtime(() => send("messages"));
+      unsubscribeTyping = subscribeTyping((payload) => send("typing", payload));
 
       checkAndPush();
       pollTimer = setInterval(checkAndPush, 1500);
@@ -79,6 +83,7 @@ export async function GET(request: Request) {
         closed = true;
         if (pollTimer) clearInterval(pollTimer);
         unsubscribe?.();
+        unsubscribeTyping?.();
         try {
           controller.close();
         } catch {
@@ -90,6 +95,7 @@ export async function GET(request: Request) {
       closed = true;
       if (pollTimer) clearInterval(pollTimer);
       unsubscribe?.();
+      unsubscribeTyping?.();
     },
   });
 

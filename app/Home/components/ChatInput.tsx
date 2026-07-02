@@ -24,6 +24,8 @@ interface ChatInputProps {
   sendError?: string | null;
   lastFailedText?: string;
   onDismissSendError?: () => void;
+  onTypingActivity?: (hasContent: boolean) => void;
+  onStopTyping?: () => void;
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
@@ -48,6 +50,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   sendError = null,
   lastFailedText = "",
   onDismissSendError,
+  onTypingActivity,
+  onStopTyping,
 }) => {
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
@@ -523,10 +527,16 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             <textarea
               ref={messageInputRef}
               value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
+              onChange={(e) => {
+                const value = e.target.value;
+                setNewMessage(value);
+                onTypingActivity?.(value.trim().length > 0);
+              }}
+              onBlur={() => onStopTyping?.()}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
                   e.preventDefault();
+                  onStopTyping?.();
                   handleSendMessage();
                 }
               }}

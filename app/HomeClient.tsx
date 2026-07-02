@@ -28,6 +28,7 @@ import { MediaTab } from "./Home/components/MediaTab";
 import { CallOverlay } from "./Home/components/CallOverlay";
 import { useCall } from "./Home/hooks/useCall";
 import { useRealtimeSync } from "./Home/hooks/useRealtimeSync";
+import { useTypingSignal, usePartnerTypingState } from "./Home/hooks/useTypingIndicator";
 import { CallLogsTab } from "./Home/components/CallLogsTab";
 import { MAINTENANCE_REDIRECT_URL } from "../lib/maintenance";
 
@@ -76,6 +77,9 @@ export default function HomeClient() {
     hasUnreadMessages,
     getPartnerStatus
   } = usePresence(users, setUsers, view, messages);
+
+  const { partnerIsTyping, handleTypingEvent } = usePartnerTypingState(view);
+  const { signalTyping, stopTyping } = useTypingSignal(view, view !== "login");
 
   // UI States
   const [newTicket, setNewTicket] = useState("");
@@ -264,7 +268,7 @@ export default function HomeClient() {
 
   useRealtimeSync(view, useCallback(() => {
     fetchMessagesOnly(true);
-  }, [fetchMessagesOnly]));
+  }, [fetchMessagesOnly]), view !== "login", handleTypingEvent);
 
   useEffect(() => {
     if (view !== "login") {
@@ -1211,12 +1215,18 @@ export default function HomeClient() {
                     handleCopyMessage={handleCopyMessage}
                     setPreviewMessage={setPreviewMessage}
                     setPreviewImageIndex={setPreviewImageIndex}
+                    partnerIsTyping={partnerIsTyping}
                 />
 
                 <ChatInput 
                     newMessage={newMessage}
                     setNewMessage={setNewMessage}
-                    handleSendMessage={handleSendMessage}
+                    handleSendMessage={(e) => {
+                      stopTyping();
+                      handleSendMessage(e);
+                    }}
+                    onTypingActivity={signalTyping}
+                    onStopTyping={stopTyping}
                     replyingTo={replyingTo}
                     setReplyingTo={setReplyingTo}
                     activeTheme={activeTheme}
