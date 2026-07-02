@@ -27,11 +27,15 @@ export function LoginView({ password, setPassword, handleLogin }: LoginViewProps
           id="password"
           value={password}
           onChange={(e) => handlePasswordChange(e.target.value)}
-          onClick={() => setShowPassword((prev) => !prev)}
-          autoComplete="off"
+          onPointerDown={(e) => {
+            if (document.activeElement === e.currentTarget) {
+              setShowPassword((prev) => !prev);
+            }
+          }}
+          onBlur={() => setShowPassword(false)}
+          autoComplete="new-password"
           spellCheck={false}
-          className="w-full px-6 py-4 bg-zinc-900 border border-zinc-800 rounded-2xl text-white focus:border-white focus:ring-1 focus:ring-white/20 outline-none transition-all font-mono text-center text-sm cursor-pointer"
-          autoFocus
+          className="w-full px-6 py-4 bg-zinc-900 border border-zinc-800 rounded-2xl text-white focus:border-white focus:ring-1 focus:ring-white/20 outline-none transition-all font-mono text-center text-sm"
         />
       </div>
     </div>
