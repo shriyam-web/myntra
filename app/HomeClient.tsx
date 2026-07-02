@@ -671,6 +671,27 @@ export default function HomeClient() {
     }
   };
 
+  const handleCopyMessage = useCallback(async (text: string) => {
+    if (!text?.trim()) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      if (window.navigator.vibrate) window.navigator.vibrate(8);
+    } catch {
+      try {
+        const el = document.createElement("textarea");
+        el.value = text;
+        el.style.position = "fixed";
+        el.style.left = "-9999px";
+        document.body.appendChild(el);
+        el.select();
+        document.execCommand("copy");
+        document.body.removeChild(el);
+      } catch (err) {
+        console.error("Failed to copy message:", err);
+      }
+    }
+  }, []);
+
   const handleUpdateChatPreferences = useCallback(async (updates: { 
     chatBackgroundColor?: string; 
     chatBubbleColor?: string; 
@@ -1023,6 +1044,7 @@ export default function HomeClient() {
                     editingMessageText={editingMessageText}
                     setEditingMessageText={setEditingMessageText}
                     handleDownloadMedia={handleDownloadMedia}
+                    handleCopyMessage={handleCopyMessage}
                     setPreviewMessage={setPreviewMessage}
                     setPreviewImageIndex={setPreviewImageIndex}
                 />

@@ -20,9 +20,20 @@ async function getSyncFingerprint(): Promise<string> {
       },
     },
   ]);
+  const recentMessageState = await Message.find({})
+    .sort({ createdAt: -1 })
+    .limit(40)
+    .select("_id reactions pinnedBy savedBy")
+    .lean();
   const settings = await AppSettings.findOne({ key: APP_SETTINGS_KEY }).lean();
   return JSON.stringify({
     messages: stats || { count: 0, maxCreatedAt: null, reactionCount: 0 },
+    recentState: recentMessageState.map((m) => ({
+      id: String(m._id),
+      reactions: (m.reactions || []).map((r: { user: string; type: string }) => `${r.user}:${r.type}`),
+      pinnedBy: m.pinnedBy || [],
+      savedBy: m.savedBy || [],
+    })),
     maintenanceMode: Boolean(settings?.maintenanceMode),
     maintenanceEnabledAt: settings?.maintenanceEnabledAt ?? null,
   });

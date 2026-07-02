@@ -39,6 +39,7 @@ interface MessageListProps {
   editingMessageText: string;
   setEditingMessageText: (text: string) => void;
   handleDownloadMedia: (url: string) => void;
+  handleCopyMessage: (text: string) => void;
   setPreviewMessage: (m: Message | null) => void;
   setPreviewImageIndex: (index: number) => void;
 }
@@ -76,6 +77,7 @@ export const MessageList: React.FC<MessageListProps> = ({
   editingMessageText,
   setEditingMessageText,
   handleDownloadMedia,
+  handleCopyMessage,
   setPreviewMessage,
   setPreviewImageIndex,
 }) => {
@@ -402,7 +404,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                     }}
                     className={`flex flex-col w-full transition-all duration-300 relative group/msg mb-2.5 ${
                       isMe ? "items-end" : "items-start"
-                    } ${actionMenuId === m._id ? "z-30" : ""}`}
+                    } ${actionMenuId === m._id ? "z-[160]" : ""}`}
                   >
                     {swipingMessageId === m._id && swipeDistance > 20 && (
                       <div 
@@ -463,6 +465,10 @@ export const MessageList: React.FC<MessageListProps> = ({
                               : ""
                           } ${
                             actionMenuId === m._id ? "ring-2 ring-amber-400/50 shadow-lg" : ""
+                          } ${
+                            (m.pinnedBy || []).includes(currentUser)
+                              ? "ring-1 ring-amber-300/50 shadow-[0_0_0_1px_rgba(251,191,36,0.15)]"
+                              : ""
                           }`}
                         >
                           {(m.pinnedBy || []).includes(currentUser) && (
@@ -612,7 +618,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                           </div>
 
                           {(m.reactions || []).length > 0 && (
-                            <div className={`absolute -bottom-2 ${isMe ? 'right-2' : 'left-2'} flex items-center gap-0.5 px-1.5 py-0.5 bg-zinc-900/90 border border-zinc-700/50 rounded-full shadow-lg backdrop-blur-sm reaction-badge-pop`}>
+                            <div className={`absolute -bottom-2 ${isMe ? 'right-2' : 'left-2'} flex items-center gap-0.5 px-1.5 py-0.5 bg-zinc-900/90 border border-zinc-700/50 rounded-full shadow-lg backdrop-blur-sm reaction-badge-pop z-10`}>
                               {(m.reactions || []).map((r) => (
                                 <span key={r.user} className="text-sm leading-none" title={r.user}>
                                   {REACTION_EMOJIS[r.type]}
@@ -624,11 +630,12 @@ export const MessageList: React.FC<MessageListProps> = ({
 
                         {actionMenuId === m._id && !isOptimistic && (
                           <MessageActionMenu
+                            messageId={m._id}
                             message={m}
                             isMe={isMe}
                             isPinned={(m.pinnedBy || []).includes(currentUser)}
-                            align={isMe ? "right" : "left"}
                             onPin={() => handleTogglePinMessage(m._id)}
+                            onCopy={m.text ? () => handleCopyMessage(m.text || "") : undefined}
                             onEdit={isMe && m.text ? () => {
                               setEditingMessage(m._id);
                               setEditingMessageText(m.text || "");
