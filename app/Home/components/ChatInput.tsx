@@ -505,7 +505,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               </button>
               {isRecording && (
                 <div className="h-10 w-10 flex items-center justify-center rounded-full text-red-300 bg-red-500/12 ring-1 ring-red-400/40 animate-pulse shrink-0">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
                     <path d="M12 15a3.5 3.5 0 0 0 3.5-3.5V6.5a3.5 3.5 0 1 0-7 0v5A3.5 3.5 0 0 0 12 15Z" />
                     <path d="M18 11.5a1 1 0 1 0-2 0 4 4 0 0 1-8 0 1 1 0 1 0-2 0 6 6 0 0 0 5 5.91V20H9a1 1 0 1 0 0 2h6a1 1 0 1 0 0-2h-2v-2.59a6 6 0 0 0 5-5.91Z" />
                   </svg>
@@ -532,7 +532,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               }}
               className="w-full bg-transparent text-white text-sm font-normal py-3.5 px-1 outline-none no-scrollbar resize-none max-h-40 placeholder:text-zinc-800"
               placeholder={
-                sendQueueStatus.isActive
+                isRecording
+                  ? ""
+                  : sendQueueStatus.isActive
                   ? "Type another message…"
                   : "Say, Hello!"
               }
@@ -579,7 +581,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 title="Start voice recording"
                 aria-label="Start voice recording"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
                   <path d="M12 15a3.5 3.5 0 0 0 3.5-3.5V6.5a3.5 3.5 0 1 0-7 0v5A3.5 3.5 0 0 0 12 15Z" />
                   <path d="M18 11.5a1 1 0 1 0-2 0 4 4 0 0 1-8 0 1 1 0 1 0-2 0 6 6 0 0 0 5 5.91V20H9a1 1 0 1 0 0 2h6a1 1 0 1 0 0-2h-2v-2.59a6 6 0 0 0 5-5.91Z" />
                 </svg>
