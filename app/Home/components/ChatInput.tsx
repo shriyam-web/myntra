@@ -51,14 +51,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 }) => {
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
-  const [isRecordLocked, setIsRecordLocked] = useState(false);
   const [recordingStartedAt, setRecordingStartedAt] = useState<number | null>(null);
   const [recordingElapsedSec, setRecordingElapsedSec] = useState(0);
   const mediaRecorderRef = React.useRef<MediaRecorder | null>(null);
   const recordStreamRef = React.useRef<MediaStream | null>(null);
   const recordingChunksRef = React.useRef<BlobPart[]>([]);
-  const recordingStartYRef = React.useRef<number | null>(null);
-  const recordingPointerIdRef = React.useRef<number | null>(null);
   const keepRecordedClipRef = React.useRef(true);
 
   const copyableText = newMessage.trim() || lastFailedText.trim();
@@ -184,8 +181,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   const stopRecording = useCallback(() => {
-    recordingPointerIdRef.current = null;
-    recordingStartYRef.current = null;
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       mediaRecorderRef.current.stop();
     }
@@ -215,7 +210,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         }
         recordStreamRef.current = null;
         setIsRecording(false);
-        setIsRecordLocked(false);
         setRecordingStartedAt(null);
 
         if (!keepRecordedClipRef.current) {
@@ -240,50 +234,16 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       recordStreamRef.current = stream;
       keepRecordedClipRef.current = true;
       setIsRecording(true);
-      setIsRecordLocked(false);
       setRecordingStartedAt(Date.now());
     } catch (err) {
       console.error("Failed to start voice recording:", err);
     }
   }, [setSelectedAudios, setSelectedFiles]);
 
-  const handleRecordPointerDown = useCallback(
-    async (e: React.PointerEvent<HTMLButtonElement>) => {
-      if (isRecording) return;
-      recordingStartYRef.current = e.clientY;
-      recordingPointerIdRef.current = e.pointerId;
-      e.currentTarget.setPointerCapture(e.pointerId);
-      await startRecording();
-    },
-    [isRecording, startRecording]
-  );
-
-  const handleRecordPointerMove = useCallback(
-    (e: React.PointerEvent<HTMLButtonElement>) => {
-      if (!isRecording || isRecordLocked) return;
-      if (recordingPointerIdRef.current !== e.pointerId) return;
-      const startY = recordingStartYRef.current;
-      if (startY === null) return;
-      const deltaY = e.clientY - startY;
-      if (deltaY < -60) {
-        setIsRecordLocked(true);
-        if (window.navigator.vibrate) window.navigator.vibrate(12);
-      }
-    },
-    [isRecording, isRecordLocked]
-  );
-
-  const handleRecordPointerUp = useCallback(
-    (e: React.PointerEvent<HTMLButtonElement>) => {
-      if (recordingPointerIdRef.current !== e.pointerId) return;
-      recordingPointerIdRef.current = null;
-      recordingStartYRef.current = null;
-      if (isRecording && !isRecordLocked) {
-        stopRecording();
-      }
-    },
-    [isRecording, isRecordLocked, stopRecording]
-  );
+  const handleMicClick = useCallback(() => {
+    if (isRecording) return;
+    void startRecording();
+  }, [isRecording, startRecording]);
 
   const canSend =
     newMessage.trim().length > 0 ||
@@ -543,31 +503,14 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.59a2 2 0 0 1-2.83-2.83l8.49-8.48" />
                 </svg>
               </button>
-              <button
-              type="button"
-              onPointerDown={handleRecordPointerDown}
-              onPointerMove={handleRecordPointerMove}
-              onPointerUp={handleRecordPointerUp}
-              onPointerCancel={() => {
-                recordingPointerIdRef.current = null;
-                recordingStartYRef.current = null;
-                if (isRecording && !isRecordLocked) stopRecording();
-              }}
-              className={`relative h-10 w-10 flex items-center justify-center rounded-full transition-all active:scale-90 shrink-0 touch-none ${
-                isRecording
-                  ? "text-red-300 bg-red-500/12 ring-1 ring-red-400/40"
-                  : "text-zinc-600 hover:text-white hover:bg-white/5"
-              }`}
-              title={isRecording ? (isRecordLocked ? "Recording locked" : "Release to send") : "Hold to record"}
-              aria-label={isRecording ? "Recording voice note" : "Hold to record voice note"}
-            >
-              {isRecording && !isRecordLocked && (
-                <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-[9px] font-bold uppercase tracking-wide text-red-300 whitespace-nowrap">
-                  Slide up to lock
-                </span>
+              {isRecording && (
+                <div className="h-10 w-10 flex items-center justify-center rounded-full text-red-300 bg-red-500/12 ring-1 ring-red-400/40 animate-pulse shrink-0">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                    <path d="M12 15a3.5 3.5 0 0 0 3.5-3.5V6.5a3.5 3.5 0 1 0-7 0v5A3.5 3.5 0 0 0 12 15Z" />
+                    <path d="M18 11.5a1 1 0 1 0-2 0 4 4 0 0 1-8 0 1 1 0 1 0-2 0 6 6 0 0 0 5 5.91V20H9a1 1 0 1 0 0 2h6a1 1 0 1 0 0-2h-2v-2.59a6 6 0 0 0 5-5.91Z" />
+                  </svg>
+                </div>
               )}
-              <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1v11" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" /></svg>
-              </button>
             </div>
             <input
               type="file"
@@ -608,7 +551,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                     :
                     {(recordingElapsedSec % 60).toString().padStart(2, "0")}
                   </span>
-                  {isRecordLocked && <span className="text-red-100/85">LOCK</span>}
                 </div>
                 <button
                   type="button"
@@ -619,17 +561,29 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 >
                   <span className="h-2.5 w-2.5 rounded-sm bg-white" />
                 </button>
-                {isRecordLocked && (
-                  <button
-                    type="button"
-                    onClick={cancelRecording}
-                    className="px-2 py-1 rounded-md bg-zinc-900/70 text-zinc-200 text-[10px] font-bold uppercase tracking-wide"
-                    title="Discard recording"
-                  >
-                    Discard
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={cancelRecording}
+                  className="px-2 py-1 rounded-md bg-zinc-900/70 text-zinc-200 text-[10px] font-bold uppercase tracking-wide"
+                  title="Discard recording"
+                >
+                  Discard
+                </button>
               </div>
+            )}
+            {!isRecording && (
+              <button
+                type="button"
+                onClick={handleMicClick}
+                className="h-10 w-10 flex items-center justify-center rounded-full text-zinc-600 hover:text-white hover:bg-white/5 transition-all active:scale-90 shrink-0 mr-0.5"
+                title="Start voice recording"
+                aria-label="Start voice recording"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                  <path d="M12 15a3.5 3.5 0 0 0 3.5-3.5V6.5a3.5 3.5 0 1 0-7 0v5A3.5 3.5 0 0 0 12 15Z" />
+                  <path d="M18 11.5a1 1 0 1 0-2 0 4 4 0 0 1-8 0 1 1 0 1 0-2 0 6 6 0 0 0 5 5.91V20H9a1 1 0 1 0 0 2h6a1 1 0 1 0 0-2h-2v-2.59a6 6 0 0 0 5-5.91Z" />
+                </svg>
+              </button>
             )}
             {copyableText && !isRecording && (
               <button
