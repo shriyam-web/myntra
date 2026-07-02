@@ -148,6 +148,7 @@ const VoiceNotePlayer: React.FC<{
 interface MessageListProps {
   messages: Message[];
   groupedMessages: { date: string; label: string; messages: Message[] }[];
+  unseenSeparatorMessageId?: string | null;
   currentUser: string;
   activeTheme: Theme;
   users: PresenceUser[];
@@ -186,6 +187,7 @@ interface MessageListProps {
 export const MessageList: React.FC<MessageListProps> = ({
   messages,
   groupedMessages,
+  unseenSeparatorMessageId = null,
   currentUser,
   activeTheme,
   users,
@@ -469,10 +471,19 @@ export const MessageList: React.FC<MessageListProps> = ({
                 const avatarSrc = m.createdBy.trim().toLowerCase() === "alpha 1" ? "/female.png" : "/male.png";
 
                 return (
-                  <div
-                    key={m._id}
-                    id={`message-${m._id}`}
-                    onTouchStart={(e) => {
+                  <Fragment key={m._id}>
+                    {unseenSeparatorMessageId === m._id && (
+                      <div className="my-2 flex items-center gap-2 px-1 animate-in fade-in duration-300">
+                        <div className="h-px flex-1 bg-zinc-700/60" />
+                        <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-zinc-400">
+                          New Messages
+                        </span>
+                        <div className="h-px flex-1 bg-zinc-700/60" />
+                      </div>
+                    )}
+                    <div
+                      id={`message-${m._id}`}
+                      onTouchStart={(e) => {
                       if (isInteractiveTouchTarget(e.target)) return;
                       swipeMovedRef.current = false;
                       swipeDistanceRef.current = 0;
@@ -528,10 +539,10 @@ export const MessageList: React.FC<MessageListProps> = ({
                       transform: swipingMessageId === m._id ? `translateX(${swipeDistance}px)` : 'none',
                       transition: swipingMessageId === m._id ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)'
                     }}
-                    className={`flex flex-col w-full transition-all duration-300 relative group/msg mb-2.5 ${
-                      isMe ? "items-end" : "items-start"
-                    } ${actionMenuId === m._id ? "z-[160]" : ""}`}
-                  >
+                      className={`flex flex-col w-full transition-all duration-300 relative group/msg mb-2.5 ${
+                        isMe ? "items-end" : "items-start"
+                      } ${actionMenuId === m._id ? "z-[160]" : ""}`}
+                    >
                     {swipingMessageId === m._id && swipeDistance > 20 && (
                       <div 
                         className="absolute left-[-40px] top-1/2 -translate-y-1/2 opacity-0 transition-opacity duration-200"
@@ -790,7 +801,8 @@ export const MessageList: React.FC<MessageListProps> = ({
                         )}
                       </div>
                     </div>
-                  </div>
+                    </div>
+                  </Fragment>
                 );
               })}
             </div>

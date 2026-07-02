@@ -118,6 +118,7 @@ export default function HomeClient() {
   const [previewMessage, setPreviewMessage] = useState<Message | null>(null);
   const [previewImageIndex, setPreviewImageIndex] = useState(0);
   const [showCopyToast, setShowCopyToast] = useState(false);
+  const [unseenSeparatorMessageId, setUnseenSeparatorMessageId] = useState<string | null>(null);
   const [pullUpDistance, setPullUpDistance] = useState(0);
   const [isPullingUp, setIsPullingUp] = useState(false);
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
@@ -127,6 +128,8 @@ export default function HomeClient() {
   const messageInputRef = useRef<HTMLTextAreaElement>(null);
   const rafRef = useRef<number | null>(null);
   const copyToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const unseenSeparatorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastShownUnseenSeparatorRef = useRef<string | null>(null);
   const lastMessageIdRef = useRef<string | null>(null);
   const prevLastMessageIdRef = useRef<string | null>(null);
   const reactionsSnapshotRef = useRef<Map<string, string>>(new Map());
@@ -188,6 +191,9 @@ export default function HomeClient() {
       if (copyToastTimerRef.current) {
         clearTimeout(copyToastTimerRef.current);
       }
+      if (unseenSeparatorTimerRef.current) {
+        clearTimeout(unseenSeparatorTimerRef.current);
+      }
     };
   }, []);
 
@@ -208,6 +214,40 @@ export default function HomeClient() {
       prevLastMessageIdRef.current = currentLastMessageId;
     }
   }, [activeTab, messages, messageLimit, showScrollButton, currentUser]);
+
+  useEffect(() => {
+    if (activeTab !== "messages") return;
+
+    const me = users.find(
+      (u) => u.username.trim().toLowerCase() === currentUser.trim().toLowerCase()
+    );
+    const lastReadAt = me?.lastReadAt ? new Date(me.lastReadAt).getTime() : 0;
+
+    const firstUnseenIncoming = messages.find((m) => {
+      const isMine = m.createdBy.trim().toLowerCase() === currentUser.trim().toLowerCase();
+      if (isMine) return false;
+      return new Date(m.createdAt).getTime() > lastReadAt;
+    });
+
+    if (!firstUnseenIncoming) {
+      setUnseenSeparatorMessageId(null);
+      return;
+    }
+
+    if (lastShownUnseenSeparatorRef.current === firstUnseenIncoming._id) return;
+
+    setUnseenSeparatorMessageId(firstUnseenIncoming._id);
+    lastShownUnseenSeparatorRef.current = firstUnseenIncoming._id;
+
+    if (unseenSeparatorTimerRef.current) {
+      clearTimeout(unseenSeparatorTimerRef.current);
+    }
+    unseenSeparatorTimerRef.current = setTimeout(() => {
+      setUnseenSeparatorMessageId((prev) =>
+        prev === firstUnseenIncoming._id ? null : prev
+      );
+    }, 10000);
+  }, [activeTab, messages, users, currentUser]);
 
   useRealtimeSync(view, useCallback(() => {
     fetchMessagesOnly(true);
@@ -1087,6 +1127,7 @@ export default function HomeClient() {
                 <MessageList 
                     messages={visibleMessages}
                     groupedMessages={groupedMessages}
+                    unseenSeparatorMessageId={unseenSeparatorMessageId}
                     currentUser={currentUser}
                     activeTheme={activeTheme}
                     users={users}
