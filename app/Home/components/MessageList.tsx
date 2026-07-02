@@ -27,16 +27,27 @@ const VoiceNotePlayer: React.FC<{
   React.useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
-    const onLoaded = () => setDuration(audio.duration || 0);
-    const onTime = () => setCurrentTime(audio.currentTime || 0);
-    const onEnded = () => setIsPlaying(false);
+    const safeDuration = (value: number) => (Number.isFinite(value) && value > 0 ? value : 0);
+    const safeTime = (value: number) => (Number.isFinite(value) && value >= 0 ? value : 0);
+    const onLoaded = () => setDuration(safeDuration(audio.duration));
+    const onDurationChange = () => setDuration(safeDuration(audio.duration));
+    const onTime = () => setCurrentTime(safeTime(audio.currentTime));
+    const onEnded = () => {
+      setIsPlaying(false);
+      setCurrentTime(0);
+    };
+    const onPause = () => setIsPlaying(false);
     audio.addEventListener("loadedmetadata", onLoaded);
+    audio.addEventListener("durationchange", onDurationChange);
     audio.addEventListener("timeupdate", onTime);
     audio.addEventListener("ended", onEnded);
+    audio.addEventListener("pause", onPause);
     return () => {
       audio.removeEventListener("loadedmetadata", onLoaded);
+      audio.removeEventListener("durationchange", onDurationChange);
       audio.removeEventListener("timeupdate", onTime);
       audio.removeEventListener("ended", onEnded);
+      audio.removeEventListener("pause", onPause);
     };
   }, []);
 
@@ -77,6 +88,7 @@ const VoiceNotePlayer: React.FC<{
 
   const pct = duration > 0 ? Math.min((currentTime / duration) * 100, 100) : 0;
   const fmt = (s: number) => {
+    if (!Number.isFinite(s) || s < 0) return "0:00";
     const m = Math.floor(s / 60);
     const sec = Math.floor(s % 60);
     return `${m}:${sec.toString().padStart(2, "0")}`;

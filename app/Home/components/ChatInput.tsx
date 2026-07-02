@@ -453,15 +453,17 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             </div>
           ))}
           {selectedAudios.map((url, idx) => (
-            <div key={`aud-${idx}`} className="relative group shrink-0 w-48 h-24 rounded-[1.5rem] border-2 border-zinc-800 shadow-2xl bg-zinc-950 p-3 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-200">
+            <div key={`aud-${idx}`} className="relative group shrink-0 w-52 h-24 rounded-[1.5rem] border-2 border-zinc-800 shadow-2xl bg-zinc-950 p-3 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-200">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19V5"/><path d="M8 9v6"/><path d="M16 9v6"/></svg>
               </div>
-              <audio src={url} controls className="w-full max-w-[120px] h-8" />
+              <audio src={url} controls className="w-full max-w-[128px] h-8" />
               <button
                 type="button"
                 onClick={() => removeAudio(idx)}
-                className="absolute -top-2 -right-2 p-2 bg-red-600 text-white rounded-full shadow-2xl opacity-0 group-hover:opacity-100 transition-all hover:scale-110 active:scale-90"
+                className="absolute -top-2 -right-2 p-2 bg-red-600 text-white rounded-full shadow-2xl opacity-100 transition-all hover:scale-110 active:scale-90"
+                title="Remove recording"
+                aria-label="Remove recording"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
               </button>
@@ -519,28 +521,29 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               )}
             </div>
           )}
-          <div className="relative group/input flex items-end bg-zinc-950/90 border border-zinc-700/50 rounded-2xl sm:rounded-[1.5rem] focus-within:border-zinc-500/60 focus-within:ring-1 focus-within:ring-white/10 transition-all shadow-inner overflow-hidden">
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="p-4 text-zinc-600 hover:text-white transition-all active:scale-90 shrink-0"
-              title="Attach Media"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
+          <div className="relative group/input flex items-center bg-zinc-950/90 border border-zinc-700/50 rounded-2xl sm:rounded-[1.5rem] focus-within:border-zinc-500/60 focus-within:ring-1 focus-within:ring-white/10 transition-all shadow-inner overflow-hidden px-1.5">
+            <div className="flex items-center gap-1 pr-1.5">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="h-10 w-10 flex items-center justify-center rounded-full text-zinc-600 hover:text-white hover:bg-white/5 transition-all active:scale-90 shrink-0"
+                title="Attach media"
               >
-                <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.59a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-              </svg>
-            </button>
-            <button
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="19"
+                  height="19"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.59a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                </svg>
+              </button>
+              <button
               type="button"
               onPointerDown={handleRecordPointerDown}
               onPointerMove={handleRecordPointerMove}
@@ -564,7 +567,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 </span>
               )}
               <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1v11" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" /></svg>
-            </button>
+              </button>
+            </div>
             <input
               type="file"
               ref={fileInputRef}
@@ -583,7 +587,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   handleSendMessage();
                 }
               }}
-              className="w-full bg-transparent text-white text-sm font-normal py-4 px-1 outline-none no-scrollbar resize-none max-h-40 placeholder:text-zinc-800"
+              className="w-full bg-transparent text-white text-sm font-normal py-3.5 px-1 outline-none no-scrollbar resize-none max-h-40 placeholder:text-zinc-800"
               placeholder={
                 sendQueueStatus.isActive
                   ? "Type another message…"
