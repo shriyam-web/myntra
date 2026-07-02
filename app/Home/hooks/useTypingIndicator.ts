@@ -71,7 +71,6 @@ export function useTypingSignal(currentUser: ViewType, enabled = true) {
 
 export function usePartnerTypingState(view: ViewType) {
   const [partnerIsTyping, setPartnerIsTyping] = useState(false);
-  const safetyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleTypingEvent = useCallback(
     (payload: { user: string; typing: boolean }) => {
@@ -82,24 +81,12 @@ export function usePartnerTypingState(view: ViewType) {
       if (payload.user.trim().toLowerCase() !== partnerUsername) return;
 
       setPartnerIsTyping(Boolean(payload.typing));
-
-      if (safetyTimerRef.current) {
-        clearTimeout(safetyTimerRef.current);
-        safetyTimerRef.current = null;
-      }
-
-      if (payload.typing) {
-        safetyTimerRef.current = setTimeout(() => {
-          setPartnerIsTyping(false);
-        }, 5000);
-      }
     },
     [view]
   );
 
   useEffect(() => {
     return () => {
-      if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current);
       setPartnerIsTyping(false);
     };
   }, [view]);
