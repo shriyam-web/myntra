@@ -345,7 +345,7 @@ export default function HomeClient() {
       }
     };
 
-    const timeoutId = setTimeout(() => resolve(true), 1500);
+    const timeoutId = setTimeout(() => resolve(true), 2500);
 
     void detectIncognitoMode()
       .then(resolve)
