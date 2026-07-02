@@ -332,15 +332,53 @@ export default function HomeClient() {
   }, [messages, currentUser, activeTab, view]);
 
   useEffect(() => {
-    const checkIncognito = async () => {
-      try {
-        const isPrivate = await actions.checkIncognito();
-        setIsIncognito(isPrivate);
-      } catch (e) {
-        setIsIncognito(false);
+    let resolved = false;
+    const resolve = (val: boolean) => {
+      if (!resolved) {
+        resolved = true;
+        setIsIncognito(val);
       }
     };
-    checkIncognito();
+
+    const timeoutId = setTimeout(() => resolve(true), 1000);
+
+    const checkIncognito = async () => {
+      try {
+        if (navigator.storage?.estimate) {
+          const { quota } = await navigator.storage.estimate();
+          if (quota !== undefined) {
+            resolve(quota < 4_000_000_000);
+            return;
+          }
+        }
+
+        const fs =
+          (window as Window & { RequestFileSystem?: unknown; webkitRequestFileSystem?: unknown })
+            .RequestFileSystem ||
+          (window as Window & { webkitRequestFileSystem?: unknown }).webkitRequestFileSystem;
+
+        if (typeof fs === "function") {
+          fs.call(
+            window,
+            (window as Window & { TEMPORARY?: number }).TEMPORARY,
+            100,
+            () => resolve(false),
+            () => resolve(true)
+          );
+          return;
+        }
+
+        resolve(true);
+      } catch {
+        resolve(true);
+      }
+    };
+
+    void checkIncognito();
+    return () => {
+      clearTimeout(timeoutId);
+      resolved = true;
+    };
   }, []);
 
   useEffect(() => {
