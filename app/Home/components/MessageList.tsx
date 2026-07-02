@@ -6,15 +6,23 @@ import { ReactionBurst } from "./ReactionBurst";
 import { MessageActionMenu } from "./MessageActionMenu";
 import { ReactionPickerBar } from "./ReactionPickerBar";
 
-const VoiceNotePlayer: React.FC<{ url: string; isMe: boolean; themeClass: string }> = ({
+const VoiceNotePlayer: React.FC<{
+  url: string;
+  isMe: boolean;
+  themeClass: string;
+  onRequestPlay: (audio: HTMLAudioElement) => Promise<void>;
+}> = ({
   url,
   isMe,
   themeClass,
+  onRequestPlay,
 }) => {
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
   const [isPlaying, setIsPlaying] = React.useState(false);
   const [duration, setDuration] = React.useState(0);
   const [currentTime, setCurrentTime] = React.useState(0);
+  const [speedIndex, setSpeedIndex] = React.useState(0);
+  const SPEEDS = [1, 1.5, 2];
 
   React.useEffect(() => {
     const audio = audioRef.current;
@@ -41,7 +49,7 @@ const VoiceNotePlayer: React.FC<{ url: string; isMe: boolean; themeClass: string
       return;
     }
     try {
-      await audio.play();
+      await onRequestPlay(audio);
       setIsPlaying(true);
     } catch {
       setIsPlaying(false);
@@ -53,11 +61,18 @@ const VoiceNotePlayer: React.FC<{ url: string; isMe: boolean; themeClass: string
     if (!audio) return;
     audio.currentTime = 0;
     try {
-      await audio.play();
+      await onRequestPlay(audio);
       setIsPlaying(true);
     } catch {
       setIsPlaying(false);
     }
+  };
+
+  const toggleSpeed = () => {
+    const next = (speedIndex + 1) % SPEEDS.length;
+    setSpeedIndex(next);
+    const audio = audioRef.current;
+    if (audio) audio.playbackRate = SPEEDS[next];
   };
 
   const pct = duration > 0 ? Math.min((currentTime / duration) * 100, 100) : 0;
@@ -68,7 +83,7 @@ const VoiceNotePlayer: React.FC<{ url: string; isMe: boolean; themeClass: string
   };
 
   return (
-    <div className={`mt-1.5 min-w-[210px] rounded-xl border border-white/20 ${isMe ? "bg-white/10" : "bg-zinc-900/60"} p-2.5`}>
+    <div className={`mt-1.5 min-w-[230px] rounded-xl border border-white/20 ${isMe ? "bg-white/10" : "bg-zinc-900/60"} p-2.5`}>
       <audio ref={audioRef} src={url} preload="metadata" />
       <div className="flex items-center gap-2">
         <button
@@ -87,13 +102,32 @@ const VoiceNotePlayer: React.FC<{ url: string; isMe: boolean; themeClass: string
           ↺
         </button>
         <div className="flex-1">
-          <div className="h-1.5 rounded-full bg-white/15 overflow-hidden">
-            <div className={`h-full ${themeClass}`} style={{ width: `${pct}%` }} />
+          <div className="h-6 rounded-full bg-white/10 overflow-hidden px-1 flex items-center gap-0.5">
+            {Array.from({ length: 20 }).map((_, i) => {
+              const threshold = ((i + 1) / 20) * 100;
+              const active = pct >= threshold;
+              const h = 20 + ((i * 13) % 45);
+              return (
+                <div
+                  key={i}
+                  className={`w-1 rounded-full transition-colors ${active ? themeClass : "bg-white/25"}`}
+                  style={{ height: `${h}%` }}
+                />
+              );
+            })}
           </div>
           <div className="mt-1 text-[9px] text-white/60 font-medium tracking-wide">
             {fmt(currentTime)} / {fmt(duration || 0)}
           </div>
         </div>
+        <button
+          type="button"
+          onClick={toggleSpeed}
+          className="px-2 py-1 rounded-lg border border-white/20 text-[10px] font-bold text-white/85 hover:text-white"
+          title="Playback speed"
+        >
+          {SPEEDS[speedIndex]}x
+        </button>
       </div>
     </div>
   );
@@ -180,6 +214,7 @@ export const MessageList: React.FC<MessageListProps> = ({
   const [reactionPickerId, setReactionPickerId] = React.useState<string | null>(null);
   const [actionMenuId, setActionMenuId] = React.useState<string | null>(null);
   const [burstReaction, setBurstReaction] = React.useState<ReactionType | null>(null);
+  const activeAudioRef = React.useRef<HTMLAudioElement | null>(null);
   const touchStartRef = React.useRef<{ x: number; y: number; time: number } | null>(null);
   const swipeMovedRef = React.useRef(false);
   const swipeDistanceRef = React.useRef(0);
@@ -293,6 +328,14 @@ export const MessageList: React.FC<MessageListProps> = ({
     () => (reactionPickerId ? messages.find((m) => m._id === reactionPickerId) : null),
     [reactionPickerId, messages]
   );
+
+  const handleRequestPlayAudio = React.useCallback(async (audio: HTMLAudioElement) => {
+    if (activeAudioRef.current && activeAudioRef.current !== audio) {
+      activeAudioRef.current.pause();
+    }
+    activeAudioRef.current = audio;
+    await audio.play();
+  }, []);
 
   return (
     <div ref={listRootRef} className="relative flex-1 flex flex-col min-h-0 overflow-hidden">
@@ -680,6 +723,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                                   url={url!}
                                   isMe={isMe}
                                   themeClass={activeTheme.bubbleMe}
+                                  onRequestPlay={handleRequestPlayAudio}
                                 />
                               ))}
                             </div>

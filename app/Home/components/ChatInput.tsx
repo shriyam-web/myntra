@@ -51,8 +51,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 }) => {
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
+  const [isRecordLocked, setIsRecordLocked] = useState(false);
   const mediaRecorderRef = React.useRef<MediaRecorder | null>(null);
+  const recordStreamRef = React.useRef<MediaStream | null>(null);
   const recordingChunksRef = React.useRef<BlobPart[]>([]);
+  const recordingStartYRef = React.useRef<number | null>(null);
+  const recordingPointerIdRef = React.useRef<number | null>(null);
+  const keepRecordedClipRef = React.useRef(true);
 
   const copyableText = newMessage.trim() || lastFailedText.trim();
 
@@ -107,7 +112,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     let imageCount = 0;
     setSelectedFiles(
       selectedFiles.filter((file) => {
-        if (!file.type.startsWith("video/")) {
+        if (!file.type.startsWith("video/") && !file.type.startsWith("audio/")) {
           if (imageCount === idx) {
             imageCount++;
             return false;
@@ -169,6 +174,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     }
   }, []);
 
+  const cancelRecording = useCallback(() => {
+    keepRecordedClipRef.current = false;
+    stopRecording();
+  }, [stopRecording]);
+
   const startRecording = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -182,7 +192,22 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       };
 
       recorder.onstop = () => {
+        const stream = recordStreamRef.current;
+        if (stream) {
+          stream.getTracks().forEach((track) => track.stop());
+        }
+        recordStreamRef.current = null;
+        setIsRecording(false);
+        setIsRecordLocked(false);
+
+        if (!keepRecordedClipRef.current) {
+          keepRecordedClipRef.current = true;
+          recordingChunksRef.current = [];
+          return;
+        }
+
         const audioBlob = new Blob(recordingChunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        if (audioBlob.size < 1200) return;
         const extension = (recorder.mimeType || "audio/webm").includes("ogg") ? "ogg" : "webm";
         const audioFile = new File([audioBlob], `voice-note-${Date.now()}.${extension}`, {
           type: recorder.mimeType || "audio/webm",
@@ -190,25 +215,56 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         const previewUrl = URL.createObjectURL(audioBlob);
         setSelectedFiles((prev) => [...prev, audioFile]);
         setSelectedAudios((prev) => [...prev, previewUrl]);
-        setIsRecording(false);
-        stream.getTracks().forEach((track) => track.stop());
       };
 
       recorder.start(200);
       mediaRecorderRef.current = recorder;
+      recordStreamRef.current = stream;
+      keepRecordedClipRef.current = true;
       setIsRecording(true);
+      setIsRecordLocked(false);
     } catch (err) {
       console.error("Failed to start voice recording:", err);
     }
   }, [setSelectedAudios, setSelectedFiles]);
 
-  const toggleRecording = useCallback(() => {
-    if (isRecording) {
-      stopRecording();
-    } else {
-      void startRecording();
-    }
-  }, [isRecording, startRecording, stopRecording]);
+  const handleRecordPointerDown = useCallback(
+    async (e: React.PointerEvent<HTMLButtonElement>) => {
+      if (isRecording) return;
+      recordingStartYRef.current = e.clientY;
+      recordingPointerIdRef.current = e.pointerId;
+      e.currentTarget.setPointerCapture(e.pointerId);
+      await startRecording();
+    },
+    [isRecording, startRecording]
+  );
+
+  const handleRecordPointerMove = useCallback(
+    (e: React.PointerEvent<HTMLButtonElement>) => {
+      if (!isRecording || isRecordLocked) return;
+      if (recordingPointerIdRef.current !== e.pointerId) return;
+      const startY = recordingStartYRef.current;
+      if (startY === null) return;
+      const deltaY = e.clientY - startY;
+      if (deltaY < -60) {
+        setIsRecordLocked(true);
+        if (window.navigator.vibrate) window.navigator.vibrate(12);
+      }
+    },
+    [isRecording, isRecordLocked]
+  );
+
+  const handleRecordPointerUp = useCallback(
+    (e: React.PointerEvent<HTMLButtonElement>) => {
+      if (recordingPointerIdRef.current !== e.pointerId) return;
+      recordingPointerIdRef.current = null;
+      recordingStartYRef.current = null;
+      if (isRecording && !isRecordLocked) {
+        stopRecording();
+      }
+    },
+    [isRecording, isRecordLocked, stopRecording]
+  );
 
   const canSend =
     newMessage.trim().length > 0 ||
@@ -467,10 +523,17 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             </button>
             <button
               type="button"
-              onClick={toggleRecording}
-              className={`p-3 transition-all active:scale-90 shrink-0 ${isRecording ? "text-red-400 animate-pulse" : "text-zinc-600 hover:text-white"}`}
-              title={isRecording ? "Stop voice note" : "Record voice note"}
-              aria-label={isRecording ? "Stop voice note" : "Record voice note"}
+              onPointerDown={handleRecordPointerDown}
+              onPointerMove={handleRecordPointerMove}
+              onPointerUp={handleRecordPointerUp}
+              onPointerCancel={() => {
+                recordingPointerIdRef.current = null;
+                recordingStartYRef.current = null;
+                if (isRecording && !isRecordLocked) stopRecording();
+              }}
+              className={`p-3 transition-all active:scale-90 shrink-0 ${isRecording ? "text-red-400 animate-pulse" : "text-zinc-600 hover:text-white"} touch-none`}
+              title={isRecording ? (isRecordLocked ? "Recording locked" : "Release to send") : "Hold to record voice note"}
+              aria-label={isRecording ? "Recording voice note" : "Hold to record voice note"}
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1v11" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="23" /><line x1="8" y1="23" x2="16" y2="23" /></svg>
             </button>
@@ -533,6 +596,32 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               </button>
             )}
           </div>
+          {isRecording && (
+            <div className="mt-2 flex items-center justify-between rounded-xl border border-red-500/35 bg-red-500/10 px-3 py-2">
+              <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-red-200">
+                <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
+                {isRecordLocked ? "Recording locked" : "Recording · slide up to lock"}
+              </div>
+              {isRecordLocked && (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={cancelRecording}
+                    className="px-2 py-1 rounded-md bg-zinc-900/70 text-zinc-200 text-[10px] font-bold uppercase tracking-wide"
+                  >
+                    Discard
+                  </button>
+                  <button
+                    type="button"
+                    onClick={stopRecording}
+                    className="px-2 py-1 rounded-md bg-red-600 text-white text-[10px] font-bold uppercase tracking-wide"
+                  >
+                    Send
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
         <button
           type="submit"
