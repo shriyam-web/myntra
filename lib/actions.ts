@@ -238,11 +238,7 @@ export async function fetchMessages(messageLimit = 50, currentUser?: string) {
   try {
     await dbConnect();
     
-    // Update presence if currentUser provided
-    if (currentUser && currentUser !== "login") {
-      await updatePresence(currentUser);
-    }
-
+    // Presence is updated on its own interval in HomeClient — avoid on every poll.
     const messageQuery: Record<string, unknown> = {};
     if (currentUser) {
       messageQuery.deletedFor = { $ne: currentUser };

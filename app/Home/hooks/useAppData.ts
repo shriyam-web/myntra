@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import * as actions from "../../../lib/actions";
 import { Ticket, Message, WishlistItem, PlanItem, TimelineDate, PresenceUser, ViewType, CallLog, isOptimisticMessageId } from "../types";
 
@@ -18,6 +18,10 @@ export function useAppData(view: ViewType, messageLimit: number) {
   const [maintenanceEnabledAt, setMaintenanceEnabledAt] = useState<string | null>(null);
   const [maintenanceEnabledBy, setMaintenanceEnabledBy] = useState<string | null>(null);
 
+  const syncInFlightRef = useRef(false);
+  const syncAgainRef = useRef(false);
+  const syncDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const applyMaintenance = useCallback((data: {
     maintenanceMode?: boolean;
     maintenanceEnabledAt?: string | null;
@@ -36,10 +40,6 @@ export function useAppData(view: ViewType, messageLimit: number) {
 
   const updateMessagesState = useCallback((newMessagesFromData: Message[]) => {
     setMessages(prev => {
-      // 1. Map existing messages for easy lookup
-      const prevMap = new Map(prev.map(m => [m._id, m]));
-      
-      // 2. Identify optimistic messages (not yet in server)
       const optimistic = prev.filter(m => isOptimisticMessageId(m._id));
       const pendingOptimistic = optimistic.filter(opt => 
         !newMessagesFromData.some((m: Message) => 
@@ -49,25 +49,19 @@ export function useAppData(view: ViewType, messageLimit: number) {
         )
       );
 
-      // 3. Create a map for the new state
-      const nextMap = new Map();
+      const nextMap = new Map<string, Message>();
       
-      // 4. Add server messages, but be careful not to overwrite a very recent local change 
-      // if the server might be stale. For now, we trust the server if it's there.
       newMessagesFromData.forEach(m => {
         nextMap.set(m._id, m);
       });
       
-      // 5. Add pending optimistic messages
       pendingOptimistic.forEach(m => {
         nextMap.set(m._id, m);
       });
 
-      // 6. Convert back to array and sort by createdAt
       const finalMessages = Array.from(nextMap.values());
       finalMessages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
       
-      // 7. Check if anything actually changed to avoid unnecessary re-renders
       if (prev.length === finalMessages.length) {
         const hasChange = prev.some((m, i) => 
           m._id !== finalMessages[i]._id || 
@@ -83,7 +77,7 @@ export function useAppData(view: ViewType, messageLimit: number) {
     });
   }, []);
 
-  const fetchMessagesOnly = useCallback(async (silent = true) => {
+  const runFetchMessages = useCallback(async (silent: boolean) => {
     if (view === "login") return;
     try {
       if (!silent) setIsRefreshing(true);
@@ -101,6 +95,35 @@ export function useAppData(view: ViewType, messageLimit: number) {
       if (!silent) setIsRefreshing(false);
     }
   }, [messageLimit, view, updateMessagesState, applyMaintenance]);
+
+  const fetchMessagesOnly = useCallback(async (silent = true) => {
+    if (view === "login") return;
+
+    if (syncInFlightRef.current) {
+      syncAgainRef.current = true;
+      return;
+    }
+
+    syncInFlightRef.current = true;
+    try {
+      await runFetchMessages(silent);
+    } finally {
+      syncInFlightRef.current = false;
+      if (syncAgainRef.current) {
+        syncAgainRef.current = false;
+        void fetchMessagesOnly(true);
+      }
+    }
+  }, [view, runFetchMessages]);
+
+  const scheduleFetchMessages = useCallback((silent = true, delayMs = 450) => {
+    if (view === "login") return;
+    if (syncDebounceRef.current) clearTimeout(syncDebounceRef.current);
+    syncDebounceRef.current = setTimeout(() => {
+      syncDebounceRef.current = null;
+      void fetchMessagesOnly(silent);
+    }, delayMs);
+  }, [view, fetchMessagesOnly]);
 
   const fetchInitialData = useCallback(async (silent = false) => {
     if (view === "login") return;
@@ -158,6 +181,7 @@ export function useAppData(view: ViewType, messageLimit: number) {
     maintenanceEnabledBy,
     fetchInitialData,
     fetchMessagesOnly,
+    scheduleFetchMessages,
     fetchAllMedia
   };
 }

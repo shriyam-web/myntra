@@ -77,7 +77,7 @@ export async function GET(request: Request) {
       unsubscribeTyping = subscribeTyping((payload) => send("typing", payload));
 
       checkAndPush();
-      pollTimer = setInterval(checkAndPush, 1500);
+      pollTimer = setInterval(checkAndPush, 3000);
 
       request.signal.addEventListener("abort", () => {
         closed = true;

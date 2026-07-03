@@ -57,6 +57,7 @@ export default function HomeClient() {
     maintenanceMode,
     fetchInitialData,
     fetchMessagesOnly,
+    scheduleFetchMessages,
     fetchAllMedia
   } = useAppData(view, messageLimit);
 
@@ -129,6 +130,7 @@ export default function HomeClient() {
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const scrollRafRef = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messageInputRef = useRef<HTMLTextAreaElement>(null);
   const rafRef = useRef<number | null>(null);
@@ -268,8 +270,8 @@ export default function HomeClient() {
   }, [activeTab, messages, users, currentUser]);
 
   useRealtimeSync(view, useCallback(() => {
-    fetchMessagesOnly(true);
-  }, [fetchMessagesOnly]), view !== "login", handleTypingEvent);
+    scheduleFetchMessages(true);
+  }, [scheduleFetchMessages]), view !== "login", handleTypingEvent);
 
   useEffect(() => {
     if (view !== "login") {
@@ -830,13 +832,19 @@ export default function HomeClient() {
     }, 100);
   };
 
-  const handleScroll = () => {
-    if (messagesContainerRef.current) {
+  const handleScroll = useCallback(() => {
+    if (scrollRafRef.current !== null) return;
+    scrollRafRef.current = requestAnimationFrame(() => {
+      scrollRafRef.current = null;
+      if (!messagesContainerRef.current) return;
       const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
       const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
-      setShowScrollButton(!isNearBottom);
-    }
-  };
+      setShowScrollButton((prev) => {
+        const next = !isNearBottom;
+        return prev === next ? prev : next;
+      });
+    });
+  }, []);
 
   const formatDateLabel = useCallback((dateString: string) => {
     const date = new Date(dateString);
