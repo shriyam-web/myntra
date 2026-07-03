@@ -6,7 +6,7 @@ import { MAINTENANCE_REDIRECT_URL } from "../../../lib/maintenance";
 
 const TAP_THRESHOLD_PX = 8;
 const BUTTON_SIZE = 56;
-const STORAGE_KEY = "sos_emergency_button_position";
+const STORAGE_KEY = "sos_emergency_button_position_v2";
 
 interface Position {
   x: number;
@@ -17,7 +17,7 @@ function getDefaultPosition(): Position {
   if (typeof window === "undefined") return { x: 0, y: 0 };
 
   return {
-    x: Math.max(12, window.innerWidth - BUTTON_SIZE - 16),
+    x: 16,
     y: Math.max(12, window.innerHeight - BUTTON_SIZE - 96),
   };
 }
