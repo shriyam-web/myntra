@@ -391,12 +391,46 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
   return (
     <div
-      className={`shrink-0 bg-zinc-900/70 backdrop-blur-3xl border-t border-zinc-800/50 z-20 ${
+      className={`relative shrink-0 bg-zinc-900/70 backdrop-blur-3xl border-t border-zinc-800/50 z-20 ${
         isMessageExpanded
           ? "p-3 sm:p-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
           : "p-4 sm:p-5"
       }`}
     >
+      {attachMenuOpen && (
+        <>
+          {/* Click-outside layer */}
+          <div className="fixed inset-0 z-30" onClick={() => setAttachMenuOpen(false)} />
+          {/* Menu sits above the input row, outside its overflow-hidden box */}
+          <div className="absolute bottom-full left-4 mb-2 z-40 w-52 rounded-2xl border border-zinc-800 bg-zinc-950 p-1.5 animate-in slide-in-from-bottom-2 fade-in duration-150">
+            <button type="button" onClick={() => { setAttachMenuOpen(false); mediaInputRef.current?.click(); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm text-zinc-200 hover:bg-white/5 active:bg-white/10">
+              <span className="w-8 h-8 rounded-full bg-pink-500/15 text-pink-400 flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+              </span>
+              Photo &amp; Video
+            </button>
+            <button type="button" onClick={() => { setAttachMenuOpen(false); audioInputRef.current?.click(); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm text-zinc-200 hover:bg-white/5 active:bg-white/10">
+              <span className="w-8 h-8 rounded-full bg-violet-500/15 text-violet-400 flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+              </span>
+              Audio file
+            </button>
+            <button type="button" onClick={() => { setAttachMenuOpen(false); docInputRef.current?.click(); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm text-zinc-200 hover:bg-white/5 active:bg-white/10">
+              <span className="w-8 h-8 rounded-full bg-sky-500/15 text-sky-400 flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+              </span>
+              Document
+            </button>
+            <button type="button" onClick={shareLocation} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm text-zinc-200 hover:bg-white/5 active:bg-white/10">
+              <span className="w-8 h-8 rounded-full bg-emerald-500/15 text-emerald-400 flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+              </span>
+              Location
+            </button>
+          </div>
+        </>
+      )}
+
       {sendError && (
         <div className="mb-3 p-3 rounded-2xl border border-red-500/30 bg-red-500/10 flex items-start gap-3 animate-in slide-in-from-bottom-2 duration-300">
           <p className="text-xs text-red-200/90 leading-relaxed flex-1">{sendError}</p>
@@ -647,34 +681,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.59a2 2 0 0 1-2.83-2.83l8.49-8.48" />
                 </svg>
               </button>
-              {attachMenuOpen && (
-                <div className="absolute bottom-12 left-0 z-30 w-48 rounded-2xl border border-zinc-800 bg-zinc-950 p-1.5 shadow-none">
-                  <button type="button" onClick={() => { setAttachMenuOpen(false); mediaInputRef.current?.click(); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm text-zinc-200 hover:bg-white/5">
-                    <span className="w-8 h-8 rounded-full bg-pink-500/15 text-pink-400 flex items-center justify-center">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
-                    </span>
-                    Photo &amp; Video
-                  </button>
-                  <button type="button" onClick={() => { setAttachMenuOpen(false); audioInputRef.current?.click(); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm text-zinc-200 hover:bg-white/5">
-                    <span className="w-8 h-8 rounded-full bg-violet-500/15 text-violet-400 flex items-center justify-center">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
-                    </span>
-                    Audio file
-                  </button>
-                  <button type="button" onClick={() => { setAttachMenuOpen(false); docInputRef.current?.click(); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm text-zinc-200 hover:bg-white/5">
-                    <span className="w-8 h-8 rounded-full bg-sky-500/15 text-sky-400 flex items-center justify-center">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
-                    </span>
-                    Document
-                  </button>
-                  <button type="button" onClick={shareLocation} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm text-zinc-200 hover:bg-white/5">
-                    <span className="w-8 h-8 rounded-full bg-emerald-500/15 text-emerald-400 flex items-center justify-center">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
-                    </span>
-                    Location
-                  </button>
-                </div>
-              )}
               {isRecording && (
                 <div className="h-10 w-10 flex items-center justify-center rounded-full text-red-300 bg-red-500/12 ring-1 ring-red-400/40 animate-pulse shrink-0">
                   <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
