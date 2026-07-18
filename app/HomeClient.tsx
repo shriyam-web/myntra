@@ -32,11 +32,14 @@ import { useTypingSignal, usePartnerTypingState } from "./Home/hooks/useTypingIn
 import { CallLogsTab } from "./Home/components/CallLogsTab";
 import { MAINTENANCE_REDIRECT_URL } from "../lib/maintenance";
 import { detectIncognitoMode } from "./Home/utils/detectIncognito";
+import { loginAction, logoutAction } from "../lib/auth/actions";
 
-export default function HomeClient() {
+export default function HomeClient({ initialUser = null }: { initialUser?: string | null }) {
   const [isIncognito, setIsIncognito] = useState<boolean | null>(null);
   const [password, setPassword] = useState("");
-  const [view, setView] = useState<ViewType>("login");
+  const [view, setView] = useState<ViewType>((initialUser as ViewType) || "login");
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>("complaints");
   
@@ -153,11 +156,16 @@ export default function HomeClient() {
 
   const {
     callStatus,
+    uiStatus,
     endReason,
     isIncoming,
     partnerName,
     localStream,
     remoteStream,
+    activeAt,
+    busyMessage,
+    quality,
+    statsLabel,
     handleStartCall,
     handleAcceptCall,
     handleEndCall,
@@ -391,13 +399,24 @@ export default function HomeClient() {
   }, [view, users]);
 
   // Handlers
-  const handleLogin = (e?: React.FormEvent, passwordOverride?: string) => {
+  const handleLogin = async (e?: React.FormEvent, passwordOverride?: string) => {
     if (e) e.preventDefault();
-    const lowerPassword = (passwordOverride ?? password).toLowerCase().trim();
-    if (lowerPassword === "icai") {
-      setView("alpha 1");
-    } else if (lowerPassword === "gamma2") {
-      setView("delta 1");
+    if (isLoggingIn) return;
+    setIsLoggingIn(true);
+    setLoginError(null);
+    try {
+      const result = await loginAction(passwordOverride ?? password);
+      if (!result.ok) {
+        setLoginError(result.error);
+        return;
+      }
+      setView(result.user as ViewType);
+      setPassword("");
+    } catch (error) {
+      console.error("Login failed:", error);
+      setLoginError("Login failed");
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
@@ -812,7 +831,12 @@ export default function HomeClient() {
     }
   }, [currentUser, fetchInitialData]);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await logoutAction();
+    } catch (error) {
+      console.error("Logout failed:", error);
+    }
     setView("login");
     window.location.href = "about:blank";
   };
@@ -893,7 +917,7 @@ export default function HomeClient() {
 
   if (isIncognito === null) return <IncognitoVerify status="verifying" />;
   if (isIncognito === false) return <IncognitoVerify status="blocked" />;
-  if (view === "login") return <LoginView password={password} setPassword={setPassword} handleLogin={handleLogin} />;
+  if (view === "login") return <LoginView password={password} setPassword={setPassword} handleLogin={handleLogin} loginError={loginError} isLoggingIn={isLoggingIn} />;
 
   return (
     <div className="flex flex-col min-h-[100svh] bg-zinc-950 text-zinc-100 font-sans pb-2 selection:bg-white selection:text-black">
@@ -1260,6 +1284,7 @@ export default function HomeClient() {
         currentUser={currentUser as string}
         partnerName={partnerName}
         callStatus={callStatus}
+        uiStatus={uiStatus}
         endReason={endReason}
         isIncoming={isIncoming}
         onAccept={handleAcceptCall}
@@ -1267,6 +1292,10 @@ export default function HomeClient() {
         onEnd={handleEndCall}
         stream={localStream}
         remoteStream={remoteStream}
+        activeAt={activeAt}
+        busyMessage={busyMessage}
+        quality={quality}
+        statsLabel={statsLabel}
       />
 
       {previewMessage && (

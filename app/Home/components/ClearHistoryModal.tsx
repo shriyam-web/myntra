@@ -42,11 +42,11 @@ export const ClearHistoryModal: React.FC<ClearHistoryModalProps> = ({
               <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
             </svg>
           </div>
-          <h2 className="text-xl font-black text-white uppercase tracking-[0.3em]">
-            Purge History
+          <h2 className="text-xl font-black text-white uppercase tracking-[0.2em]">
+            Delete All Messages
           </h2>
-          <p className="text-xs text-zinc-500 font-bold leading-relaxed uppercase tracking-wider">
-            Critical Action Required. Data extraction will be permanent.
+          <p className="text-xs text-zinc-400 font-medium leading-relaxed">
+            This will permanently delete your chat history. Deleted messages cannot be recovered.
           </p>
         </div>
 
@@ -76,10 +76,12 @@ export const ClearHistoryModal: React.FC<ClearHistoryModalProps> = ({
             </div>
             <div className="flex flex-col">
               <span className="text-xs font-black text-white uppercase tracking-widest group-hover/check:text-red-500 transition-colors">
-                Include Protected
+                Also delete saved messages
               </span>
-              <span className="text-[9px] font-bold text-zinc-600 uppercase tracking-widest">
-                Delete saved/starred entries
+              <span className="text-[10px] font-medium text-zinc-500 leading-relaxed normal-case tracking-normal">
+                {includeSavedInDelete
+                  ? "Saved and pinned messages will be deleted too"
+                  : "Saved and pinned messages will be kept"}
               </span>
             </div>
           </label>
@@ -87,15 +89,20 @@ export const ClearHistoryModal: React.FC<ClearHistoryModalProps> = ({
           <div className="flex flex-col gap-3">
             <button
               onClick={handleDeleteAllMessages}
-              className="w-full py-5 bg-red-600 text-white rounded-2xl font-black uppercase tracking-[0.3em] text-[10px] hover:bg-red-500 hover:scale-[1.02] transition-all active:scale-95 shadow-xl shadow-red-900/20"
+              className="w-full py-5 bg-red-600 text-white rounded-2xl font-black uppercase tracking-[0.2em] text-[10px] hover:bg-red-500 hover:scale-[1.02] transition-all active:scale-95 shadow-xl shadow-red-900/20"
             >
-              Execute Purge
+              {includeSavedInDelete ? "Delete Everything" : "Delete Messages"}
             </button>
+            <p className="text-[9px] text-zinc-600 text-center font-medium -mt-1">
+              {includeSavedInDelete
+                ? "Deletes all messages, including saved and pinned ones"
+                : "Deletes all messages except saved and pinned ones"}
+            </p>
             <button
               onClick={() => setShowClearHistoryModal(false)}
-              className="w-full py-5 bg-zinc-900 text-zinc-500 rounded-2xl font-black uppercase tracking-[0.3em] text-[10px] border border-zinc-800 hover:text-white hover:bg-zinc-800 transition-all active:scale-95"
+              className="w-full py-5 bg-zinc-900 text-zinc-400 rounded-2xl font-black uppercase tracking-[0.2em] text-[10px] border border-zinc-800 hover:text-white hover:bg-zinc-800 transition-all active:scale-95"
             >
-              Abort Mission
+              Cancel — Keep Messages
             </button>
           </div>
         </div>

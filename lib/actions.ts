@@ -7,6 +7,9 @@ import { Ticket, Wishlist, Plan, TimelineDate, Message, User, CallLog, AppSettin
 import { revalidatePath, unstable_noStore as noStore } from "next/cache";
 import { v2 as cloudinary } from "cloudinary";
 import { APP_SETTINGS_KEY } from "./maintenance";
+import { requireUser } from "./auth/session";
+import * as callService from "./calls/service";
+import type { CallEndReason, CallSignalType } from "./calls/types";
 
 // Configure Cloudinary
 cloudinary.config({
@@ -864,147 +867,137 @@ export async function getIceServers(): Promise<IceServerEntry[]> {
   return iceServers;
 }
 
-// Append a signaling message to the target's queue (never overwrites).
-export async function pushCallSignal(targetUser: string, kind: string, payload: string) {
+// Authenticated calling API (call-scoped, atomic lifecycle)
+
+export async function getIceServersAuthed(): Promise<IceServerEntry[]> {
   noStore();
-  try {
-    await dbConnect();
-    await User.findOneAndUpdate(
-      { username: targetUser.trim().toLowerCase() },
-      { $push: { callSignals: { kind, payload } } }
-    );
-  } catch (error) {
-    console.error('Failed to push call signal:', error);
-  }
+  await requireUser();
+  return getIceServers();
 }
 
-export async function initiateCall(fromUser: string, toUser: string, offer: string) {
+export async function startCallAction(startRequestId: string, offer: string) {
   noStore();
-  try {
-    await dbConnect();
-    const toUname = toUser.trim().toLowerCase();
-
-    // Seed the callee with a fresh signal queue containing the offer.
-    await User.findOneAndUpdate(
-      { username: toUname },
-      {
-        callStatus: 'ringing',
-        callerId: fromUser,
-        signalData: null,
-        callSignals: [{ kind: 'offer', payload: offer }],
-        lastCallEndReason: null,
-      }
-    );
-
-    // Mark caller engaged with a clean queue ready to receive the answer/candidates.
-    await User.findOneAndUpdate(
-      { username: fromUser.trim().toLowerCase() },
-      {
-        callStatus: 'on-call',
-        callerId: toUser,
-        signalData: null,
-        callSignals: [],
-        lastCallEndReason: null,
-      }
-    );
-  } catch (error) {
-    console.error('Failed to initiate call:', error);
-    throw new Error('Failed to initiate call.');
-  }
+  const me = await requireUser();
+  return callService.startCall(me, startRequestId, offer);
 }
 
-export async function acceptCall(username: string, answer: string) {
+export async function acceptCallAction(callId: string, answer: string) {
   noStore();
-  try {
-    await dbConnect();
-    const uname = username.trim().toLowerCase();
-
-    // Deliver my answer into the caller's queue.
-    const me = await User.findOne({ username: uname });
-    if (me && me.callerId) {
-      await User.findOneAndUpdate(
-        { username: me.callerId.trim().toLowerCase() },
-        { $push: { callSignals: { kind: 'answer', payload: answer } } }
-      );
-    }
-
-    // Set own status to on-call
-    await User.findOneAndUpdate(
-      { username: uname },
-      { callStatus: 'on-call' }
-    );
-  } catch (error) {
-    console.error('Failed to accept call:', error);
-    throw new Error('Failed to accept call.');
-  }
+  const me = await requireUser();
+  return callService.acceptCall(me, callId, answer);
 }
 
-export async function endCall(username: string, logData?: { status: 'completed' | 'missed' | 'rejected', duration: number, from: string, to: string }) {
+export async function rejectCallAction(callId: string) {
   noStore();
-  try {
-    await dbConnect();
-    const uname = username.trim().toLowerCase();
-    const user = await User.findOne({ username: uname });
-    
-    const reason = logData?.status || 'completed';
+  const me = await requireUser();
+  return callService.rejectCall(me, callId);
+}
 
-    if (user && user.callerId) {
-      // Reset the other person and set reason
-      await User.findOneAndUpdate(
-        { username: user.callerId.trim().toLowerCase() },
-        { callStatus: 'idle', callerId: null, signalData: null, callSignals: [], lastCallEndReason: reason }
-      );
-    }
+export async function endCallAction(callId: string, reason: CallEndReason = "hangup") {
+  noStore();
+  const me = await requireUser();
+  return callService.endCall(me, callId, reason);
+}
 
-    // Reset self and set reason
-    await User.findOneAndUpdate(
-      { username: uname },
-      { callStatus: 'idle', callerId: null, signalData: null, callSignals: [], lastCallEndReason: reason }
-    );
+export async function pushCallSignalAction(input: {
+  callId: string;
+  signalId: string;
+  type: CallSignalType;
+  payload: string;
+  revision?: number;
+  iceGeneration?: number;
+}) {
+  noStore();
+  const me = await requireUser();
+  return callService.pushSignal(me, input);
+}
 
-    // Log the call if data is provided
-    if (logData) {
-      await CallLog.create({
-        from: logData.from,
-        to: logData.to,
-        status: logData.status,
-        duration: logData.duration,
-        createdAt: new Date()
-      });
+export async function fetchCallSignalsAction(callId: string, afterSeq = 0) {
+  noStore();
+  const me = await requireUser();
+  return callService.fetchSignals(me, callId, afterSeq);
+}
 
-      // Also send a message to the chat
-      await Message.create({
-        text: `[CALL_LOG:${logData.status}:${logData.duration}:${logData.from}:${logData.to}]`,
-        createdBy: logData.from,
-        createdAt: new Date()
-      });
-    }
-  } catch (error) {
-    console.error('Failed to end call:', error);
-    throw new Error('Failed to end call.');
-  }
+export async function getActiveCallAction() {
+  noStore();
+  const me = await requireUser();
+  return callService.getActiveCallForUser(me);
+}
+
+export async function reportCallConnectedAction(callId: string) {
+  noStore();
+  const me = await requireUser();
+  return callService.reportConnected(me, callId);
+}
+
+export async function heartbeatCallAction(callId: string) {
+  noStore();
+  const me = await requireUser();
+  return callService.heartbeatCall(me, callId);
 }
 
 export async function getCallLogs() {
   noStore();
   try {
+    await requireUser();
     await dbConnect();
     const logs = await CallLog.find({}).sort({ createdAt: -1 }).limit(50).lean();
     return JSON.parse(JSON.stringify(logs));
   } catch (error) {
-    console.error('Failed to fetch call logs:', error);
-    throw new Error('Failed to fetch call logs.');
+    console.error("Failed to fetch call logs:", error);
+    throw new Error("Failed to fetch call logs.");
   }
 }
 
+/** @deprecated Legacy — kept temporarily for older clients */
+export async function pushCallSignal(targetUser: string, kind: string, payload: string) {
+  noStore();
+  void targetUser;
+  void kind;
+  void payload;
+  throw new Error("Deprecated. Use pushCallSignalAction.");
+}
+
+/** @deprecated */
+export async function initiateCall(fromUser: string, toUser: string, offer: string) {
+  noStore();
+  void fromUser;
+  void toUser;
+  void offer;
+  throw new Error("Deprecated. Use startCallAction.");
+}
+
+/** @deprecated */
+export async function acceptCall(username: string, answer: string) {
+  noStore();
+  void username;
+  void answer;
+  throw new Error("Deprecated. Use acceptCallAction.");
+}
+
+/** @deprecated */
+export async function endCall(
+  username: string,
+  logData?: { status: "completed" | "missed" | "rejected"; duration: number; from: string; to: string }
+) {
+  noStore();
+  void username;
+  void logData;
+  throw new Error("Deprecated. Use endCallAction.");
+}
+
+/** @deprecated */
 export async function fetchCallStatus(username: string) {
   noStore();
-  try {
-    await dbConnect();
-    const user = await User.findOne({ username: username.trim().toLowerCase() }).select('callStatus callerId callSignals lastCallEndReason').lean();
-    return JSON.parse(JSON.stringify(user));
-  } catch (error) {
-    console.error('Failed to fetch call status:', error);
-    return null;
-  }
+  void username;
+  const me = await requireUser();
+  const session = await callService.getActiveCallForUser(me);
+  return session
+    ? {
+        callStatus: session.state === "ringing" ? "ringing" : session.state === "ended" ? "idle" : "on-call",
+        callerId: session.role === "callee" ? session.caller : session.callee,
+        callId: session.callId,
+        session,
+      }
+    : { callStatus: "idle", callerId: null, callId: null, session: null };
 }

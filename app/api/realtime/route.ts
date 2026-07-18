@@ -2,11 +2,12 @@ import dbConnect from "../../../lib/mongodb";
 import { Message, AppSettings } from "../../../models/schemas";
 import { subscribeRealtime, subscribeTyping } from "../../../lib/realtime-hub";
 import { APP_SETTINGS_KEY } from "../../../lib/maintenance";
+import { getCallFingerprint } from "../../../lib/calls/service";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-async function getSyncFingerprint(): Promise<string> {
+async function getSyncFingerprint(user?: string | null): Promise<{ messages: string; call: string }> {
   await dbConnect();
   const [stats] = await Message.aggregate([
     {
@@ -26,7 +27,7 @@ async function getSyncFingerprint(): Promise<string> {
     .select("_id reactions pinnedBy savedBy")
     .lean();
   const settings = await AppSettings.findOne({ key: APP_SETTINGS_KEY }).lean();
-  return JSON.stringify({
+  const messages = JSON.stringify({
     messages: stats || { count: 0, maxCreatedAt: null, reactionCount: 0 },
     recentState: recentMessageState.map((m) => ({
       id: String(m._id),
@@ -37,15 +38,22 @@ async function getSyncFingerprint(): Promise<string> {
     maintenanceMode: Boolean(settings?.maintenanceMode),
     maintenanceEnabledAt: settings?.maintenanceEnabledAt ?? null,
   });
+
+  const call = user ? await getCallFingerprint(user) : "none";
+  return { messages, call };
 }
 
 export async function GET(request: Request) {
   const encoder = new TextEncoder();
   let closed = false;
-  let lastFingerprint = "";
+  let lastMessageFingerprint = "";
+  let lastCallFingerprint = "";
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   let unsubscribe: (() => void) | null = null;
   let unsubscribeTyping: (() => void) | null = null;
+
+  const url = new URL(request.url);
+  const user = url.searchParams.get("user");
 
   const stream = new ReadableStream({
     start(controller) {
@@ -63,10 +71,14 @@ export async function GET(request: Request) {
       const checkAndPush = async () => {
         if (closed) return;
         try {
-          const fingerprint = await getSyncFingerprint();
-          if (fingerprint !== lastFingerprint) {
-            lastFingerprint = fingerprint;
+          const fingerprint = await getSyncFingerprint(user);
+          if (fingerprint.messages !== lastMessageFingerprint) {
+            lastMessageFingerprint = fingerprint.messages;
             send("messages");
+          }
+          if (fingerprint.call !== lastCallFingerprint) {
+            lastCallFingerprint = fingerprint.call;
+            send("call", { fingerprint: fingerprint.call });
           }
         } catch {
           send("heartbeat");
@@ -77,7 +89,7 @@ export async function GET(request: Request) {
       unsubscribeTyping = subscribeTyping((payload) => send("typing", payload));
 
       checkAndPush();
-      pollTimer = setInterval(checkAndPush, 3000);
+      pollTimer = setInterval(checkAndPush, 2000);
 
       request.signal.addEventListener("abort", () => {
         closed = true;

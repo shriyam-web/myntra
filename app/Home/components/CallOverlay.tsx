@@ -6,29 +6,37 @@ interface CallOverlayProps {
   currentUser: string;
   partnerName: string;
   callStatus: 'idle' | 'ringing' | 'on-call';
-  endReason?: 'completed' | 'missed' | 'rejected' | null;
+  uiStatus?: 'idle' | 'dialing' | 'ringing' | 'connecting' | 'active' | 'reconnecting' | 'ended';
+  endReason?: 'completed' | 'missed' | 'rejected' | 'cancelled' | 'timeout' | 'failed' | 'disconnected' | 'busy' | null;
   isIncoming: boolean;
   onAccept: () => void;
   onReject: () => void;
   onEnd: () => void;
   stream: MediaStream | null;
   remoteStream: MediaStream | null;
+  activeAt?: string | null;
+  statsLabel?: string;
+  quality?: string;
+  busyMessage?: string | null;
 }
 
 // Isolated so the 1s tick doesn't re-render the whole overlay.
-const CallTimer = memo(function CallTimer({ active }: { active: boolean }) {
+const CallTimer = memo(function CallTimer({ activeAt }: { activeAt: string | null }) {
   const [duration, setDuration] = useState(0);
 
   useEffect(() => {
-    if (!active) {
+    if (!activeAt) {
       setDuration(0);
       return;
     }
-    const interval = setInterval(() => setDuration((prev) => prev + 1), 1000);
+    const start = new Date(activeAt).getTime();
+    const tick = () => setDuration(Math.max(0, Math.floor((Date.now() - start) / 1000)));
+    tick();
+    const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
-  }, [active]);
+  }, [activeAt]);
 
-  if (!active) return null;
+  if (!activeAt) return null;
 
   const mins = Math.floor(duration / 60);
   const secs = duration % 60;
@@ -47,13 +55,18 @@ const BAR_COUNT = 16;
 export const CallOverlay = memo(function CallOverlay({
   partnerName,
   callStatus,
+  uiStatus = callStatus === 'on-call' ? 'active' : callStatus === 'ringing' ? 'ringing' : 'idle',
   endReason,
   isIncoming,
   onAccept,
   onReject,
   onEnd,
   stream,
-  remoteStream
+  remoteStream,
+  activeAt = null,
+  statsLabel = "",
+  quality = "unknown",
+  busyMessage = null,
 }: CallOverlayProps) {
   const remoteAudioRef = useRef<HTMLAudioElement>(null);
   const localAudioRef = useRef<HTMLAudioElement>(null);
@@ -262,13 +275,26 @@ export const CallOverlay = memo(function CallOverlay({
           }`} />
           <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white/80">
             {endReason === 'rejected' ? 'Call Rejected' :
-             endReason === 'missed' ? 'Call Missed' :
+             endReason === 'missed' || endReason === 'timeout' ? 'Call Missed' :
+             endReason === 'busy' ? (busyMessage || 'Busy') :
+             endReason === 'cancelled' ? 'Call Cancelled' :
+             endReason === 'failed' ? 'Call Failed' :
+             endReason === 'disconnected' ? 'Disconnected' :
              endReason === 'completed' ? 'Call Ended' :
+             uiStatus === 'reconnecting' ? 'Reconnecting…' :
+             uiStatus === 'connecting' ? 'Connecting…' :
              callStatus === 'ringing'
               ? (isIncoming ? (accepting ? 'Connecting…' : 'Incoming Audio Call') : 'Calling...')
               : 'Secure Connection Active'}
           </span>
         </div>
+        {callStatus === 'on-call' && statsLabel && (
+          <p className={`mt-3 text-[10px] font-bold uppercase tracking-widest ${
+            quality === 'poor' ? 'text-amber-400' : quality === 'reconnecting' ? 'text-zinc-400' : 'text-zinc-500'
+          }`}>
+            {statsLabel}
+          </p>
+        )}
       </div>
 
       {/* Center Content: Avatar & Info */}
@@ -293,7 +319,7 @@ export const CallOverlay = memo(function CallOverlay({
           <h2 className="text-5xl font-black tracking-tighter uppercase italic bg-clip-text text-transparent bg-gradient-to-b from-white via-white to-white/20">
             {partnerName}
           </h2>
-          <CallTimer active={callStatus === 'on-call'} />
+          <CallTimer activeAt={activeAt} />
         </div>
       </div>
 
