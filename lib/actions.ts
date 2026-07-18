@@ -633,10 +633,15 @@ export async function sendMessage(
         20000,
         "Saving message timed out. Please check your connection and try again."
       );
+      // Return the quoted message as an object, not a raw ObjectId, so the
+      // client's reply preview doesn't briefly show the ID until the next sync.
+      if (repliedTo) {
+        await message.populate('repliedTo');
+      }
     } catch (err: unknown) {
       // Duplicate clientMessageId → the message already exists (client retry); return it.
       if (typeof err === "object" && err !== null && (err as { code?: number }).code === 11000 && data.clientMessageId) {
-        const existing = await Message.findOne({ clientMessageId: data.clientMessageId }).lean();
+        const existing = await Message.findOne({ clientMessageId: data.clientMessageId }).populate('repliedTo').lean();
         if (existing) return protectMessageMedia(JSON.parse(JSON.stringify(existing)));
       }
       throw err;
@@ -679,10 +684,10 @@ export async function sendMessage(
 export async function updateMessage(id: string, text: string) {
   try {
     await dbConnect();
-    const message = await Message.findByIdAndUpdate(id, { text }, { new: true });
+    const message = await Message.findByIdAndUpdate(id, { text }, { new: true }).populate('repliedTo');
     revalidatePath('/');
     notifyRealtime();
-    return JSON.parse(JSON.stringify(message));
+    return protectMessageMedia(JSON.parse(JSON.stringify(message)));
   } catch (error) {
     console.error('Failed to update message:', error);
     throw new Error('Failed to update message. Database connection error.');
