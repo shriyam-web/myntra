@@ -1,5 +1,7 @@
 # Calling & Auth Environment
 
+Deploy trigger note: env checklist only — no runtime effect.
+
 ## Required
 - `SESSION_SECRET` — long random string for signing HttpOnly session cookies
 - `ALPHA_PASSWORD` / `DELTA_PASSWORD` — server-side login passwords (defaults: `icai` / `gamma2`)
