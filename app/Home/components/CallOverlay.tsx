@@ -63,6 +63,10 @@ export const CallOverlay = memo(function CallOverlay({
   const [isMuted, setIsMuted] = useState(false);
   const [isSpeakerOn, setIsSpeakerOn] = useState(false);
   const [speakerSupported, setSpeakerSupported] = useState(false);
+  const audioRoutesRef = useRef<{ earpiece: string | null; speaker: string | null }>({
+    earpiece: null,
+    speaker: null,
+  });
 
   // Fixed heights computed once — no per-render randomness.
   const barHeights = useMemo(
@@ -147,17 +151,65 @@ export const CallOverlay = memo(function CallOverlay({
     return stopRingback;
   }, [callStatus, isIncoming, endReason]);
 
-  // Speaker toggle needs setSinkId (Chrome/Edge/Android). Hidden where unsupported (iOS Safari).
+  // Audio routing (Android Chrome): find the earpiece and speakerphone outputs,
+  // default the call to the earpiece like a normal phone call, and let the
+  // Speaker button switch between the two. The toggle only shows when both
+  // routes exist (i.e., on phones that support output selection).
   useEffect(() => {
-    const el = remoteAudioRef.current;
-    setSpeakerSupported(Boolean(el && typeof (el as HTMLAudioElement & { setSinkId?: unknown }).setSinkId === "function"));
-  }, [callStatus]);
+    if (callStatus !== 'on-call' || !remoteStream) return;
+
+    const el = remoteAudioRef.current as (HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> }) | null;
+    if (!el || typeof el.setSinkId !== 'function') {
+      setSpeakerSupported(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        // Mic permission is already granted mid-call, so labels are populated.
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const outputs = devices.filter((d) => d.kind === 'audiooutput');
+        const earpiece = outputs.find((d) => /earpiece|receiver/i.test(d.label));
+        const speaker = outputs.find((d) => /speaker/i.test(d.label));
+        if (cancelled) return;
+
+        audioRoutesRef.current = {
+          earpiece: earpiece?.deviceId ?? null,
+          speaker: speaker?.deviceId ?? null,
+        };
+
+        if (earpiece && speaker) {
+          setSpeakerSupported(true);
+          // Default to earpiece, like a normal phone call.
+          try {
+            await el.setSinkId(earpiece.deviceId);
+            if (!cancelled) setIsSpeakerOn(false);
+          } catch (e) {
+            console.error("Failed to route audio to earpiece:", e);
+          }
+        } else {
+          // Desktop or browsers without distinct routes — no toggle needed.
+          setSpeakerSupported(false);
+        }
+      } catch (e) {
+        console.error("Failed to enumerate audio outputs:", e);
+        if (!cancelled) setSpeakerSupported(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [callStatus, remoteStream]);
 
   // Reset per-call toggles and re-apply mute to the current mic track.
   useEffect(() => {
     if (callStatus === 'idle') {
       setIsMuted(false);
       setIsSpeakerOn(false);
+      audioRoutesRef.current = { earpiece: null, speaker: null };
     }
   }, [callStatus]);
 
@@ -182,17 +234,13 @@ export const CallOverlay = memo(function CallOverlay({
     const el = remoteAudioRef.current as (HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> }) | null;
     if (!el?.setSinkId) return;
 
+    const { earpiece, speaker } = audioRoutesRef.current;
     const next = !isSpeakerOn;
+    const targetId = next ? speaker : earpiece;
+    if (!targetId) return;
+
     try {
-      if (next) {
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const speaker = devices.find(
-          (d) => d.kind === 'audiooutput' && /speaker/i.test(d.label)
-        );
-        await el.setSinkId(speaker ? speaker.deviceId : 'default');
-      } else {
-        await el.setSinkId('default');
-      }
+      await el.setSinkId(targetId);
       setIsSpeakerOn(next);
     } catch (e) {
       console.error("Failed to switch audio output:", e);
