@@ -3,7 +3,9 @@ import { cookies } from "next/headers";
 import type { AuthUser } from "./passwords";
 
 const COOKIE_NAME = "gp_session";
-const MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
+// Session lives only for this browser tab/session — never “remember me”.
+// Page load also clears the cookie so refresh always requires password again.
+const MAX_AGE_SECONDS = 60 * 60 * 12; // hard expiry while the tab stays open
 
 type SessionPayload = {
   user: AuthUser;
@@ -73,7 +75,8 @@ export async function createSession(user: AuthUser): Promise<void> {
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
-    maxAge: MAX_AGE_SECONDS,
+    // No maxAge → browser session cookie (dropped when the browser closes).
+    // Refresh still clears via clearSession() on page load.
   });
 }
 
