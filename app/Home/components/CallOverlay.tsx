@@ -57,6 +57,8 @@ export const CallOverlay = memo(function CallOverlay({
 }: CallOverlayProps) {
   const remoteAudioRef = useRef<HTMLAudioElement>(null);
   const localAudioRef = useRef<HTMLAudioElement>(null);
+  const ringbackCtxRef = useRef<AudioContext | null>(null);
+  const ringbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [accepting, setAccepting] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [isSpeakerOn, setIsSpeakerOn] = useState(false);
@@ -83,6 +85,67 @@ export const CallOverlay = memo(function CallOverlay({
   useEffect(() => {
     if (callStatus !== 'ringing') setAccepting(false);
   }, [callStatus]);
+
+  // Outgoing ringback: tring…tring… while waiting for the partner to pick up.
+  useEffect(() => {
+    const shouldRing = callStatus === 'ringing' && !isIncoming && !endReason;
+
+    const stopRingback = () => {
+      if (ringbackTimerRef.current) {
+        clearTimeout(ringbackTimerRef.current);
+        ringbackTimerRef.current = null;
+      }
+      if (ringbackCtxRef.current) {
+        void ringbackCtxRef.current.close().catch(() => undefined);
+        ringbackCtxRef.current = null;
+      }
+    };
+
+    if (!shouldRing) {
+      stopRingback();
+      return;
+    }
+
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    const ctx = new AudioContextClass();
+    ringbackCtxRef.current = ctx;
+
+    const playBurst = (startAt: number, durationSec: number) => {
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.0001, startAt);
+      gain.gain.exponentialRampToValueAtTime(0.12, startAt + 0.03);
+      gain.gain.setValueAtTime(0.12, startAt + durationSec - 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.0001, startAt + durationSec);
+      gain.connect(ctx.destination);
+
+      // Classic dual-tone ringback (440 + 480 Hz)
+      for (const freq of [440, 480]) {
+        const osc = ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        osc.connect(gain);
+        osc.start(startAt);
+        osc.stop(startAt + durationSec);
+      }
+    };
+
+    const scheduleCycle = () => {
+      if (ringbackCtxRef.current !== ctx) return;
+      if (ctx.state === 'suspended') {
+        void ctx.resume();
+      }
+
+      const now = ctx.currentTime;
+      // tring (0.4s) — short gap — tring (0.4s) — pause
+      playBurst(now, 0.4);
+      playBurst(now + 0.6, 0.4);
+      ringbackTimerRef.current = setTimeout(scheduleCycle, 2800);
+    };
+
+    scheduleCycle();
+
+    return stopRingback;
+  }, [callStatus, isIncoming, endReason]);
 
   // Speaker toggle needs setSinkId (Chrome/Edge/Android). Hidden where unsupported (iOS Safari).
   useEffect(() => {
