@@ -132,10 +132,11 @@ export const SharedItemCard: React.FC<SharedItemCardProps> = (props) => {
 
   const item = props.item;
   const title = item ? item.title : fallbackTitle;
-  const done = Boolean(item?.done);
+  // "done" on a reminder means it was acknowledged/celebrated, not completed work.
+  const celebrated = Boolean(item?.done);
   const dueAt = item?.dueAt;
   const dueLabel = formatDue(dueAt);
-  const overdue = Boolean(!done && dueAt && new Date(dueAt).getTime() <= Date.now());
+  const itsTime = Boolean(!celebrated && dueAt && new Date(dueAt).getTime() <= Date.now());
 
   return (
     <div className="mt-1.5 min-w-[230px] max-w-[290px] overflow-hidden rounded-2xl border border-white/15 bg-black/20">
@@ -148,18 +149,18 @@ export const SharedItemCard: React.FC<SharedItemCardProps> = (props) => {
         className="flex w-full items-center gap-3 px-3.5 py-3 text-left active:bg-white/5"
       >
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-400/20 text-amber-100">
-          ⏰
+          {celebrated ? "🎉" : "⏰"}
         </span>
         <span className="min-w-0 flex-1">
           <span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-white/55">
             Shared reminder
           </span>
-          <span className={`mt-0.5 block text-sm font-semibold leading-snug text-white ${done ? "line-through opacity-55" : ""}`}>
+          <span className="mt-0.5 block text-sm font-semibold leading-snug text-white">
             {title}
           </span>
           {dueLabel && (
-            <span className={`mt-1 block text-[10px] ${overdue ? "font-semibold text-amber-200" : "text-white/55"}`}>
-              {overdue ? "Overdue · " : "Due · "}
+            <span className={`mt-1 block text-[10px] ${itsTime ? "font-semibold text-amber-200" : "text-white/55"}`}>
+              {itsTime ? "It's time! 🎉 · " : "On · "}
               {dueLabel}
             </span>
           )}
@@ -168,20 +169,18 @@ export const SharedItemCard: React.FC<SharedItemCardProps> = (props) => {
 
       <div className="flex items-center justify-between border-t border-white/10 px-3.5 py-2">
         <span className="text-[10px] text-white/45">
-          {!item ? "No longer available" : done ? "Completed" : "Shared with both of you"}
+          {!item ? "No longer available" : celebrated ? "🎉 Celebrated together" : "Shared with both of you"}
         </span>
-        {item && (
+        {item && !celebrated && itsTime && (
           <button
             type="button"
             onClick={(event) => {
               event.stopPropagation();
               onToggle(item._id);
             }}
-            className={`rounded-lg px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider active:scale-95 ${
-              done ? "bg-white/10 text-white/70" : "bg-white text-zinc-950"
-            }`}
+            className="rounded-lg bg-amber-300 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-zinc-950 active:scale-95"
           >
-            {done ? "Undo" : "Done"}
+            🎉 Got it
           </button>
         )}
       </div>

@@ -32,19 +32,19 @@ export function DueReminderModal({
       <div className="w-full max-w-sm overflow-hidden rounded-[1.75rem] border border-amber-500/30 bg-zinc-950 animate-in slide-in-from-bottom-4 duration-300">
         <div className="bg-gradient-to-br from-amber-500/20 via-orange-500/10 to-transparent px-6 pb-4 pt-6">
           <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-amber-400/30 bg-amber-500/20 text-xl">
-            ⏰
+            🎉
           </div>
           <p className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-300">
             Shared reminder
           </p>
           <h2 id="due-reminder-title" className="mt-1 text-lg font-bold tracking-tight text-white">
-            This is due today
+            Today&apos;s the day! 🎉
           </h2>
         </div>
 
         <div className="px-6 py-5">
           <p className="text-base font-semibold leading-snug text-white">{reminder.title}</p>
-          <p className="mt-2 text-xs text-zinc-400">Scheduled for {dueTime}. Both partners receive this notice.</p>
+          <p className="mt-2 text-xs text-zinc-400">It&apos;s at {dueTime} today. You both get this little nudge.</p>
         </div>
 
         <div className="grid grid-cols-2 gap-2 px-6 pb-2">
@@ -66,7 +66,7 @@ export function DueReminderModal({
             }}
             className="rounded-xl bg-amber-400 py-3 text-xs font-black text-zinc-950 active:scale-[0.98]"
           >
-            Mark done
+            🎉 Got it
           </button>
         </div>
 

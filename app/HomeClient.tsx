@@ -1588,16 +1588,16 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
                      key={r._id}
                      className="flex items-center gap-2 px-3 py-2.5 rounded-2xl bg-amber-500/15 border border-amber-500/30"
                    >
-                     <span className="text-amber-300 text-xs shrink-0">⏰</span>
+                     <span className="text-amber-300 text-xs shrink-0">🎉</span>
                      <div className="min-w-0 flex-1">
                        <p className="text-xs font-semibold text-amber-100 truncate">{r.title}</p>
-                       <p className="text-[10px] text-amber-200/70">Reminder due</p>
+                       <p className="text-[10px] text-amber-200/70">It's time!</p>
                      </div>
                      <button
                        onClick={() => handleToggleReminder(r._id)}
                        className="text-[10px] font-bold uppercase tracking-wider text-amber-200 hover:text-white px-2 py-1 rounded-lg hover:bg-amber-500/20"
                      >
-                       Done
+                       🎉 Got it
                      </button>
                      <button
                        onClick={() => setDismissedReminderIds((prev) => [...prev, r._id])}

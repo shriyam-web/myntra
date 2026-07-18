@@ -255,23 +255,19 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
         ) : (
           <div className="space-y-2">
             {upcomingReminders.map((r) => {
-              const overdue = new Date(r.dueAt).getTime() <= Date.now();
+              const itsTime = new Date(r.dueAt).getTime() <= Date.now();
               return (
                 <div
                   key={r._id}
                   className={`flex items-center gap-3 p-3.5 rounded-2xl border ${
-                    overdue ? "bg-amber-500/10 border-amber-500/30" : "bg-zinc-950/50 border-zinc-800/60"
+                    itsTime ? "bg-amber-500/10 border-amber-500/30" : "bg-zinc-950/50 border-zinc-800/60"
                   }`}
                 >
-                  <button
-                    onClick={() => handleToggleReminder(r._id)}
-                    className="w-5 h-5 rounded-md border border-zinc-600 hover:border-amber-400 shrink-0"
-                    aria-label="Mark done"
-                  />
+                  <span className="text-base shrink-0">{itsTime ? "🎉" : "⏰"}</span>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-white truncate">{r.title}</p>
-                    <p className={`text-[10px] ${overdue ? "text-amber-300" : "text-zinc-500"}`}>
-                      {overdue ? "Due now · " : ""}
+                    <p className={`text-[10px] ${itsTime ? "text-amber-300" : "text-zinc-500"}`}>
+                      {itsTime ? "It's time! · " : ""}
                       {new Date(r.dueAt).toLocaleString([], {
                         day: "numeric",
                         month: "short",
@@ -280,6 +276,14 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
                       })}
                     </p>
                   </div>
+                  {itsTime && (
+                    <button
+                      onClick={() => handleToggleReminder(r._id)}
+                      className="text-[10px] font-bold uppercase tracking-wider bg-amber-400 text-zinc-950 px-2.5 py-1.5 rounded-lg active:scale-95 shrink-0"
+                    >
+                      🎉 Got it
+                    </button>
+                  )}
                   <button
                     onClick={() => handleDeleteReminder(r._id)}
                     className="text-red-500/80 hover:text-red-400 text-xs px-2"
@@ -291,20 +295,14 @@ export const TimelineTab: React.FC<TimelineTabProps> = ({
             })}
             {doneReminders.length > 0 && (
               <>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600 pt-2 px-1">Done</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600 pt-2 px-1">Celebrated 🎉</p>
                 {doneReminders.map((r) => (
                   <div
                     key={r._id}
                     className="flex items-center gap-3 p-3.5 rounded-2xl bg-zinc-950/30 border border-zinc-800/40 opacity-70"
                   >
-                    <button
-                      onClick={() => handleToggleReminder(r._id)}
-                      className="w-5 h-5 rounded-md bg-emerald-500/80 text-black flex items-center justify-center shrink-0 text-[10px] font-black"
-                      aria-label="Mark not done"
-                    >
-                      ✓
-                    </button>
-                    <p className="min-w-0 flex-1 text-sm text-zinc-400 line-through truncate">{r.title}</p>
+                    <span className="text-base shrink-0">🎉</span>
+                    <p className="min-w-0 flex-1 text-sm text-zinc-400 truncate">{r.title}</p>
                     <button
                       onClick={() => handleDeleteReminder(r._id)}
                       className="text-red-500/70 hover:text-red-400 text-xs px-2"
