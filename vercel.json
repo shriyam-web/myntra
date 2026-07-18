@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/calls/expire",
-      "schedule": "* * * * *"
+      "schedule": "0 0 * * *"
     }
   ]
 }

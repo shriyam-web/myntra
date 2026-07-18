@@ -13,5 +13,5 @@ Deploy trigger note: env checklist only — no runtime effect.
 - `CRON_SECRET` — protect `/api/calls/expire` in production
 
 ## Ops
-- Vercel Cron hits `/api/calls/expire` every minute (see `vercel.json`)
+- Vercel Cron hits `/api/calls/expire` once daily (Hobby plan limit); expiry also runs on-demand during call activity (see `vercel.json`)
 - Without Upstash, call signaling still works via durable MongoDB + SSE fingerprint polling
