@@ -101,8 +101,50 @@ const callStatusLabel = (status: string) => {
   }
 };
 
+export type PreviewableMessage = {
+  text?: string | null;
+  imageUrl?: string;
+  imageUrls?: string[];
+  videoUrl?: string;
+  videoUrls?: string[];
+  audioUrl?: string;
+  audioUrls?: string[];
+  documents?: Array<{ name?: string; url?: string }>;
+  location?: { latitude: number; longitude: number };
+};
+
+export type ReplyPreviewKind =
+  | "text"
+  | "image"
+  | "video"
+  | "audio"
+  | "document"
+  | "location"
+  | "call";
+
 /** Human-readable one-line preview for a message (used in reply banners/quotes). */
-export const getMessagePreviewText = (text?: string | null): string => {
+export const getMessagePreviewText = (
+  textOrMsg?: string | null | PreviewableMessage,
+  maybeMsg?: PreviewableMessage
+): string => {
+  const msg: PreviewableMessage | undefined =
+    typeof textOrMsg === "object" && textOrMsg !== null
+      ? textOrMsg
+      : maybeMsg;
+  const text =
+    typeof textOrMsg === "string" || textOrMsg == null
+      ? textOrMsg
+      : textOrMsg.text;
+
+  if (msg?.location) return "Location";
+  if (msg?.documents?.length) {
+    const name = msg.documents[0]?.name;
+    return name ? `📄 ${name}` : "Document";
+  }
+  if (msg?.audioUrl || (msg?.audioUrls && msg.audioUrls.length > 0)) return "Audio";
+  if (msg?.videoUrl || (msg?.videoUrls && msg.videoUrls.length > 0)) return "Video";
+  if (msg?.imageUrl || (msg?.imageUrls && msg.imageUrls.length > 0)) return "Photo";
+
   if (!text) return "";
   const trimmed = text.trim();
   if (trimmed.toUpperCase().startsWith('[CALL_LOG:')) {
@@ -116,6 +158,28 @@ export const getMessagePreviewText = (text?: string | null): string => {
     return label;
   }
   return trimmed;
+};
+
+export const getReplyPreviewKind = (msg?: PreviewableMessage | null): ReplyPreviewKind => {
+  if (!msg) return "text";
+  if (msg.location) return "location";
+  if (msg.documents?.length) return "document";
+  if (msg.audioUrl || (msg.audioUrls && msg.audioUrls.length > 0)) return "audio";
+  if (msg.videoUrl || (msg.videoUrls && msg.videoUrls.length > 0)) return "video";
+  if (msg.imageUrl || (msg.imageUrls && msg.imageUrls.length > 0)) return "image";
+  if (msg.text?.trim().toUpperCase().startsWith("[CALL_LOG:")) return "call";
+  return "text";
+};
+
+export const getReplyThumbUrl = (msg?: PreviewableMessage | null): string | null => {
+  if (!msg) return null;
+  return (
+    msg.imageUrls?.[0] ||
+    msg.imageUrl ||
+    msg.videoUrls?.[0] ||
+    msg.videoUrl ||
+    null
+  );
 };
 
 export const renderMessage = (text: string) => {

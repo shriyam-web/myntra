@@ -1,6 +1,7 @@
 import React, { Fragment } from "react";
 import { Message, PresenceUser, Theme, ReactionType, isOptimisticMessageId } from "../types";
-import { renderMessage, getVideoPoster, getMessagePreviewText } from "../../../lib/utils";
+import { renderMessage, getVideoPoster, getMessagePreviewText, getReplyPreviewKind, getReplyThumbUrl } from "../../../lib/utils";
+import { mapsUrl, formatFileSize } from "../../../lib/attachments";
 import { REACTION_EMOJIS } from "../constants";
 import { ReactionBurst } from "./ReactionBurst";
 import { MessageActionMenu } from "./MessageActionMenu";
@@ -645,7 +646,11 @@ export const MessageList: React.FC<MessageListProps> = ({
                               <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1"><path d="M12 17v5" /><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2z" /></svg>
                             </span>
                           )}
-                           {m.repliedTo && (
+                           {m.repliedTo && (() => {
+                              const kind = getReplyPreviewKind(m.repliedTo);
+                              const thumb = getReplyThumbUrl(m.repliedTo);
+                              const preview = getMessagePreviewText(m.repliedTo) || "Media";
+                              return (
                               <div 
                                 onClick={() => {
                                   const element = document.getElementById(`message-${m.repliedTo?._id}`);
@@ -657,14 +662,40 @@ export const MessageList: React.FC<MessageListProps> = ({
                                     }, 2000);
                                   }
                                 }}
-                                className={`mb-2 p-2 rounded-xl border-l-2 border-white/20 ${isMe ? 'bg-white/10' : 'bg-zinc-950/50'} text-[10px] opacity-80 backdrop-blur-md cursor-pointer hover:bg-white/20 transition-all active:scale-95`}
+                                className={`mb-2 flex overflow-hidden rounded-xl cursor-pointer active:scale-[0.98] transition-transform ${
+                                  isMe ? 'bg-black/20' : 'bg-black/30'
+                                }`}
                               >
-                                  <p className="font-medium uppercase tracking-widest mb-0.5 text-[7px] opacity-50">
-                                      {m.repliedTo.createdBy}
-                                  </p>
-                                  <p className="line-clamp-1 italic font-normal leading-relaxed">{getMessagePreviewText(m.repliedTo.text) || 'Media'}</p>
+                                  <div className={`w-1 shrink-0 ${isMe ? 'bg-white/70' : activeTheme.bubbleMe}`} />
+                                  <div className="flex-1 min-w-0 px-2.5 py-1.5 flex items-center gap-2">
+                                    <div className="min-w-0 flex-1">
+                                      <p className={`text-[11px] font-semibold truncate ${isMe ? 'text-white/90' : activeTheme.accent}`}>
+                                          {m.repliedTo.createdBy}
+                                      </p>
+                                      <p className="text-[11px] leading-snug line-clamp-1 font-normal text-white/70">
+                                        {kind === "image" && "📷 "}
+                                        {kind === "video" && "🎬 "}
+                                        {kind === "audio" && "🎵 "}
+                                        {kind === "document" && "📄 "}
+                                        {kind === "location" && "📍 "}
+                                        {kind === "call" && "📞 "}
+                                        {preview}
+                                      </p>
+                                    </div>
+                                    {thumb && (
+                                      <div className="w-9 h-9 rounded-md overflow-hidden bg-black/30 shrink-0">
+                                        {kind === "video" ? (
+                                          <video src={thumb} className="w-full h-full object-cover" muted />
+                                        ) : (
+                                          // eslint-disable-next-line @next/next/no-img-element
+                                          <img src={thumb} alt="" className="w-full h-full object-cover" />
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
                               </div>
-                           )}
+                              );
+                           })()}
 
                           {m.text && (
                             editingMessage === m._id ? (
@@ -782,6 +813,69 @@ export const MessageList: React.FC<MessageListProps> = ({
                                 />
                               ))}
                             </div>
+                          )}
+
+                          {m.documents && m.documents.length > 0 && (
+                            <div className="mt-1.5 flex flex-col gap-1.5">
+                              {m.documents.map((doc, idx) => {
+                                const inner = (
+                                  <>
+                                    <div className="w-10 h-10 rounded-xl bg-sky-500/20 text-sky-300 flex items-center justify-center shrink-0">
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <p className="text-xs font-medium text-white truncate">{doc.name}</p>
+                                      <p className="text-[10px] text-white/50">
+                                        {formatFileSize(doc.size || 0) || "Document"}
+                                        {doc.url ? " · Tap to open" : " · Uploading…"}
+                                      </p>
+                                    </div>
+                                  </>
+                                );
+                                const className = `flex items-center gap-3 p-2.5 rounded-xl min-w-[200px] max-w-[260px] ${
+                                  isMe ? "bg-black/20 hover:bg-black/30" : "bg-black/30 hover:bg-black/40"
+                                } transition-colors`;
+                                return doc.url ? (
+                                  <a
+                                    key={`doc-${idx}`}
+                                    href={doc.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    download={doc.name}
+                                    onClick={(e) => e.stopPropagation()}
+                                    className={className}
+                                  >
+                                    {inner}
+                                  </a>
+                                ) : (
+                                  <div key={`doc-${idx}`} className={className}>{inner}</div>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {m.location && (
+                            <a
+                              href={mapsUrl(m.location.latitude, m.location.longitude)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className={`mt-1.5 flex items-center gap-3 p-2.5 rounded-xl min-w-[200px] max-w-[260px] ${
+                                isMe ? "bg-black/20 hover:bg-black/30" : "bg-black/30 hover:bg-black/40"
+                              } transition-colors`}
+                            >
+                              <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-300 flex items-center justify-center shrink-0">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-xs font-medium text-white">Location</p>
+                                <p className="text-[10px] text-white/50 truncate">
+                                  {m.location.latitude.toFixed(5)}, {m.location.longitude.toFixed(5)}
+                                  {typeof m.location.accuracy === "number" ? ` · ±${Math.round(m.location.accuracy)}m` : ""}
+                                </p>
+                                <p className="text-[10px] text-emerald-300/80 mt-0.5">Open in Maps</p>
+                              </div>
+                            </a>
                           )}
 
                           <div className={`text-[8px] mt-1 flex items-center gap-1 font-normal uppercase tracking-wider opacity-60 ${isMe ? 'justify-end' : 'justify-start'}`}>

@@ -7,7 +7,7 @@ import { useMessageSendQueue } from "./Home/hooks/useMessageSendQueue";
 import { useAudio } from "./Home/hooks/useAudio";
 import { usePresence } from "./Home/hooks/usePresence";
 import { themes, wallpapers } from "./Home/constants";
-import { ViewType, Message, UserType, TabType, ReactionType, MessageReaction } from "./Home/types";
+import { ViewType, Message, UserType, TabType, ReactionType, MessageReaction, DocumentAttachment, LocationAttachment } from "./Home/types";
 
 // Components
 import { LoginView } from "./Home/components/LoginView";
@@ -123,6 +123,8 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [selectedVideos, setSelectedVideos] = useState<string[]>([]);
   const [selectedAudios, setSelectedAudios] = useState<string[]>([]);
+  const [selectedDocuments, setSelectedDocuments] = useState<DocumentAttachment[]>([]);
+  const [pendingLocation, setPendingLocation] = useState<LocationAttachment | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [previewMessage, setPreviewMessage] = useState<Message | null>(null);
   const [previewImageIndex, setPreviewImageIndex] = useState(0);
@@ -545,52 +547,64 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
     });
   }, []);
 
-  const uploadToCloudinary = useCallback(async (file: File, onProgress: (percent: number) => void): Promise<string> => {
+  const uploadToCloudinary = useCallback(async (file: File, onProgress: (percent: number) => void) => {
+    const { classifyFile, cloudinaryResourceForKind } = await import("../lib/attachments");
+    const kind = classifyFile(file);
+    if (!kind) throw new Error(`Unsupported file: ${file.name}`);
+    const endpointResource = cloudinaryResourceForKind(kind);
+
     try {
       const { timestamp, signature, apiKey, cloudName, folder } = await actions.getCloudinarySignature();
-      const endpointResource = file.type.startsWith("video/") || file.type.startsWith("audio/")
-        ? "video"
-        : "image";
-      
-      return new Promise((resolve, reject) => {
+
+      return await new Promise<{
+        url: string;
+        publicId?: string;
+        resourceType?: string;
+        bytes?: number;
+        originalFilename?: string;
+      }>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.open('POST', `https://api.cloudinary.com/v1_1/${cloudName}/${endpointResource}/upload`, true);
-        
+
         xhr.upload.onprogress = (e) => {
           if (e.lengthComputable) {
             const percent = Math.round((e.loaded / e.total) * 100);
             onProgress(percent);
           }
         };
-        
+
         xhr.onload = () => {
           if (xhr.status === 200) {
             const response = JSON.parse(xhr.responseText);
-            resolve(response.secure_url);
+            resolve({
+              url: response.secure_url,
+              publicId: response.public_id,
+              resourceType: response.resource_type || endpointResource,
+              bytes: response.bytes,
+              originalFilename: response.original_filename,
+            });
           } else {
             console.error('Cloudinary upload error:', xhr.responseText);
             reject(new Error('Upload failed with status ' + xhr.status));
           }
         };
-        
+
         xhr.onerror = () => reject(new Error('Network error during upload'));
-        
+
         const formData = new FormData();
         formData.append('file', file);
         formData.append('api_key', apiKey!);
         formData.append('timestamp', timestamp.toString());
         formData.append('signature', signature);
         formData.append('folder', folder);
-        
+
         xhr.send(formData);
       });
     } catch (err) {
       console.error('Failed to get upload signature:', err);
       const base64 = await fileToBase64(file);
-      return await actions.uploadImage(
-        base64,
-        file.type.startsWith("video/") || file.type.startsWith("audio/") ? "video" : "image"
-      );
+      const url = await actions.uploadImage(base64, endpointResource === "raw" ? "raw" : endpointResource);
+      return { url, resourceType: endpointResource };
     }
   }, [fileToBase64]);
 
@@ -609,14 +623,19 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
 
   const handleSendMessage = useCallback((e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!newMessage.trim() && selectedFiles.length === 0) return;
+    const hasDocs = selectedDocuments.length > 0;
+    const hasLocation = Boolean(pendingLocation);
+    if (!newMessage.trim() && selectedFiles.length === 0 && !hasDocs && !hasLocation) return;
 
+    // Document files are already in selectedFiles; documentPreviews carry display metadata.
     const payload = {
       text: newMessage,
       files: [...selectedFiles],
       imagePreviewUrls: [...selectedImages],
       videoPreviewUrls: [...selectedVideos],
       audioPreviewUrls: [...selectedAudios],
+      documentPreviews: [...selectedDocuments],
+      location: pendingLocation,
       replyingTo,
     };
 
@@ -624,7 +643,9 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
     setSelectedImages([]);
     setSelectedVideos([]);
     setSelectedAudios([]);
+    setSelectedDocuments([]);
     setSelectedFiles([]);
+    setPendingLocation(null);
     setReplyingTo(null);
 
     enqueueMessage(payload);
@@ -634,6 +655,8 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
     selectedImages,
     selectedVideos,
     selectedAudios,
+    selectedDocuments,
+    pendingLocation,
     replyingTo,
     enqueueMessage,
     setReplyingTo,
@@ -647,7 +670,10 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
         messageToDelete.imageUrl || 
         (messageToDelete.imageUrls && messageToDelete.imageUrls.length > 0) ||
         messageToDelete.videoUrl || 
-        (messageToDelete.videoUrls && messageToDelete.videoUrls.length > 0)
+        (messageToDelete.videoUrls && messageToDelete.videoUrls.length > 0) ||
+        messageToDelete.audioUrl ||
+        (messageToDelete.audioUrls && messageToDelete.audioUrls.length > 0) ||
+        (messageToDelete.documents && messageToDelete.documents.length > 0)
       );
 
       if (currentUser === "delta 1" && hasMedia) {
@@ -1243,6 +1269,10 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
                     setSelectedVideos={setSelectedVideos}
                     selectedAudios={selectedAudios}
                     setSelectedAudios={setSelectedAudios}
+                    selectedDocuments={selectedDocuments}
+                    setSelectedDocuments={setSelectedDocuments}
+                    pendingLocation={pendingLocation}
+                    setPendingLocation={setPendingLocation}
                     selectedFiles={selectedFiles}
                     setSelectedFiles={setSelectedFiles}
                     sendQueueStatus={sendQueueStatus}

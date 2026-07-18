@@ -31,6 +31,29 @@ const MessageSchema = new Schema({
   videoUrls: [{ type: String }],
   audioUrl: { type: String, required: false },
   audioUrls: [{ type: String }],
+  // Document attachments (Cloudinary raw resources) with original metadata
+  documents: {
+    type: [{
+      url: { type: String, required: true },
+      name: { type: String, required: true },
+      mimeType: { type: String, default: '' },
+      size: { type: Number, default: 0 },
+      publicId: { type: String, default: '' },
+      resourceType: { type: String, default: 'raw' },
+    }],
+    default: undefined,
+  },
+  // One-time shared location
+  location: {
+    type: {
+      latitude: { type: Number, min: -90, max: 90 },
+      longitude: { type: Number, min: -180, max: 180 },
+      accuracy: { type: Number, min: 0 },
+    },
+    default: undefined,
+  },
+  // Stable client-generated id for optimistic reconciliation
+  clientMessageId: { type: String, default: null },
   createdBy: { type: String, required: true },
   createdAt: { type: Date, default: Date.now },
   repliedTo: { type: Schema.Types.ObjectId, ref: 'Message' },
@@ -42,7 +65,7 @@ const MessageSchema = new Schema({
     type: { type: String, enum: ['love', 'adore', 'kiss', 'hearteyes', 'hug', 'rose', 'fire', 'sparkle', 'funny', 'missyou', 'sad', 'confused', 'angry'], required: true },
   }],
   // Structured call-log metadata (preferred over parsing [CALL_LOG:...] text)
-  kind: { type: String, enum: ['message', 'call-log'], default: 'message' },
+  kind: { type: String, enum: ['message', 'call-log', 'location'], default: 'message' },
   relatedCallId: { type: String, default: null },
   callMeta: {
     from: String,
@@ -56,6 +79,10 @@ MessageSchema.index({ createdAt: -1 });
 MessageSchema.index(
   { relatedCallId: 1 },
   { unique: true, partialFilterExpression: { relatedCallId: { $type: 'string' } } }
+);
+MessageSchema.index(
+  { clientMessageId: 1 },
+  { unique: true, partialFilterExpression: { clientMessageId: { $type: 'string' } } }
 );
 
 const UserSchema = new Schema({

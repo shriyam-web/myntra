@@ -104,17 +104,18 @@ export async function disableMaintenanceMode(actor: string) {
 }
 
 // IMAGE/VIDEO UPLOAD
-export async function uploadImage(file: string, resourceType: "image" | "video" | "auto" = "auto") {
+export async function uploadImage(file: string, resourceType: "image" | "video" | "raw" | "auto" = "auto") {
   const start = Date.now();
   try {
     const isVideo = resourceType === "video" || (typeof file === 'string' && file.startsWith('data:video/'));
-    const actualResourceType = isVideo ? "video" : (resourceType === "auto" ? "auto" : "image");
+    const isRaw = resourceType === "raw";
+    const actualResourceType = isRaw ? "raw" : isVideo ? "video" : (resourceType === "auto" ? "auto" : "image");
     
     console.log(`📸 Starting Cloudinary ${actualResourceType} upload (file size: ${Math.round(file.length / 1024)}KB)`);
     
     // Cloudinary upload with timeout and better options
     const result = await new Promise<CloudinaryResult>((resolve, reject) => {
-      const timeoutMs = actualResourceType === "video" ? 300000 : 60000; // 5 mins for video, 1 min for image
+      const timeoutMs = actualResourceType === "video" || actualResourceType === "raw" ? 300000 : 60000;
       
       const uploadTimeout = setTimeout(() => {
         reject(new Error(`Cloudinary upload timed out after ${timeoutMs/1000} seconds`));
@@ -150,6 +151,7 @@ export async function uploadImage(file: string, resourceType: "image" | "video" 
 
 // Get Cloudinary signature for client-side upload
 export async function getCloudinarySignature() {
+  await requireUser();
   const timestamp = Math.round((new Date()).getTime() / 1000);
   const folder = "messaging";
   
@@ -459,13 +461,62 @@ async function sendTelegramNotification(text: string) {
   }
 }
 
+export interface SendMessageExtras {
+  documents?: Array<{
+    url: string;
+    name: string;
+    mimeType?: string;
+    size?: number;
+    publicId?: string;
+    resourceType?: string;
+  }>;
+  location?: { latitude: number; longitude: number; accuracy?: number };
+  clientMessageId?: string;
+}
+
+function validateDocuments(documents: SendMessageExtras["documents"]) {
+  if (!documents?.length) return undefined;
+  if (documents.length > 10) throw new Error("Too many documents (max 10 per message).");
+  return documents.map((d) => {
+    if (!d.url || !/^https:\/\/res\.cloudinary\.com\//.test(d.url)) {
+      throw new Error("Invalid document URL.");
+    }
+    const name = String(d.name || "file").slice(0, 255);
+    return {
+      url: d.url,
+      name,
+      mimeType: String(d.mimeType || "").slice(0, 120),
+      size: Math.max(0, Number(d.size) || 0),
+      publicId: String(d.publicId || "").slice(0, 300),
+      resourceType: d.resourceType === "raw" || d.resourceType === "image" || d.resourceType === "video" ? d.resourceType : "raw",
+    };
+  });
+}
+
+function validateLocation(location: SendMessageExtras["location"]) {
+  if (!location) return undefined;
+  const { latitude, longitude, accuracy } = location;
+  if (
+    !Number.isFinite(latitude) || latitude < -90 || latitude > 90 ||
+    !Number.isFinite(longitude) || longitude < -180 || longitude > 180
+  ) {
+    throw new Error("Invalid location coordinates.");
+  }
+  return {
+    latitude,
+    longitude,
+    accuracy: Number.isFinite(accuracy) ? Math.max(0, accuracy as number) : undefined,
+  };
+}
+
 export async function sendMessage(
   text: string,
   createdBy: string,
   imageUrls?: string[],
   videoUrls?: string[],
   repliedTo?: string,
-  audioUrls?: string[]
+  audioUrls?: string[],
+  extras?: SendMessageExtras
 ) {
   const MAX_TEXT_LENGTH = 50000;
   if (text && text.length > MAX_TEXT_LENGTH) {
@@ -473,29 +524,59 @@ export async function sendMessage(
   }
 
   try {
+    // Sender identity comes from the authenticated session, never the client arg.
+    const me = await requireUser();
+    void createdBy;
+
     await withTimeout(dbConnect(), 15000, "Database connection timed out. Please try again.");
 
-    updatePresence(createdBy).catch(err => console.error("Background presence update error:", err));
+    updatePresence(me).catch(err => console.error("Background presence update error:", err));
 
-    const data = { text, createdBy, imageUrls, videoUrls, audioUrls, repliedTo };
-    const message = await withTimeout(
-      Message.create(data),
-      20000,
-      "Saving message timed out. Please check your connection and try again."
-    );
+    const documents = validateDocuments(extras?.documents);
+    const location = validateLocation(extras?.location);
 
-    if (data.createdBy === "alpha 1") {
+    const data = {
+      text,
+      createdBy: me,
+      imageUrls,
+      videoUrls,
+      audioUrls,
+      repliedTo,
+      ...(documents ? { documents } : {}),
+      ...(location ? { location, kind: "location" as const } : {}),
+      ...(extras?.clientMessageId ? { clientMessageId: String(extras.clientMessageId).slice(0, 80) } : {}),
+    };
+
+    let message;
+    try {
+      message = await withTimeout(
+        Message.create(data),
+        20000,
+        "Saving message timed out. Please check your connection and try again."
+      );
+    } catch (err: unknown) {
+      // Duplicate clientMessageId → the message already exists (client retry); return it.
+      if (typeof err === "object" && err !== null && (err as { code?: number }).code === 11000 && data.clientMessageId) {
+        const existing = await Message.findOne({ clientMessageId: data.clientMessageId }).lean();
+        if (existing) return JSON.parse(JSON.stringify(existing));
+      }
+      throw err;
+    }
+
+    if (me === "alpha 1") {
       (async () => {
         try {
           // Check if delta 1 is online (last seen within 15 seconds)
           const delta1 = await User.findOne({ username: "delta 1" }).lean() as UserDocument | null;
           const isDelta1Online = delta1 && (Date.now() - new Date(delta1.lastSeen).getTime() < 15000);
-          
+
           if (!isDelta1Online) {
             const hasMedia =
               (data.imageUrls && data.imageUrls.length > 0) ||
               (data.videoUrls && data.videoUrls.length > 0) ||
-              (data.audioUrls && data.audioUrls.length > 0);
+              (data.audioUrls && data.audioUrls.length > 0) ||
+              (documents && documents.length > 0) ||
+              Boolean(location);
             const notificationText = hasMedia ? "Sent media content" : data.text || "";
             await sendTelegramNotification(`Alpha 1 sent a new message: ${notificationText.substring(0, 100)}${notificationText.length > 100 ? "..." : ""}`);
           }
@@ -509,6 +590,9 @@ export async function sendMessage(
     return JSON.parse(JSON.stringify(message));
   } catch (error) {
     console.error('Failed to create message:', error);
+    if (error instanceof Error && /Unauthorized|Invalid|Too many|too long/i.test(error.message)) {
+      throw error;
+    }
     throw new Error('Failed to create message. Database connection error.');
   }
 }
@@ -546,7 +630,8 @@ export async function deleteMessage(id: string, deleteFromCloudinaryToo: boolean
           try {
             // Determine resource_type
             const isVideo = url.includes('/video/upload/');
-            const resourceType = isVideo ? 'video' : 'image';
+            const isRaw = url.includes('/raw/upload/');
+            const resourceType = isRaw ? 'raw' : isVideo ? 'video' : 'image';
             
             // Extract public_id from Cloudinary URL
             const parts = url.split('/');
@@ -557,8 +642,10 @@ export async function deleteMessage(id: string, deleteFromCloudinaryToo: boolean
                 relevantParts.shift();
               }
               const lastPart = relevantParts[relevantParts.length - 1];
-              const lastPartWithoutExtension = lastPart.split('.')[0];
-              relevantParts[relevantParts.length - 1] = lastPartWithoutExtension;
+              // Raw public IDs keep their extension; image/video ones don't.
+              if (resourceType !== 'raw') {
+                relevantParts[relevantParts.length - 1] = lastPart.split('.')[0];
+              }
               const publicId = relevantParts.join('/');
               
               console.log(`🗑️ Deleting ${resourceType} from Cloudinary: ${publicId}`);
@@ -566,6 +653,17 @@ export async function deleteMessage(id: string, deleteFromCloudinaryToo: boolean
             }
           } catch (err) {
             console.error(`Failed to delete media from Cloudinary: ${url}`, err);
+          }
+        }
+
+        // Document attachments carry their exact public IDs and resource types.
+        for (const doc of (message.documents || []) as Array<{ publicId?: string; resourceType?: string; url?: string }>) {
+          if (!doc?.publicId) continue;
+          try {
+            console.log(`🗑️ Deleting document from Cloudinary: ${doc.publicId}`);
+            await cloudinary.uploader.destroy(doc.publicId, { resource_type: doc.resourceType || 'raw' });
+          } catch (err) {
+            console.error(`Failed to delete document from Cloudinary: ${doc.url}`, err);
           }
         }
       }
@@ -656,14 +754,67 @@ export async function reactToMessage(id: string, username: string, reactionType:
   }
 }
 
+function isPrivateHostname(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  if (h === "localhost" || h.endsWith(".localhost") || h.endsWith(".local") || h.endsWith(".internal")) return true;
+  // IPv4 private/reserved ranges
+  const v4 = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (v4) {
+    const [a, b] = [Number(v4[1]), Number(v4[2])];
+    if (a === 10 || a === 127 || a === 0) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 169 && b === 254) return true; // link-local / cloud metadata
+  }
+  // IPv6 loopback/link-local/unique-local
+  if (h === "::1" || h.startsWith("fe80:") || h.startsWith("fc") || h.startsWith("fd") || h.startsWith("[")) return true;
+  return false;
+}
+
 export async function getUrlMetadata(url: string) {
   try {
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    await requireUser();
+
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return null;
+    if (isPrivateHostname(parsed.hostname)) return null;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        },
+        redirect: 'follow',
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
+    if (!response.ok) return null;
+    // Guard against redirects landing on internal hosts.
+    if (isPrivateHostname(new URL(response.url).hostname)) return null;
+    const contentType = response.headers.get("content-type") || "";
+    if (!contentType.includes("text/html")) return null;
+
+    // Read at most ~512KB — enough for <head> metadata.
+    const reader = response.body?.getReader();
+    let html = "";
+    if (reader) {
+      const decoder = new TextDecoder();
+      let bytes = 0;
+      while (bytes < 512 * 1024) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        bytes += value.byteLength;
+        html += decoder.decode(value, { stream: true });
       }
-    });
-    const html = await response.text();
+      void reader.cancel().catch(() => undefined);
+    } else {
+      html = await response.text();
+    }
 
     const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
     const title = titleMatch ? titleMatch[1] : '';

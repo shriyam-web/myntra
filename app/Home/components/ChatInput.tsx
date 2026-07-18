@@ -1,7 +1,17 @@
-import React, { useState, useCallback, useEffect } from "react";
-import { Message, Theme } from "../types";
+import React, { useState, useCallback, useEffect, useRef } from "react";
+import { DocumentAttachment, LocationAttachment, Message, Theme } from "../types";
 import { SendQueueStatus } from "../hooks/useMessageSendQueue";
-import { getMessagePreviewText } from "../../../lib/utils";
+import {
+  getMessagePreviewText,
+  getReplyPreviewKind,
+  getReplyThumbUrl,
+} from "../../../lib/utils";
+import {
+  MAX_ATTACHMENT_BYTES,
+  MAX_ATTACHMENTS_PER_MESSAGE,
+  classifyFile,
+  formatFileSize,
+} from "../../../lib/attachments";
 
 interface ChatInputProps {
   newMessage: string;
@@ -19,6 +29,10 @@ interface ChatInputProps {
   setSelectedVideos: React.Dispatch<React.SetStateAction<string[]>>;
   selectedAudios: string[];
   setSelectedAudios: React.Dispatch<React.SetStateAction<string[]>>;
+  selectedDocuments: DocumentAttachment[];
+  setSelectedDocuments: React.Dispatch<React.SetStateAction<DocumentAttachment[]>>;
+  pendingLocation: LocationAttachment | null;
+  setPendingLocation: React.Dispatch<React.SetStateAction<LocationAttachment | null>>;
   selectedFiles: File[];
   setSelectedFiles: React.Dispatch<React.SetStateAction<File[]>>;
   sendQueueStatus: SendQueueStatus;
@@ -45,6 +59,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   setSelectedVideos,
   selectedAudios,
   setSelectedAudios,
+  selectedDocuments,
+  setSelectedDocuments,
+  pendingLocation,
+  setPendingLocation,
   selectedFiles,
   setSelectedFiles,
   sendQueueStatus,
@@ -58,10 +76,17 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [isRecording, setIsRecording] = useState(false);
   const [recordingStartedAt, setRecordingStartedAt] = useState<number | null>(null);
   const [recordingElapsedSec, setRecordingElapsedSec] = useState(0);
+  const [attachMenuOpen, setAttachMenuOpen] = useState(false);
+  const [attachError, setAttachError] = useState<string | null>(null);
+  const [locationStatus, setLocationStatus] = useState<"idle" | "acquiring" | "ready" | "error">("idle");
+  const [locationError, setLocationError] = useState<string | null>(null);
   const mediaRecorderRef = React.useRef<MediaRecorder | null>(null);
   const recordStreamRef = React.useRef<MediaStream | null>(null);
   const recordingChunksRef = React.useRef<BlobPart[]>([]);
   const keepRecordedClipRef = React.useRef(true);
+  const docInputRef = useRef<HTMLInputElement>(null);
+  const mediaInputRef = useRef<HTMLInputElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
 
   const copyableText = newMessage.trim() || lastFailedText.trim();
   useEffect(() => {
@@ -106,20 +131,65 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
+    setAttachMenuOpen(false);
+    setAttachError(null);
 
-    const newFiles = Array.from(files);
-    setSelectedFiles([...selectedFiles, ...newFiles]);
+    const incoming = Array.from(files);
+    const remainingSlots =
+      MAX_ATTACHMENTS_PER_MESSAGE -
+      (selectedImages.length + selectedVideos.length + selectedAudios.length + selectedDocuments.length);
+    if (remainingSlots <= 0) {
+      setAttachError(`You can attach up to ${MAX_ATTACHMENTS_PER_MESSAGE} files per message.`);
+      e.target.value = "";
+      return;
+    }
 
-    newFiles.forEach((file) => {
-      const url = URL.createObjectURL(file);
-      if (file.type.startsWith("video/")) {
-        setSelectedVideos((prev) => [...prev, url]);
-      } else if (file.type.startsWith("audio/")) {
-        setSelectedAudios((prev) => [...prev, url]);
+    const accepted: File[] = [];
+    const errors: string[] = [];
+
+    for (const file of incoming.slice(0, remainingSlots)) {
+      if (file.size > MAX_ATTACHMENT_BYTES) {
+        errors.push(`${file.name} is over 50 MB`);
+        continue;
+      }
+      const kind = classifyFile(file);
+      if (!kind) {
+        errors.push(`${file.name} is not allowed`);
+        continue;
+      }
+      accepted.push(file);
+    }
+
+    if (errors.length) setAttachError(errors[0]);
+    if (!accepted.length) {
+      e.target.value = "";
+      return;
+    }
+
+    setSelectedFiles((prev) => [...prev, ...accepted]);
+
+    accepted.forEach((file) => {
+      const kind = classifyFile(file)!;
+      if (kind === "video") {
+        setSelectedVideos((prev) => [...prev, URL.createObjectURL(file)]);
+      } else if (kind === "audio") {
+        setSelectedAudios((prev) => [...prev, URL.createObjectURL(file)]);
+      } else if (kind === "document") {
+        setSelectedDocuments((prev) => [
+          ...prev,
+          {
+            url: "",
+            name: file.name,
+            mimeType: file.type,
+            size: file.size,
+          },
+        ]);
       } else {
-        setSelectedImages((prev) => [...prev, url]);
+        setSelectedImages((prev) => [...prev, URL.createObjectURL(file)]);
       }
     });
+
+    e.target.value = "";
   };
 
   const removeImage = (idx: number) => {
@@ -129,7 +199,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     let imageCount = 0;
     setSelectedFiles(
       selectedFiles.filter((file) => {
-        if (!file.type.startsWith("video/") && !file.type.startsWith("audio/")) {
+        if (classifyFile(file) === "image") {
           if (imageCount === idx) {
             imageCount++;
             return false;
@@ -150,7 +220,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     let videoCount = 0;
     setSelectedFiles(
       selectedFiles.filter((file) => {
-        if (file.type.startsWith("video/")) {
+        if (classifyFile(file) === "video") {
           if (videoCount === idx) {
             videoCount++;
             return false;
@@ -171,7 +241,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     let audioCount = 0;
     setSelectedFiles(
       selectedFiles.filter((file) => {
-        if (file.type.startsWith("audio/")) {
+        if (classifyFile(file) === "audio") {
           if (audioCount === idx) {
             audioCount++;
             return false;
@@ -184,6 +254,55 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
     URL.revokeObjectURL(urlToRemove);
   };
+
+  const removeDocument = (idx: number) => {
+    setSelectedDocuments(selectedDocuments.filter((_, i) => i !== idx));
+    let docCount = 0;
+    setSelectedFiles(
+      selectedFiles.filter((file) => {
+        if (classifyFile(file) === "document") {
+          if (docCount === idx) {
+            docCount++;
+            return false;
+          }
+          docCount++;
+        }
+        return true;
+      })
+    );
+  };
+
+  const shareLocation = useCallback(() => {
+    setAttachMenuOpen(false);
+    if (!navigator.geolocation) {
+      setLocationStatus("error");
+      setLocationError("Location is not supported on this device.");
+      return;
+    }
+    setLocationStatus("acquiring");
+    setLocationError(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setPendingLocation({
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+          accuracy: pos.coords.accuracy,
+        });
+        setLocationStatus("ready");
+      },
+      (err) => {
+        setLocationStatus("error");
+        if (err.code === err.PERMISSION_DENIED) {
+          setLocationError("Location permission denied. Enable it in browser settings.");
+        } else if (err.code === err.TIMEOUT) {
+          setLocationError("Timed out getting location. Try again.");
+        } else {
+          setLocationError("Couldn't get your location. Try again.");
+        }
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  }, [setPendingLocation]);
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
@@ -254,7 +373,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     newMessage.trim().length > 0 ||
     selectedImages.length > 0 ||
     selectedVideos.length > 0 ||
-    selectedAudios.length > 0;
+    selectedAudios.length > 0 ||
+    selectedDocuments.length > 0 ||
+    Boolean(pendingLocation);
+
+  const replyKind = getReplyPreviewKind(replyingTo);
+  const replyThumb = getReplyThumbUrl(replyingTo);
+  const replyPreview = getMessagePreviewText(replyingTo) || "Media";
 
   const queueLabel = sendQueueStatus.isActive
     ? sendQueueStatus.waitingCount > 0
@@ -310,69 +435,104 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         </div>
       )}
 
-      {replyingTo && (
-        <div className="mb-4 p-4 bg-zinc-950/80 rounded-[2rem] border border-zinc-800 flex items-center justify-between animate-in slide-in-from-bottom-2 duration-300 backdrop-blur-xl">
-          <div className="flex items-center gap-4 overflow-hidden">
-            <div className={`w-1.5 h-10 rounded-full ${activeTheme.bubbleMe} shrink-0`}></div>
-            <div className="overflow-hidden">
-              <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-zinc-500 mb-1">
-                Replying to {replyingTo.createdBy}
-              </p>
-              <p className="text-xs text-white/80 line-clamp-1 font-normal italic">
-                {getMessagePreviewText(replyingTo.text) || "Media Content"}
-              </p>
-            </div>
+      {attachError && (
+        <div className="mb-3 px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-200">
+          {attachError}
+        </div>
+      )}
+
+      {locationStatus === "acquiring" && (
+        <div className="mb-3 px-3 py-2.5 rounded-2xl bg-zinc-950 border border-zinc-800 text-[11px] text-zinc-300 flex items-center gap-2">
+          <span className="w-3.5 h-3.5 border-2 border-zinc-500 border-t-white rounded-full animate-spin" />
+          Getting your location…
+        </div>
+      )}
+
+      {locationError && (
+        <div className="mb-3 px-3 py-2 rounded-xl bg-red-500/10 border border-red-500/20 text-[11px] text-red-200 flex items-center justify-between gap-2">
+          <span>{locationError}</span>
+          <button type="button" onClick={() => { setLocationError(null); setLocationStatus("idle"); }} className="text-red-300/70 hover:text-red-200">Dismiss</button>
+        </div>
+      )}
+
+      {pendingLocation && (
+        <div className="mb-3 p-3 rounded-2xl bg-zinc-950 border border-zinc-800 flex items-center gap-3 animate-in slide-in-from-bottom-2 duration-200">
+          <div className="w-10 h-10 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold text-white">Current location ready</p>
+            <p className="text-[10px] text-zinc-500 truncate">
+              {pendingLocation.latitude.toFixed(5)}, {pendingLocation.longitude.toFixed(5)}
+              {pendingLocation.accuracy ? ` · ±${Math.round(pendingLocation.accuracy)}m` : ""}
+            </p>
+            <p className="text-[10px] text-zinc-600 mt-0.5">Tap send to share. Precise coordinates will be sent.</p>
           </div>
           <button
-            onClick={() => setReplyingTo(null)}
-            className="p-2.5 bg-zinc-900 border border-zinc-800 rounded-full text-zinc-500 hover:text-white transition-all active:scale-90"
+            type="button"
+            onClick={() => { setPendingLocation(null); setLocationStatus("idle"); }}
+            className="p-2 rounded-full text-zinc-500 hover:text-white hover:bg-white/5"
+            aria-label="Remove location"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="3"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </div>
       )}
 
-      {(selectedImages.length > 0 || selectedVideos.length > 0 || selectedAudios.length > 0) && (
+      {replyingTo && (
+        <div className="mb-3 flex items-stretch overflow-hidden rounded-2xl bg-zinc-950/90 border border-zinc-800/80 animate-in slide-in-from-bottom-2 duration-200">
+          <div className={`w-1 shrink-0 ${activeTheme.bubbleMe}`} />
+          <div className="flex-1 min-w-0 px-3 py-2.5 flex items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <p className={`text-[11px] font-semibold truncate ${activeTheme.accent || "text-indigo-400"}`}>
+                {replyingTo.createdBy}
+              </p>
+              <p className="text-[12px] text-zinc-300/90 line-clamp-1 font-normal leading-snug mt-0.5">
+                {replyKind === "image" && "📷 "}
+                {replyKind === "video" && "🎬 "}
+                {replyKind === "audio" && "🎵 "}
+                {replyKind === "document" && "📄 "}
+                {replyKind === "location" && "📍 "}
+                {replyKind === "call" && "📞 "}
+                {replyPreview}
+              </p>
+            </div>
+            {replyThumb && (
+              <div className="w-11 h-11 rounded-lg overflow-hidden bg-zinc-900 shrink-0 relative">
+                {replyKind === "video" ? (
+                  <video src={replyThumb} className="w-full h-full object-cover" muted />
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={replyThumb} alt="" className="w-full h-full object-cover" />
+                )}
+              </div>
+            )}
+          </div>
+          <button
+            onClick={() => setReplyingTo(null)}
+            className="px-3 text-zinc-500 hover:text-white transition-colors self-stretch"
+            aria-label="Cancel reply"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+          </button>
+        </div>
+      )}
+
+      {(selectedImages.length > 0 || selectedVideos.length > 0 || selectedAudios.length > 0 || selectedDocuments.length > 0) && (
         <div className="mb-4 flex gap-3 overflow-x-auto no-scrollbar pb-2 animate-in slide-in-from-bottom-2 duration-300">
           {selectedImages.map((url, idx) => (
             <div key={`img-${idx}`} className="relative group shrink-0">
               <img
                 src={url}
-                className="w-24 h-24 object-cover rounded-[1.5rem] border-2 border-zinc-800 shadow-2xl group-hover:border-white transition-all"
+                className="w-24 h-24 object-cover rounded-[1.5rem] border-2 border-zinc-800 group-hover:border-white transition-all"
                 alt=""
               />
               <button
                 type="button"
                 onClick={() => removeImage(idx)}
-                className="absolute -top-2 -right-2 p-2 bg-red-600 text-white rounded-full shadow-2xl opacity-0 group-hover:opacity-100 transition-all hover:scale-110 active:scale-90"
+                className="absolute -top-2 -right-2 p-2 bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-all hover:scale-110 active:scale-90"
               >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="12"
-                  height="12"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
               </button>
             </div>
           ))}
@@ -380,45 +540,24 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             <div key={`vid-${idx}`} className="relative group shrink-0">
               <video
                 src={url}
-                className="w-24 h-24 object-cover rounded-[1.5rem] border-2 border-zinc-800 shadow-2xl group-hover:border-white transition-all"
+                className="w-24 h-24 object-cover rounded-[1.5rem] border-2 border-zinc-800 group-hover:border-white transition-all"
               />
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <div className="bg-black/40 rounded-full p-1">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="white"
-                  >
-                    <polygon points="5 3 19 12 5 21 5 3" />
-                  </svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3" /></svg>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => removeVideo(idx)}
-                className="absolute -top-2 -right-2 p-2 bg-red-600 text-white rounded-full shadow-2xl opacity-0 group-hover:opacity-100 transition-all hover:scale-110 active:scale-90"
+                className="absolute -top-2 -right-2 p-2 bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-all hover:scale-110 active:scale-90"
               >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="12"
-                  height="12"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
               </button>
             </div>
           ))}
           {selectedAudios.map((url, idx) => (
-            <div key={`aud-${idx}`} className="relative group shrink-0 w-52 h-24 rounded-[1.5rem] border-2 border-zinc-800 shadow-2xl bg-zinc-950 p-3 flex items-center gap-3">
+            <div key={`aud-${idx}`} className="relative group shrink-0 w-52 h-24 rounded-[1.5rem] border-2 border-zinc-800 bg-zinc-950 p-3 flex items-center gap-3">
               <div className="w-9 h-9 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-200">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19V5"/><path d="M8 9v6"/><path d="M16 9v6"/></svg>
               </div>
@@ -426,7 +565,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               <button
                 type="button"
                 onClick={() => removeAudio(idx)}
-                className="absolute -top-2 -right-2 p-2 bg-red-600 text-white rounded-full shadow-2xl opacity-100 transition-all hover:scale-110 active:scale-90"
+                className="absolute -top-2 -right-2 p-2 bg-red-600 text-white rounded-full opacity-100 transition-all hover:scale-110 active:scale-90"
                 title="Remove recording"
                 aria-label="Remove recording"
               >
@@ -434,26 +573,25 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               </button>
             </div>
           ))}
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="w-24 h-24 flex items-center justify-center bg-zinc-950 border-2 border-dashed border-zinc-800 rounded-[1.5rem] text-zinc-700 hover:text-zinc-500 hover:border-zinc-700 transition-all shrink-0 active:scale-95"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-          </button>
+          {selectedDocuments.map((doc, idx) => (
+            <div key={`doc-${idx}`} className="relative group shrink-0 w-52 h-24 rounded-[1.5rem] border border-zinc-800 bg-zinc-950 p-3 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-sky-500/15 text-sky-400 flex items-center justify-center shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs text-white font-medium truncate">{doc.name}</p>
+                <p className="text-[10px] text-zinc-500">{formatFileSize(doc.size || 0) || "Document"}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => removeDocument(idx)}
+                className="absolute -top-2 -right-2 p-2 bg-red-600 text-white rounded-full"
+                aria-label="Remove document"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+              </button>
+            </div>
+          ))}
         </div>
       )}
 
@@ -487,12 +625,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             </div>
           )}
           <div className="relative group/input flex items-center bg-zinc-950/90 border border-zinc-700/50 rounded-2xl sm:rounded-[1.5rem] focus-within:border-zinc-500/60 focus-within:ring-1 focus-within:ring-white/10 transition-all shadow-inner overflow-hidden px-1.5">
-            <div className="flex items-center gap-1 pr-1.5">
+            <div className="flex items-center gap-1 pr-1.5 relative">
               <button
                 type="button"
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => setAttachMenuOpen((v) => !v)}
                 className="h-10 w-10 flex items-center justify-center rounded-full text-zinc-600 hover:text-white hover:bg-white/5 transition-all active:scale-90 shrink-0"
-                title="Attach media"
+                title="Attach"
+                aria-label="Attach"
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -508,6 +647,34 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.59a2 2 0 0 1-2.83-2.83l8.49-8.48" />
                 </svg>
               </button>
+              {attachMenuOpen && (
+                <div className="absolute bottom-12 left-0 z-30 w-48 rounded-2xl border border-zinc-800 bg-zinc-950 p-1.5 shadow-none">
+                  <button type="button" onClick={() => { setAttachMenuOpen(false); mediaInputRef.current?.click(); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm text-zinc-200 hover:bg-white/5">
+                    <span className="w-8 h-8 rounded-full bg-pink-500/15 text-pink-400 flex items-center justify-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+                    </span>
+                    Photo &amp; Video
+                  </button>
+                  <button type="button" onClick={() => { setAttachMenuOpen(false); audioInputRef.current?.click(); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm text-zinc-200 hover:bg-white/5">
+                    <span className="w-8 h-8 rounded-full bg-violet-500/15 text-violet-400 flex items-center justify-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+                    </span>
+                    Audio file
+                  </button>
+                  <button type="button" onClick={() => { setAttachMenuOpen(false); docInputRef.current?.click(); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm text-zinc-200 hover:bg-white/5">
+                    <span className="w-8 h-8 rounded-full bg-sky-500/15 text-sky-400 flex items-center justify-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    </span>
+                    Document
+                  </button>
+                  <button type="button" onClick={shareLocation} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm text-zinc-200 hover:bg-white/5">
+                    <span className="w-8 h-8 rounded-full bg-emerald-500/15 text-emerald-400 flex items-center justify-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+                    </span>
+                    Location
+                  </button>
+                </div>
+              )}
               {isRecording && (
                 <div className="h-10 w-10 flex items-center justify-center rounded-full text-red-300 bg-red-500/12 ring-1 ring-red-400/40 animate-pulse shrink-0">
                   <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
@@ -517,14 +684,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 </div>
               )}
             </div>
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileChange}
-              className="hidden"
-              multiple
-              accept="image/*,video/*,audio/*"
-            />
+            <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" multiple accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.rtf,.csv,.zip,.rar,.7z,.json,.xml,.md" />
+            <input type="file" ref={mediaInputRef} onChange={handleFileChange} className="hidden" multiple accept="image/*,video/*" />
+            <input type="file" ref={audioInputRef} onChange={handleFileChange} className="hidden" multiple accept="audio/*" />
+            <input type="file" ref={docInputRef} onChange={handleFileChange} className="hidden" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.rtf,.csv,.odt,.ods,.odp,.zip,.rar,.7z,.tar,.gz,.json,.xml,.md,.epub" />
             <textarea
               ref={messageInputRef}
               value={newMessage}

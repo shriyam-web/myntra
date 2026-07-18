@@ -28,6 +28,21 @@ export interface Ticket {
   createdBy: UserType;
 }
 
+export interface DocumentAttachment {
+  url: string;
+  name: string;
+  mimeType?: string;
+  size?: number;
+  publicId?: string;
+  resourceType?: string;
+}
+
+export interface LocationAttachment {
+  latitude: number;
+  longitude: number;
+  accuracy?: number;
+}
+
 export interface Message {
   _id: string;
   text?: string;
@@ -37,6 +52,10 @@ export interface Message {
   videoUrls?: string[];
   audioUrl?: string;
   audioUrls?: string[];
+  documents?: DocumentAttachment[];
+  location?: LocationAttachment;
+  clientMessageId?: string;
+  kind?: "message" | "call-log" | "location";
   createdAt: string;
   createdBy: UserType;
   savedBy?: string[];
@@ -51,6 +70,8 @@ export interface Message {
     videoUrls?: string[];
     audioUrl?: string;
     audioUrls?: string[];
+    documents?: DocumentAttachment[];
+    location?: LocationAttachment;
     createdBy: UserType;
   };
 }

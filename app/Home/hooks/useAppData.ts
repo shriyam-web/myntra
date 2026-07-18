@@ -43,9 +43,14 @@ export function useAppData(view: ViewType, messageLimit: number) {
       const optimistic = prev.filter(m => isOptimisticMessageId(m._id));
       const pendingOptimistic = optimistic.filter(opt => 
         !newMessagesFromData.some((m: Message) => 
-          m.text === opt.text && 
-          m.createdBy === opt.createdBy &&
-          Math.abs(new Date(m.createdAt).getTime() - new Date(opt.createdAt).getTime()) < 30000
+          (opt.clientMessageId && m.clientMessageId === opt.clientMessageId) ||
+          (
+            m.text === opt.text && 
+            m.createdBy === opt.createdBy &&
+            Math.abs(new Date(m.createdAt).getTime() - new Date(opt.createdAt).getTime()) < 30000 &&
+            Boolean(opt.location) === Boolean(m.location) &&
+            (opt.documents?.length || 0) === (m.documents?.length || 0)
+          )
         )
       );
 

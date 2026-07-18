@@ -3,7 +3,16 @@
 import { useCallback, useRef, useState, useEffect } from "react";
 import * as actions from "../../../lib/actions";
 import { withTimeout } from "../../../lib/with-timeout";
-import { Message, UserType } from "../types";
+import { classifyFile } from "../../../lib/attachments";
+import { DocumentAttachment, LocationAttachment, Message, UserType } from "../types";
+
+export interface UploadResult {
+  url: string;
+  publicId?: string;
+  resourceType?: string;
+  bytes?: number;
+  originalFilename?: string;
+}
 
 export interface EnqueueMessagePayload {
   text: string;
@@ -11,6 +20,8 @@ export interface EnqueueMessagePayload {
   imagePreviewUrls: string[];
   videoPreviewUrls: string[];
   audioPreviewUrls: string[];
+  documentPreviews?: DocumentAttachment[];
+  location?: LocationAttachment | null;
   replyingTo: Message | null;
 }
 
@@ -31,27 +42,29 @@ interface UseMessageSendQueueOptions {
   currentUser: string;
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
   fetchMessagesOnly: (silent?: boolean) => Promise<void>;
-  uploadToCloudinary: (file: File, onProgress: (percent: number) => void) => Promise<string>;
+  uploadToCloudinary: (file: File, onProgress: (percent: number) => void) => Promise<UploadResult>;
 }
 
 function createJobId(seq: number) {
   return `${Date.now()}-${seq}`;
 }
 
-function buildOptimisticMessage(
-  job: QueuedSendJob,
-  currentUser: string
-): Message {
+function buildOptimisticMessage(job: QueuedSendJob, currentUser: string): Message {
   const imageUrls = job.imagePreviewUrls.length > 0 ? job.imagePreviewUrls : undefined;
   const videoUrls = job.videoPreviewUrls.length > 0 ? job.videoPreviewUrls : undefined;
   const audioUrls = job.audioPreviewUrls.length > 0 ? job.audioPreviewUrls : undefined;
+  const documents = job.documentPreviews?.length ? job.documentPreviews : undefined;
 
   return {
     _id: job.id,
+    clientMessageId: job.id,
     text: job.text || undefined,
     imageUrls,
     videoUrls,
     audioUrls,
+    documents,
+    location: job.location || undefined,
+    kind: job.location ? "location" : "message",
     imageUrl: imageUrls?.[0],
     videoUrl: videoUrls?.[0],
     audioUrl: audioUrls?.[0],
@@ -67,6 +80,8 @@ function buildOptimisticMessage(
           videoUrls: job.replyingTo.videoUrls,
           audioUrl: job.replyingTo.audioUrl,
           audioUrls: job.replyingTo.audioUrls,
+          documents: job.replyingTo.documents,
+          location: job.replyingTo.location,
           createdBy: job.replyingTo.createdBy,
         }
       : undefined,
@@ -129,12 +144,16 @@ export function useMessageSendQueue({
       const uploadedImageUrls: string[] = [];
       const uploadedVideoUrls: string[] = [];
       const uploadedAudioUrls: string[] = [];
+      const uploadedDocuments: DocumentAttachment[] = [];
 
       try {
         if (job.files.length > 0) {
           for (let i = 0; i < job.files.length; i++) {
             const file = job.files[i];
-            const url = await withTimeout(
+            const kind = classifyFile(file);
+            if (!kind) throw new Error(`Unsupported file type: ${file.name}`);
+
+            const result = await withTimeout(
               uploadToCloudinary(file, (percent) => {
                 if (!mountedRef.current) return;
                 setSendQueueStatus((prev) => ({
@@ -153,9 +172,18 @@ export function useMessageSendQueue({
               "Media upload timed out. Your files were not sent."
             );
 
-            if (file.type.startsWith("video/")) uploadedVideoUrls.push(url);
-            else if (file.type.startsWith("audio/")) uploadedAudioUrls.push(url);
-            else uploadedImageUrls.push(url);
+            if (kind === "video") uploadedVideoUrls.push(result.url);
+            else if (kind === "audio") uploadedAudioUrls.push(result.url);
+            else if (kind === "document") {
+              uploadedDocuments.push({
+                url: result.url,
+                name: file.name,
+                mimeType: file.type || "",
+                size: file.size,
+                publicId: result.publicId,
+                resourceType: result.resourceType || "raw",
+              });
+            } else uploadedImageUrls.push(result.url);
           }
 
           if (mountedRef.current) {
@@ -170,7 +198,12 @@ export function useMessageSendQueue({
             uploadedImageUrls,
             uploadedVideoUrls,
             job.replyingTo?._id,
-            uploadedAudioUrls
+            uploadedAudioUrls,
+            {
+              documents: uploadedDocuments.length ? uploadedDocuments : undefined,
+              location: job.location || undefined,
+              clientMessageId: job.id,
+            }
           ),
           35000,
           "Sending timed out after 35 seconds. Your message may not have been delivered."
@@ -179,7 +212,11 @@ export function useMessageSendQueue({
         if (!mountedRef.current) return;
 
         if (serverMsg) {
-          setMessages((prev) => prev.map((m) => (m._id === job.id ? serverMsg : m)));
+          setMessages((prev) =>
+            prev.map((m) =>
+              m._id === job.id || m.clientMessageId === job.id ? serverMsg : m
+            )
+          );
         } else {
           await fetchMessagesOnly(true);
         }
@@ -228,7 +265,9 @@ export function useMessageSendQueue({
 
   const enqueueMessage = useCallback(
     (payload: EnqueueMessagePayload) => {
-      if (!payload.text.trim() && payload.files.length === 0) return;
+      const hasDocs = (payload.documentPreviews?.length ?? 0) > 0;
+      const hasLocation = Boolean(payload.location);
+      if (!payload.text.trim() && payload.files.length === 0 && !hasDocs && !hasLocation) return;
 
       const job: QueuedSendJob = {
         id: createJobId(seqRef.current++),
@@ -237,6 +276,8 @@ export function useMessageSendQueue({
         imagePreviewUrls: [...payload.imagePreviewUrls],
         videoPreviewUrls: [...payload.videoPreviewUrls],
         audioPreviewUrls: [...payload.audioPreviewUrls],
+        documentPreviews: payload.documentPreviews ? [...payload.documentPreviews] : [],
+        location: payload.location || null,
         replyingTo: payload.replyingTo,
         createdAt: new Date().toISOString(),
       };

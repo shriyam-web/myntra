@@ -27,6 +27,10 @@ const nextConfig: NextConfig = {
             key: 'Surrogate-Control',
             value: 'no-store',
           },
+          {
+            key: 'Permissions-Policy',
+            value: 'geolocation=(self), microphone=(self), camera=()',
+          },
         ],
       },
     ];
