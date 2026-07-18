@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import { Message, Theme } from "../types";
 import { getVideoPoster } from "../../../lib/utils";
+import { toProtectedMediaUrl } from "../../../lib/media-url";
 
 interface MediaTabProps {
   messages: Message[];
@@ -32,12 +33,12 @@ export const MediaTab: React.FC<MediaTabProps> = ({
       const videos = m.videoUrls || (m.videoUrl ? [m.videoUrl] : []);
 
       images.forEach((url, idx) => {
-        items.push({ url, type: "image", message: m, originalIndex: idx });
+        items.push({ url: toProtectedMediaUrl(url), type: "image", message: m, originalIndex: idx });
       });
 
       videos.forEach((url, idx) => {
         items.push({ 
-          url, 
+          url: toProtectedMediaUrl(url), 
           type: "video", 
           message: m, 
           originalIndex: idx + images.length 

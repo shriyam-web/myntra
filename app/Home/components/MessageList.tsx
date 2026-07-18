@@ -2,8 +2,10 @@ import React, { Fragment } from "react";
 import { Message, PresenceUser, Theme, ReactionType, isOptimisticMessageId } from "../types";
 import { renderMessage, getVideoPoster, getMessagePreviewText, getReplyPreviewKind, getReplyThumbUrl } from "../../../lib/utils";
 import { mapsUrl, formatFileSize } from "../../../lib/attachments";
+import { toProtectedMediaUrl } from "../../../lib/media-url";
 import { REACTION_EMOJIS } from "../constants";
 import { ReactionBurst } from "./ReactionBurst";
+import { MediaSafetyModal, MediaSafetyInfo } from "./MediaSafetyModal";
 import { MessageActionMenu } from "./MessageActionMenu";
 import { ReactionPickerBar } from "./ReactionPickerBar";
 
@@ -227,6 +229,16 @@ export const MessageList: React.FC<MessageListProps> = ({
 }) => {
   const [swipingMessageId, setSwipingMessageId] = React.useState<string | null>(null);
   const [swipeDistance, setSwipeDistance] = React.useState(0);
+  const [mediaSafetyInfo, setMediaSafetyInfo] = React.useState<MediaSafetyInfo | null>(null);
+
+  const openMediaSafety = (kind: MediaSafetyInfo["kind"], url: string) => {
+    // New uploads are authenticated assets behind the login proxy. Legacy files
+    // are either raw CDN links or proxy links with deliveryType=upload (public asset).
+    const isLegacyPublic =
+      url.includes("res.cloudinary.com") || url.includes("deliveryType=upload");
+    const protectedDelivery = kind === "document" || kind === "location" || !isLegacyPublic;
+    setMediaSafetyInfo({ kind, protectedDelivery });
+  };
   const [zoomedAvatar, setZoomedAvatar] = React.useState<string | null>(null);
   const [reactionPickerId, setReactionPickerId] = React.useState<string | null>(null);
   const [actionMenuId, setActionMenuId] = React.useState<string | null>(null);
@@ -273,8 +285,13 @@ export const MessageList: React.FC<MessageListProps> = ({
     }
   };
 
-  const isInteractiveTouchTarget = (target: EventTarget | null) =>
-    !!(target as HTMLElement)?.closest?.("a, button, textarea");
+  const isInteractiveTouchTarget = (target: EventTarget | null) => {
+    const el = (target as HTMLElement)?.closest?.("a, button, textarea");
+    if (!el) return false;
+    // Attachment cards (documents/location) fill the whole bubble, so they must
+    // still allow swipe-to-reply and long-press; a plain tap still opens them.
+    return !el.hasAttribute("data-attachment-card");
+  };
 
   const startLongPress = (messageId: string) => {
     if (isOptimisticMessageId(messageId)) return;
@@ -741,10 +758,12 @@ export const MessageList: React.FC<MessageListProps> = ({
                           
                           {(m.imageUrl || (m.imageUrls && m.imageUrls.length > 0)) && (
                               <div className={`mt-1.5 grid gap-1.5 ${m.imageUrls && m.imageUrls.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                                  {(m.imageUrls || [m.imageUrl]).map((url, idx) => (
+                                  {(m.imageUrls || [m.imageUrl]).map((url, idx) => {
+                                      const mediaUrl = toProtectedMediaUrl(url!);
+                                      return (
                                       <div key={idx} className="relative group/img overflow-hidden rounded-xl border border-white/10 shadow-lg bg-zinc-950">
                                           <img 
-                                              src={url!} 
+                                              src={mediaUrl} 
                                               alt="Shared content" 
                                               className="w-full h-auto max-h-[250px] object-cover hover:scale-105 transition-transform duration-500 cursor-pointer"
                                               onClick={() => {
@@ -753,23 +772,32 @@ export const MessageList: React.FC<MessageListProps> = ({
                                               }}
                                           />
                                           <button 
-                                              onClick={() => handleDownloadMedia(url!)}
+                                              onClick={() => handleDownloadMedia(mediaUrl)}
                                               className="absolute top-1.5 right-1.5 p-1.5 bg-black/60 backdrop-blur-md rounded-full text-white opacity-0 group-hover/img:opacity-100 transition-all hover:bg-black"
                                           >
                                               <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                                           </button>
+                                          <button
+                                              onClick={(e) => { e.stopPropagation(); openMediaSafety("image", mediaUrl); }}
+                                              className="absolute top-1.5 left-1.5 p-1.5 bg-black/50 backdrop-blur-md rounded-full text-white/80 hover:text-white hover:bg-black transition-all"
+                                              aria-label="Safety info"
+                                          >
+                                              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                                          </button>
                                       </div>
-                                  ))}
+                                  );})}
                               </div>
                           )}
 
                           {(m.videoUrl || (m.videoUrls && m.videoUrls.length > 0)) && (
                               <div className={`mt-1.5 grid gap-1.5 ${m.videoUrls && m.videoUrls.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                                  {(m.videoUrls || [m.videoUrl]).map((url, idx) => (
+                                  {(m.videoUrls || [m.videoUrl]).map((url, idx) => {
+                                      const mediaUrl = toProtectedMediaUrl(url!);
+                                      return (
                                       <div key={idx} className="relative group/vid overflow-hidden rounded-xl border border-white/10 shadow-lg bg-zinc-950 aspect-video flex items-center justify-center">
                                           <video 
-                                              src={url!} 
-                                              poster={getVideoPoster(url!)}
+                                              src={mediaUrl} 
+                                              poster={getVideoPoster(mediaUrl)}
                                               className="w-full h-full object-cover cursor-pointer"
                                               onClick={() => {
                                                   setPreviewMessage(m);
@@ -791,33 +819,70 @@ export const MessageList: React.FC<MessageListProps> = ({
                                               Video Preview
                                           </div>
                                           <button 
-                                              onClick={() => handleDownloadMedia(url!)}
+                                              onClick={() => handleDownloadMedia(mediaUrl)}
                                               className="absolute top-1.5 right-1.5 p-1.5 bg-black/60 backdrop-blur-md rounded-full text-white opacity-0 group-hover/vid:opacity-100 transition-all hover:bg-black z-10"
                                           >
                                               <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                                           </button>
+                                          <button
+                                              onClick={(e) => { e.stopPropagation(); openMediaSafety("video", mediaUrl); }}
+                                              className="absolute bottom-1.5 right-1.5 p-1.5 bg-black/50 backdrop-blur-md rounded-full text-white/80 hover:text-white hover:bg-black transition-all z-10"
+                                              aria-label="Safety info"
+                                          >
+                                              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                                          </button>
                                       </div>
-                                  ))}
+                                  );})}
                               </div>
                           )}
 
                           {(m.audioUrl || (m.audioUrls && m.audioUrls.length > 0)) && (
                             <div className="mt-1.5 grid gap-1.5">
-                              {(m.audioUrls || [m.audioUrl]).filter(Boolean).map((url, idx) => (
-                                <VoiceNotePlayer
-                                  key={`audio-${idx}`}
-                                  url={url!}
-                                  isMe={isMe}
-                                  themeClass={activeTheme.bubbleMe}
-                                  onRequestPlay={handleRequestPlayAudio}
-                                />
-                              ))}
+                              {(m.audioUrls || [m.audioUrl]).filter(Boolean).map((url, idx) => {
+                                const audioMediaUrl = toProtectedMediaUrl(url!);
+                                return (
+                                <div key={`audio-${idx}`} className="flex items-center gap-1.5">
+                                  <div className="min-w-0 flex-1">
+                                    <VoiceNotePlayer
+                                      url={audioMediaUrl}
+                                      isMe={isMe}
+                                      themeClass={activeTheme.bubbleMe}
+                                      onRequestPlay={handleRequestPlayAudio}
+                                    />
+                                  </div>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); openMediaSafety("audio", audioMediaUrl); }}
+                                    className="p-1 rounded-full text-white/50 hover:text-white hover:bg-white/10 transition-colors shrink-0"
+                                    aria-label="Safety info"
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                                  </button>
+                                </div>
+                              );})}
                             </div>
                           )}
 
                           {m.documents && m.documents.length > 0 && (
                             <div className="mt-1.5 flex flex-col gap-1.5">
                               {m.documents.map((doc, idx) => {
+                                // Cloudinary blocks direct viewing of raw files (PDF/ZIP),
+                                // so route through our authenticated proxy: tap to preview
+                                // inline, dedicated button to download.
+                                const proxyBase = doc.publicId
+                                  ? `/api/attachments/download?publicId=${encodeURIComponent(doc.publicId)}&resourceType=${encodeURIComponent(doc.resourceType || "raw")}&name=${encodeURIComponent(doc.name || "file")}`
+                                  : doc.url;
+                                const ext = (doc.name || "").split(".").pop()?.toLowerCase() || "";
+                                const previewable = ["pdf", "txt", "csv", "md", "json", "xml", "png", "jpg", "jpeg", "gif", "webp"].includes(ext);
+                                const previewHref = doc.publicId ? `${proxyBase}&mode=inline` : proxyBase;
+                                const downloadHref = doc.publicId ? `${proxyBase}&mode=download` : proxyBase;
+                                const suppressTap = (e: React.MouseEvent) => {
+                                  // Don't trigger when the touch was a swipe-to-reply or long-press.
+                                  if (swipeMovedRef.current || longPressTriggeredRef.current) {
+                                    e.preventDefault();
+                                    return true;
+                                  }
+                                  return false;
+                                };
                                 const inner = (
                                   <>
                                     <div className="w-10 h-10 rounded-xl bg-sky-500/20 text-sky-300 flex items-center justify-center shrink-0">
@@ -827,28 +892,49 @@ export const MessageList: React.FC<MessageListProps> = ({
                                       <p className="text-xs font-medium text-white truncate">{doc.name}</p>
                                       <p className="text-[10px] text-white/50">
                                         {formatFileSize(doc.size || 0) || "Document"}
-                                        {doc.url ? " · Tap to open" : " · Uploading…"}
+                                        {doc.url ? (previewable ? " · Tap to preview" : " · Tap to download") : " · Uploading…"}
                                       </p>
                                     </div>
                                   </>
                                 );
-                                const className = `flex items-center gap-3 p-2.5 rounded-xl min-w-[200px] max-w-[260px] ${
+                                const className = `flex items-center gap-2 p-2.5 rounded-xl min-w-[200px] max-w-[260px] ${
                                   isMe ? "bg-black/20 hover:bg-black/30" : "bg-black/30 hover:bg-black/40"
                                 } transition-colors`;
-                                return doc.url ? (
-                                  <a
-                                    key={`doc-${idx}`}
-                                    href={doc.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    download={doc.name}
-                                    onClick={(e) => e.stopPropagation()}
-                                    className={className}
-                                  >
-                                    {inner}
-                                  </a>
-                                ) : (
-                                  <div key={`doc-${idx}`} className={className}>{inner}</div>
+                                if (!doc.url) {
+                                  return <div key={`doc-${idx}`} className={className}>{inner}</div>;
+                                }
+                                return (
+                                  <div key={`doc-${idx}`} className={className}>
+                                    <a
+                                      href={previewable ? previewHref : downloadHref}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      {...(previewable ? {} : { download: doc.name })}
+                                      data-attachment-card
+                                      onClick={(e) => { e.stopPropagation(); suppressTap(e); }}
+                                      className="flex items-center gap-3 min-w-0 flex-1"
+                                    >
+                                      {inner}
+                                    </a>
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); openMediaSafety("document", doc.url); }}
+                                      aria-label="Safety info"
+                                      className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-white/50 hover:text-white hover:bg-white/10 transition-colors"
+                                    >
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                                    </button>
+                                    <a
+                                      href={downloadHref}
+                                      download={doc.name}
+                                      data-attachment-card
+                                      title="Download"
+                                      aria-label="Download"
+                                      onClick={(e) => { e.stopPropagation(); suppressTap(e); }}
+                                      className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+                                    >
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                                    </a>
+                                  </div>
                                 );
                               })}
                             </div>
@@ -859,7 +945,13 @@ export const MessageList: React.FC<MessageListProps> = ({
                               href={mapsUrl(m.location.latitude, m.location.longitude)}
                               target="_blank"
                               rel="noopener noreferrer"
-                              onClick={(e) => e.stopPropagation()}
+                              data-attachment-card
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (swipeMovedRef.current || longPressTriggeredRef.current) {
+                                  e.preventDefault();
+                                }
+                              }}
                               className={`mt-1.5 flex items-center gap-3 p-2.5 rounded-xl min-w-[200px] max-w-[260px] ${
                                 isMe ? "bg-black/20 hover:bg-black/30" : "bg-black/30 hover:bg-black/40"
                               } transition-colors`}
@@ -875,6 +967,15 @@ export const MessageList: React.FC<MessageListProps> = ({
                                 </p>
                                 <p className="text-[10px] text-emerald-300/80 mt-0.5">Open in Maps</p>
                               </div>
+                              <span
+                                role="button"
+                                tabIndex={0}
+                                aria-label="Safety info"
+                                onClick={(e) => { e.preventDefault(); e.stopPropagation(); openMediaSafety("location", ""); }}
+                                className="p-1 rounded-full text-white/50 hover:text-white hover:bg-white/10 transition-colors shrink-0"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                              </span>
                             </a>
                           )}
 
@@ -912,6 +1013,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                             isMe={isMe}
                             isPinned={(m.pinnedBy || []).includes(currentUser)}
                             onPin={() => handleTogglePinMessage(m._id)}
+                            onReply={() => setReplyingTo(m)}
                             onCopy={m.text ? () => handleCopyMessage(m.text || "") : undefined}
                             onEdit={isMe && m.text ? () => {
                               setEditingMessage(m._id);
@@ -991,6 +1093,9 @@ export const MessageList: React.FC<MessageListProps> = ({
             </button>
           </div>
         </div>
+      )}
+      {mediaSafetyInfo && (
+        <MediaSafetyModal info={mediaSafetyInfo} onClose={() => setMediaSafetyInfo(null)} />
       )}
     </div>
     </div>

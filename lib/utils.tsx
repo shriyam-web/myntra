@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import * as actions from './actions';
+import { toProtectedMediaUrl } from './media-url';
 
 interface Metadata {
   title: string;
@@ -68,8 +69,13 @@ const UrlPreview = ({ url }: { url: string }) => {
 
 export const getVideoPoster = (url: string) => {
   if (!url) return undefined;
-  if (url.includes('cloudinary.com')) {
-    // Replace extension with jpg for Cloudinary video thumbnail
+  // Login-gated proxy: ask the media route for a signed jpg frame.
+  if (url.startsWith("/api/attachments/media")) {
+    const joiner = url.includes("?") ? "&" : "?";
+    return `${url}${joiner}poster=1`;
+  }
+  if (url.includes("cloudinary.com") && url.includes("/video/")) {
+    // Legacy public Cloudinary video URL — replace extension with jpg.
     return url.replace(/\.[^/.]+$/, ".jpg");
   }
   return undefined;
@@ -173,13 +179,13 @@ export const getReplyPreviewKind = (msg?: PreviewableMessage | null): ReplyPrevi
 
 export const getReplyThumbUrl = (msg?: PreviewableMessage | null): string | null => {
   if (!msg) return null;
-  return (
+  const raw =
     msg.imageUrls?.[0] ||
     msg.imageUrl ||
     msg.videoUrls?.[0] ||
     msg.videoUrl ||
-    null
-  );
+    null;
+  return raw ? toProtectedMediaUrl(raw) : null;
 };
 
 export const renderMessage = (text: string) => {

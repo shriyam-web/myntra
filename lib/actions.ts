@@ -10,6 +10,13 @@ import { APP_SETTINGS_KEY } from "./maintenance";
 import { requireUser } from "./auth/session";
 import * as callService from "./calls/service";
 import type { CallEndReason, CallSignalType } from "./calls/types";
+import {
+  buildProtectedMediaUrl,
+  parseCloudinaryUrl,
+  parseProtectedMediaUrl,
+  protectMediaUrlList,
+  toProtectedMediaUrl,
+} from "./media-url";
 
 // Configure Cloudinary
 cloudinary.config({
@@ -103,18 +110,30 @@ export async function disableMaintenanceMode(actor: string) {
   return { success: true };
 }
 
-// IMAGE/VIDEO UPLOAD
+interface CloudinaryUploadResult extends CloudinaryResult {
+  public_id?: string;
+  resource_type?: string;
+  type?: string;
+  bytes?: number;
+  original_filename?: string;
+}
+
+// IMAGE/VIDEO UPLOAD (authenticated delivery — unsigned CDN URLs return 401)
 export async function uploadImage(file: string, resourceType: "image" | "video" | "raw" | "auto" = "auto") {
   const start = Date.now();
   try {
+    await requireUser();
     const isVideo = resourceType === "video" || (typeof file === 'string' && file.startsWith('data:video/'));
     const isRaw = resourceType === "raw";
     const actualResourceType = isRaw ? "raw" : isVideo ? "video" : (resourceType === "auto" ? "auto" : "image");
+    // Raw/docs stay as public upload type (Cloudinary PDF policy handled by download route).
+    // Photos/videos/audio use authenticated so only signed/proxy access works.
+    const deliveryType = isRaw ? "upload" : "authenticated";
     
-    console.log(`📸 Starting Cloudinary ${actualResourceType} upload (file size: ${Math.round(file.length / 1024)}KB)`);
+    console.log(`📸 Starting Cloudinary ${actualResourceType}/${deliveryType} upload (file size: ${Math.round(file.length / 1024)}KB)`);
     
     // Cloudinary upload with timeout and better options
-    const result = await new Promise<CloudinaryResult>((resolve, reject) => {
+    const result = await new Promise<CloudinaryUploadResult>((resolve, reject) => {
       const timeoutMs = actualResourceType === "video" || actualResourceType === "raw" ? 300000 : 60000;
       
       const uploadTimeout = setTimeout(() => {
@@ -124,6 +143,7 @@ export async function uploadImage(file: string, resourceType: "image" | "video" 
       cloudinary.uploader.upload(file, {
         folder: "messaging",
         resource_type: actualResourceType,
+        type: deliveryType,
         timeout: timeoutMs,
       }, (error, result) => {
         clearTimeout(uploadTimeout);
@@ -131,14 +151,22 @@ export async function uploadImage(file: string, resourceType: "image" | "video" 
           console.error("❌ Cloudinary callback error:", error);
           reject(error);
         } else {
-          resolve(result as CloudinaryResult);
+          resolve(result as CloudinaryUploadResult);
         }
       });
     });
 
     const duration = Date.now() - start;
-    console.log(`✅ Cloudinary upload successful in ${duration}ms: ${result.secure_url}`);
-    return result.secure_url;
+    const publicId = result.public_id || "";
+    const protectedUrl = publicId
+      ? buildProtectedMediaUrl({
+          publicId,
+          resourceType: (result.resource_type as "image" | "video" | "raw") || (actualResourceType === "auto" ? "image" : actualResourceType),
+          deliveryType: (result.type as "upload" | "authenticated") || deliveryType,
+        })
+      : result.secure_url;
+    console.log(`✅ Cloudinary upload successful in ${duration}ms: ${protectedUrl}`);
+    return protectedUrl;
   } catch (error) {
     const duration = Date.now() - start;
     console.error(`❌ Cloudinary upload failed after ${duration}ms:`, error);
@@ -150,23 +178,48 @@ export async function uploadImage(file: string, resourceType: "image" | "video" 
 }
 
 // Get Cloudinary signature for client-side upload
-export async function getCloudinarySignature() {
+export async function getCloudinarySignature(opts?: { authenticated?: boolean }) {
   await requireUser();
   const timestamp = Math.round((new Date()).getTime() / 1000);
   const folder = "messaging";
-  
-  const signature = cloudinary.utils.api_sign_request({
-    timestamp: timestamp,
-    folder: folder,
-  }, process.env.CLOUDINARY_API_SECRET!);
+  // Photos/videos/audio: authenticated. Documents (raw): leave as upload.
+  const useAuthenticated = opts?.authenticated !== false;
+  const params: Record<string, string | number> = {
+    timestamp,
+    folder,
+  };
+  if (useAuthenticated) {
+    params.type = "authenticated";
+  }
+
+  const signature = cloudinary.utils.api_sign_request(
+    params,
+    process.env.CLOUDINARY_API_SECRET!
+  );
 
   return { 
     timestamp, 
     signature, 
     apiKey: process.env.CLOUDINARY_API_KEY, 
     cloudName: process.env.CLOUDINARY_CLOUD_NAME,
-    folder
+    folder,
+    type: useAuthenticated ? "authenticated" : "upload",
   };
+}
+
+/** Rewrite message media fields so clients never receive raw Cloudinary CDN URLs. */
+function protectMessageMedia<T extends Record<string, unknown>>(message: T): T {
+  const m = { ...message } as Record<string, unknown>;
+  if (typeof m.imageUrl === "string") m.imageUrl = toProtectedMediaUrl(m.imageUrl);
+  if (typeof m.videoUrl === "string") m.videoUrl = toProtectedMediaUrl(m.videoUrl);
+  if (typeof m.audioUrl === "string") m.audioUrl = toProtectedMediaUrl(m.audioUrl);
+  if (Array.isArray(m.imageUrls)) m.imageUrls = protectMediaUrlList(m.imageUrls as string[]);
+  if (Array.isArray(m.videoUrls)) m.videoUrls = protectMediaUrlList(m.videoUrls as string[]);
+  if (Array.isArray(m.audioUrls)) m.audioUrls = protectMediaUrlList(m.audioUrls as string[]);
+  if (m.repliedTo && typeof m.repliedTo === "object" && m.repliedTo !== null) {
+    m.repliedTo = protectMessageMedia(m.repliedTo as Record<string, unknown>);
+  }
+  return m as T;
 }
 
 // FETCH ALL DATA
@@ -218,7 +271,7 @@ export async function fetchData(messageLimit = 50, currentUser?: string) {
     console.log("👥 Users found:", users.map(u => ({ username: u.username, lastSeen: u.lastSeen })));
 
     // Reverse messages to show chronological order (oldest to newest)
-    const sortedMessages = messages.reverse();
+    const sortedMessages = messages.reverse().map((m) => protectMessageMedia(m as Record<string, unknown>));
     const maintenance = await getMaintenancePayload();
 
     return {
@@ -271,7 +324,9 @@ export async function fetchMessages(messageLimit = 50, currentUser?: string) {
     const maintenance = await getMaintenancePayload();
 
     return {
-      messages: JSON.parse(JSON.stringify(messages.reverse())),
+      messages: JSON.parse(
+        JSON.stringify(messages.reverse().map((m) => protectMessageMedia(m as Record<string, unknown>)))
+      ),
       users: JSON.parse(JSON.stringify(users)),
       callLogs: JSON.parse(JSON.stringify(callLogs)),
       ...maintenance,
@@ -474,6 +529,22 @@ export interface SendMessageExtras {
   clientMessageId?: string;
 }
 
+/** Extract the Cloudinary public ID from a delivery URL (keeps extension for raw resources). */
+function publicIdFromCloudinaryUrl(url: string, resourceType: string): string {
+  try {
+    const parts = new URL(url).pathname.split("/").filter(Boolean);
+    const uploadIndex = parts.indexOf("upload");
+    if (uploadIndex === -1) return "";
+    let rest = parts.slice(uploadIndex + 1);
+    if (rest[0]?.match(/^v\d+$/)) rest = rest.slice(1);
+    let publicId = rest.join("/");
+    if (resourceType !== "raw") publicId = publicId.replace(/\.[^/.]+$/, "");
+    return decodeURIComponent(publicId);
+  } catch {
+    return "";
+  }
+}
+
 function validateDocuments(documents: SendMessageExtras["documents"]) {
   if (!documents?.length) return undefined;
   if (documents.length > 10) throw new Error("Too many documents (max 10 per message).");
@@ -482,13 +553,20 @@ function validateDocuments(documents: SendMessageExtras["documents"]) {
       throw new Error("Invalid document URL.");
     }
     const name = String(d.name || "file").slice(0, 255);
+    const resourceType =
+      d.resourceType === "raw" || d.resourceType === "image" || d.resourceType === "video" ? d.resourceType : "raw";
+    // publicId is required for the authenticated download route
+    // (Cloudinary blocks direct public delivery of PDF/ZIP raw files).
+    const publicId =
+      String(d.publicId || "").slice(0, 300) || publicIdFromCloudinaryUrl(d.url, resourceType);
+
     return {
       url: d.url,
       name,
       mimeType: String(d.mimeType || "").slice(0, 120),
       size: Math.max(0, Number(d.size) || 0),
-      publicId: String(d.publicId || "").slice(0, 300),
-      resourceType: d.resourceType === "raw" || d.resourceType === "image" || d.resourceType === "video" ? d.resourceType : "raw",
+      publicId,
+      resourceType,
     };
   });
 }
@@ -535,12 +613,13 @@ export async function sendMessage(
     const documents = validateDocuments(extras?.documents);
     const location = validateLocation(extras?.location);
 
+    // Never persist raw Cloudinary CDN URLs for photos/videos/audio — only login-gated proxies.
     const data = {
       text,
       createdBy: me,
-      imageUrls,
-      videoUrls,
-      audioUrls,
+      imageUrls: protectMediaUrlList(imageUrls),
+      videoUrls: protectMediaUrlList(videoUrls),
+      audioUrls: protectMediaUrlList(audioUrls),
       repliedTo,
       ...(documents ? { documents } : {}),
       ...(location ? { location, kind: "location" as const } : {}),
@@ -558,7 +637,7 @@ export async function sendMessage(
       // Duplicate clientMessageId → the message already exists (client retry); return it.
       if (typeof err === "object" && err !== null && (err as { code?: number }).code === 11000 && data.clientMessageId) {
         const existing = await Message.findOne({ clientMessageId: data.clientMessageId }).lean();
-        if (existing) return JSON.parse(JSON.stringify(existing));
+        if (existing) return protectMessageMedia(JSON.parse(JSON.stringify(existing)));
       }
       throw err;
     }
@@ -587,7 +666,7 @@ export async function sendMessage(
     }
 
     notifyRealtime();
-    return JSON.parse(JSON.stringify(message));
+    return protectMessageMedia(JSON.parse(JSON.stringify(message)));
   } catch (error) {
     console.error('Failed to create message:', error);
     if (error instanceof Error && /Unauthorized|Invalid|Too many|too long/i.test(error.message)) {
@@ -628,29 +707,16 @@ export async function deleteMessage(id: string, deleteFromCloudinaryToo: boolean
 
         for (const url of allUrls) {
           try {
-            // Determine resource_type
-            const isVideo = url.includes('/video/upload/');
-            const isRaw = url.includes('/raw/upload/');
-            const resourceType = isRaw ? 'raw' : isVideo ? 'video' : 'image';
-            
-            // Extract public_id from Cloudinary URL
-            const parts = url.split('/');
-            const uploadIndex = parts.indexOf('upload');
-            if (uploadIndex !== -1) {
-              const relevantParts = parts.slice(uploadIndex + 1);
-              if (relevantParts[0].match(/^v\d+$/)) {
-                relevantParts.shift();
-              }
-              const lastPart = relevantParts[relevantParts.length - 1];
-              // Raw public IDs keep their extension; image/video ones don't.
-              if (resourceType !== 'raw') {
-                relevantParts[relevantParts.length - 1] = lastPart.split('.')[0];
-              }
-              const publicId = relevantParts.join('/');
-              
-              console.log(`🗑️ Deleting ${resourceType} from Cloudinary: ${publicId}`);
-              await cloudinary.uploader.destroy(publicId, { resource_type: resourceType });
-            }
+            const fromProxy = parseProtectedMediaUrl(url);
+            const fromCloudinary = parseCloudinaryUrl(url);
+            const ref = fromProxy || fromCloudinary;
+            if (!ref) continue;
+
+            console.log(`🗑️ Deleting ${ref.resourceType}/${ref.deliveryType} from Cloudinary: ${ref.publicId}`);
+            await cloudinary.uploader.destroy(ref.publicId, {
+              resource_type: ref.resourceType,
+              type: ref.deliveryType,
+            });
           } catch (err) {
             console.error(`Failed to delete media from Cloudinary: ${url}`, err);
           }

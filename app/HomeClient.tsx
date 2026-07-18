@@ -31,6 +31,7 @@ import { useRealtimeSync } from "./Home/hooks/useRealtimeSync";
 import { useTypingSignal, usePartnerTypingState } from "./Home/hooks/useTypingIndicator";
 import { CallLogsTab } from "./Home/components/CallLogsTab";
 import { MAINTENANCE_REDIRECT_URL } from "../lib/maintenance";
+import { toProtectedMediaUrl } from "../lib/media-url";
 import { detectIncognitoMode } from "./Home/utils/detectIncognito";
 import { loginAction, logoutAction } from "../lib/auth/actions";
 
@@ -550,12 +551,18 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
 
   const uploadToCloudinary = useCallback(async (file: File, onProgress: (percent: number) => void) => {
     const { classifyFile, cloudinaryResourceForKind } = await import("../lib/attachments");
+    const { buildProtectedMediaUrl } = await import("../lib/media-url");
     const kind = classifyFile(file);
     if (!kind) throw new Error(`Unsupported file: ${file.name}`);
     const endpointResource = cloudinaryResourceForKind(kind);
+    // Photos/videos/audio → authenticated Cloudinary assets (unsigned CDN URLs = 401).
+    // Documents stay as public raw upload; PDF policy is handled by the download route.
+    const useAuthenticated = kind !== "document";
 
     try {
-      const { timestamp, signature, apiKey, cloudName, folder } = await actions.getCloudinarySignature();
+      const { timestamp, signature, apiKey, cloudName, folder, type } = await actions.getCloudinarySignature({
+        authenticated: useAuthenticated,
+      });
 
       return await new Promise<{
         url: string;
@@ -577,10 +584,18 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
         xhr.onload = () => {
           if (xhr.status === 200) {
             const response = JSON.parse(xhr.responseText);
+            const publicId = response.public_id as string | undefined;
+            const resourceType = (response.resource_type || endpointResource) as "image" | "video" | "raw";
+            const deliveryType = (response.type || type || "upload") as "upload" | "authenticated";
+            // Never keep raw Cloudinary CDN URLs for photos/videos/audio — only our login proxy.
+            const url =
+              useAuthenticated && publicId
+                ? buildProtectedMediaUrl({ publicId, resourceType, deliveryType })
+                : (response.secure_url as string);
             resolve({
-              url: response.secure_url,
-              publicId: response.public_id,
-              resourceType: response.resource_type || endpointResource,
+              url,
+              publicId,
+              resourceType,
               bytes: response.bytes,
               originalFilename: response.original_filename,
             });
@@ -598,6 +613,9 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
         formData.append('timestamp', timestamp.toString());
         formData.append('signature', signature);
         formData.append('folder', folder);
+        if (useAuthenticated) {
+          formData.append('type', 'authenticated');
+        }
 
         xhr.send(formData);
       });
@@ -1334,8 +1352,8 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
             <div className="relative max-w-4xl w-full h-full flex flex-col items-center justify-center gap-8" onClick={(e) => e.stopPropagation()}>
                 {(() => {
                     const mediaItems = [
-                        ...(previewMessage.imageUrls || (previewMessage.imageUrl ? [previewMessage.imageUrl] : [])).map(url => ({ type: 'image', url })),
-                        ...(previewMessage.videoUrls || (previewMessage.videoUrl ? [previewMessage.videoUrl] : [])).map(url => ({ type: 'video', url }))
+                        ...(previewMessage.imageUrls || (previewMessage.imageUrl ? [previewMessage.imageUrl] : [])).map(url => ({ type: 'image', url: toProtectedMediaUrl(url) })),
+                        ...(previewMessage.videoUrls || (previewMessage.videoUrl ? [previewMessage.videoUrl] : [])).map(url => ({ type: 'video', url: toProtectedMediaUrl(url) }))
                     ];
                     const currentMedia = mediaItems[previewImageIndex] || mediaItems[0];
                     if (!currentMedia) return null;
