@@ -1638,8 +1638,11 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
                   <div className="absolute inset-0 pointer-events-none z-[1] bg-[radial-gradient(circle_at_50%_0%,rgba(139,92,246,0.22)_0%,rgba(88,28,135,0.12)_40%,transparent_75%)]" />
                 )}
                 {disappearingMode && (
-                  <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[65] px-3 py-1.5 rounded-full bg-violet-950/90 border border-violet-400/40 text-violet-100 text-[10px] font-bold uppercase tracking-wider shadow-lg shadow-violet-900/30">
-                    Disappearing on · 1h after viewed
+                  <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[65] px-3 py-1.5 rounded-full bg-violet-950/90 border border-violet-400/40 text-violet-100 text-[10px] font-bold uppercase tracking-wider shadow-lg shadow-violet-900/30 whitespace-nowrap">
+                    Disappearing on
+                    {disappearingEnabledAt
+                      ? ` · since ${new Date(disappearingEnabledAt).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`
+                      : " · 1h after viewed"}
                   </div>
                 )}
                 {showSavedMessagesOnly && (

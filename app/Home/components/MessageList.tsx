@@ -594,6 +594,15 @@ export const MessageList: React.FC<MessageListProps> = ({
 
                 if (isDisappearingSystem) {
                   const turnedOn = systemText.startsWith("[SYSTEM:DISAPPEARING_ON]");
+                  const switchedAt = new Date(m.createdAt);
+                  const switchedLabel = Number.isNaN(switchedAt.getTime())
+                    ? null
+                    : switchedAt.toLocaleString([], {
+                        day: "numeric",
+                        month: "short",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      });
                   return (
                     <Fragment key={m._id}>
                       <div className="my-3 flex justify-center px-2">
@@ -605,7 +614,10 @@ export const MessageList: React.FC<MessageListProps> = ({
                           }`}
                         >
                           <span>{turnedOn ? "⏱" : "○"}</span>
-                          <span>{turnedOn ? "Disappearing mode on" : "Disappearing mode off"}</span>
+                          <span>
+                            {turnedOn ? "Disappearing mode on" : "Disappearing mode off"}
+                            {switchedLabel ? ` · ${switchedLabel}` : ""}
+                          </span>
                         </div>
                       </div>
                     </Fragment>
