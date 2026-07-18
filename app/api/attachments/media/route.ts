@@ -1,6 +1,7 @@
 import { v2 as cloudinary } from "cloudinary";
 import { getSession } from "../../../../lib/auth/session";
 import type { CloudinaryDeliveryType, CloudinaryResourceType } from "../../../../lib/media-url";
+import { assertMediaStillAvailable } from "../../../../lib/media-access";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -29,6 +30,11 @@ export async function GET(request: Request) {
 
   if (!publicId.startsWith("messaging/") || publicId.includes("..")) {
     return new Response("Invalid media", { status: 400 });
+  }
+
+  const stillAvailable = await assertMediaStillAvailable(publicId);
+  if (!stillAvailable) {
+    return new Response("Media expired", { status: 410 });
   }
 
   const resourceType: CloudinaryResourceType =

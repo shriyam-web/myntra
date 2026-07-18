@@ -3,7 +3,18 @@
 import dbConnect from "./mongodb";
 import { notifyRealtime } from "./realtime-hub";
 import { withTimeout } from "./with-timeout";
-import { Ticket, Wishlist, Plan, TimelineDate, Message, User, CallLog, AppSettings } from "../models/schemas";
+import {
+  Ticket,
+  Wishlist,
+  Plan,
+  TimelineDate,
+  Reminder,
+  MoodCheckIn,
+  Message,
+  User,
+  CallLog,
+  AppSettings,
+} from "../models/schemas";
 import { revalidatePath, unstable_noStore as noStore } from "next/cache";
 import { v2 as cloudinary } from "cloudinary";
 import { APP_SETTINGS_KEY } from "./maintenance";
@@ -17,6 +28,16 @@ import {
   protectMediaUrlList,
   toProtectedMediaUrl,
 } from "./media-url";
+import {
+  disappearingCreateFields,
+  getDisappearingModePayload,
+  markDisappearingMessagesViewed,
+  notExpiredMessageFilter,
+  notExpiredSharedFilter,
+  permanentlyKeepMessage,
+  processMediaCleanupJobs,
+  purgeExpiredDisappearingMessages,
+} from "./disappearing-messages";
 
 // Configure Cloudinary
 cloudinary.config({
@@ -47,6 +68,81 @@ async function getMaintenancePayload() {
       : null,
     maintenanceEnabledBy: settings?.maintenanceEnabledBy ?? null,
   };
+}
+
+async function getAppModePayload() {
+  const [maintenance, disappearing] = await Promise.all([
+    getMaintenancePayload(),
+    getDisappearingModePayload(),
+  ]);
+  return { ...maintenance, ...disappearing };
+}
+
+export async function setDisappearingMode(enabled: boolean) {
+  const me = await requireUser();
+  await dbConnect();
+  const now = new Date();
+  if (enabled) {
+    await AppSettings.findOneAndUpdate(
+      { key: APP_SETTINGS_KEY },
+      {
+        disappearingMode: true,
+        disappearingEnabledAt: now,
+        disappearingEnabledBy: me,
+      },
+      { upsert: true }
+    );
+    await Message.create({
+      text: `[SYSTEM:DISAPPEARING_ON] ${me} turned on disappearing messages. New messages delete 1 hour after being viewed.`,
+      createdBy: me,
+      kind: "message",
+      disappearing: false,
+    });
+  } else {
+    await AppSettings.findOneAndUpdate(
+      { key: APP_SETTINGS_KEY },
+      {
+        disappearingMode: false,
+        disappearingEnabledAt: null,
+        disappearingEnabledBy: null,
+      },
+      { upsert: true }
+    );
+    await Message.create({
+      text: `[SYSTEM:DISAPPEARING_OFF] ${me} turned off disappearing messages. New messages stay permanently.`,
+      createdBy: me,
+      kind: "message",
+      disappearing: false,
+    });
+  }
+  notifyRealtime();
+  revalidatePath("/");
+  return getDisappearingModePayload();
+}
+
+export async function getDisappearingStatus() {
+  noStore();
+  try {
+    return await getDisappearingModePayload();
+  } catch {
+    return {
+      disappearingMode: false,
+      disappearingEnabledAt: null,
+      disappearingEnabledBy: null,
+    };
+  }
+}
+
+export async function markMessagesViewed(messageIds: string[]) {
+  const me = await requireUser();
+  const updated = await markDisappearingMessagesViewed(me, messageIds);
+  if (updated > 0) notifyRealtime();
+  return { updated };
+}
+
+export async function expireDisappearingMediaJobs() {
+  await purgeExpiredDisappearingMessages();
+  return processMediaCleanupJobs();
 }
 
 export async function getMaintenanceStatus() {
@@ -237,19 +333,26 @@ export async function fetchData(messageLimit = 50, currentUser?: string) {
     const userCount = await User.countDocuments();
     console.log(`🔍 fetchData: Found ${userCount} users in database`);
 
-    const messageQuery: Record<string, unknown> = {};
+    await purgeExpiredDisappearingMessages().catch(() => 0);
+    const now = new Date();
+    const sharedAlive = notExpiredSharedFilter(now);
+    const messageQuery: Record<string, unknown> = {
+      $and: [notExpiredMessageFilter(now)],
+    };
     if (currentUser) {
-      messageQuery.deletedFor = { $ne: currentUser };
+      (messageQuery.$and as Record<string, unknown>[]).push({ deletedFor: { $ne: currentUser } });
     }
 
-    const [tickets, wishlist, plans, dates, messages, rawUsers, callLogs] = await Promise.all([
+    const [tickets, wishlist, plans, dates, reminders, moods, messages, rawUsers, callLogs] = await Promise.all([
       Ticket.find({}).sort({ createdAt: -1 }).lean(),
       Wishlist.find({}).lean(),
-      Plan.find({}).lean(),
+      Plan.find(sharedAlive).sort({ createdAt: -1 }).lean(),
       TimelineDate.find({}).lean(),
+      Reminder.find(sharedAlive).sort({ dueAt: 1 }).lean(),
+      MoodCheckIn.find({}).sort({ day: -1 }).limit(60).lean(),
       Message.find(messageQuery).sort({ createdAt: -1 }).limit(messageLimit).populate('repliedTo').lean(),
       User.find({}).select('username lastSeen lastReadAt chatBackgroundColor chatBubbleColor themeName chatWallpaper').lean(),
-      CallLog.find({}).sort({ createdAt: -1 }).limit(50).lean()
+      CallLog.find(sharedAlive).sort({ createdAt: -1 }).limit(50).lean()
     ]);
 
     // Deduplicate users by username (lowercase)
@@ -272,21 +375,49 @@ export async function fetchData(messageLimit = 50, currentUser?: string) {
 
     // Reverse messages to show chronological order (oldest to newest)
     const sortedMessages = messages.reverse().map((m) => protectMessageMedia(m as Record<string, unknown>));
-    const maintenance = await getMaintenancePayload();
+    const modes = await getAppModePayload();
 
     return {
       tickets: JSON.parse(JSON.stringify(tickets)),
       wishlist: JSON.parse(JSON.stringify(wishlist)),
       plans: JSON.parse(JSON.stringify(plans)),
       dates: JSON.parse(JSON.stringify(dates)),
+      reminders: JSON.parse(JSON.stringify(reminders)),
+      moods: JSON.parse(JSON.stringify(moods)),
       messages: JSON.parse(JSON.stringify(sortedMessages)),
       users: JSON.parse(JSON.stringify(users)),
       callLogs: JSON.parse(JSON.stringify(callLogs)),
-      ...maintenance,
+      ...modes,
     };
   } catch (error) {
     console.error('Database fetch error:', error);
     throw new Error('Unable to connect to database. Please check your MongoDB connection and try again.');
+  }
+}
+
+/** Lightweight refresh for couple-shared tabs (dates/tasks/reminders/moods). */
+export async function fetchSharedData() {
+  noStore();
+  try {
+    await requireUser();
+    await dbConnect();
+    await purgeExpiredDisappearingMessages().catch(() => 0);
+    const sharedAlive = notExpiredSharedFilter();
+    const [plans, dates, reminders, moods] = await Promise.all([
+      Plan.find(sharedAlive).sort({ createdAt: -1 }).lean(),
+      TimelineDate.find({}).lean(),
+      Reminder.find(sharedAlive).sort({ dueAt: 1 }).lean(),
+      MoodCheckIn.find({}).sort({ day: -1 }).limit(60).lean(),
+    ]);
+    return {
+      plans: JSON.parse(JSON.stringify(plans)),
+      dates: JSON.parse(JSON.stringify(dates)),
+      reminders: JSON.parse(JSON.stringify(reminders)),
+      moods: JSON.parse(JSON.stringify(moods)),
+    };
+  } catch (error) {
+    console.error("fetchSharedData failed:", error);
+    throw new Error("Unable to refresh shared data.");
   }
 }
 
@@ -295,17 +426,22 @@ export async function fetchMessages(messageLimit = 50, currentUser?: string) {
   noStore();
   try {
     await dbConnect();
-    
+    await purgeExpiredDisappearingMessages().catch(() => 0);
+
     // Presence is updated on its own interval in HomeClient — avoid on every poll.
-    const messageQuery: Record<string, unknown> = {};
+    const now = new Date();
+    const sharedAlive = notExpiredSharedFilter(now);
+    const messageQuery: Record<string, unknown> = {
+      $and: [notExpiredMessageFilter(now)],
+    };
     if (currentUser) {
-      messageQuery.deletedFor = { $ne: currentUser };
+      (messageQuery.$and as Record<string, unknown>[]).push({ deletedFor: { $ne: currentUser } });
     }
 
     const [messages, rawUsers, callLogs] = await Promise.all([
       Message.find(messageQuery).sort({ createdAt: -1 }).limit(messageLimit).populate('repliedTo').lean(),
       User.find({}).select('username lastSeen lastReadAt chatBackgroundColor chatBubbleColor themeName chatWallpaper').lean(),
-      CallLog.find({}).sort({ createdAt: -1 }).limit(50).lean()
+      CallLog.find(sharedAlive).sort({ createdAt: -1 }).limit(50).lean()
     ]);
 
     const userMap = new Map<string, UserDocument>();
@@ -321,7 +457,7 @@ export async function fetchMessages(messageLimit = 50, currentUser?: string) {
       }
     });
     const users = Array.from(userMap.values());
-    const maintenance = await getMaintenancePayload();
+    const modes = await getAppModePayload();
 
     return {
       messages: JSON.parse(
@@ -329,11 +465,46 @@ export async function fetchMessages(messageLimit = 50, currentUser?: string) {
       ),
       users: JSON.parse(JSON.stringify(users)),
       callLogs: JSON.parse(JSON.stringify(callLogs)),
-      ...maintenance,
+      ...modes,
     };
   } catch (error) {
     console.error('Fetch messages error:', error);
     throw new Error('Unable to fetch messages.');
+  }
+}
+
+// SEARCH MESSAGES BY TEXT
+export async function searchMessages(query: string) {
+  noStore();
+  try {
+    const me = await requireUser();
+    const q = String(query || "").trim().slice(0, 100);
+    if (q.length < 2) return [];
+
+    await dbConnect();
+    await purgeExpiredDisappearingMessages().catch(() => 0);
+    const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const results = await Message.find({
+      $and: [
+        notExpiredMessageFilter(),
+        {
+          text: { $regex: escaped, $options: "i" },
+          deletedFor: { $ne: me },
+          kind: { $ne: "call-log" },
+        },
+      ],
+    })
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .lean();
+
+    return JSON.parse(
+      JSON.stringify(results.map((m) => protectMessageMedia(m as Record<string, unknown>)))
+    );
+  } catch (error) {
+    console.error("Message search failed:", error);
+    if (error instanceof Error && /Unauthorized/i.test(error.message)) throw error;
+    throw new Error("Search failed. Please try again.");
   }
 }
 
@@ -417,75 +588,379 @@ export async function deleteWish(id: string) {
   }
 }
 
-// PLANS
-export async function createPlan(content: string, createdBy: string) {
+// TASKS (Plans collection)
+export async function createPlan(content: string, createdBy: string, dueAt?: string | null) {
   try {
+    const me = await requireUser();
+    void createdBy;
+    const text = String(content || "").trim().slice(0, 200);
+    if (!text) throw new Error("Task cannot be empty.");
     await dbConnect();
-    const plan = await Plan.create({ content, createdBy });
+    const disappearing = await disappearingCreateFields();
+    const plan = await Plan.create({
+      content: text,
+      createdBy: me,
+      dueAt: dueAt ? new Date(dueAt) : null,
+    });
+    try {
+      await Message.create({
+        text,
+        createdBy: me,
+        kind: "task",
+        sharedItemMeta: {
+          itemId: plan._id.toString(),
+          itemType: "task",
+        },
+        ...disappearing,
+      });
+    } catch (error) {
+      await Plan.findByIdAndDelete(plan._id);
+      throw error;
+    }
     revalidatePath('/');
+    notifyRealtime();
     return JSON.parse(JSON.stringify(plan));
   } catch (error) {
     console.error('Failed to create plan:', error);
-    throw new Error('Failed to add plan. Database connection error.');
+    if (error instanceof Error && /Unauthorized|empty/i.test(error.message)) throw error;
+    throw new Error('Failed to add task. Database connection error.');
   }
 }
 
 export async function updatePlan(id: string, content: string) {
   try {
+    await requireUser();
+    const text = String(content || "").trim().slice(0, 200);
+    if (!text) throw new Error("Task cannot be empty.");
     await dbConnect();
-    const plan = await Plan.findByIdAndUpdate(id, { content }, { new: true });
+    const plan = await Plan.findByIdAndUpdate(id, { content: text }, { new: true });
     revalidatePath('/');
+    notifyRealtime();
     return JSON.parse(JSON.stringify(plan));
   } catch (error) {
     console.error('Failed to update plan:', error);
-    throw new Error('Failed to update plan. Database connection error.');
+    if (error instanceof Error && /Unauthorized|empty/i.test(error.message)) throw error;
+    throw new Error('Failed to update task. Database connection error.');
+  }
+}
+
+export async function togglePlanDone(id: string) {
+  try {
+    const me = await requireUser();
+    await dbConnect();
+    const existing = await Plan.findById(id);
+    if (!existing) throw new Error("Task not found.");
+    const nextDone = !existing.done;
+    const plan = await Plan.findByIdAndUpdate(
+      id,
+      {
+        done: nextDone,
+        doneAt: nextDone ? new Date() : null,
+        doneBy: nextDone ? me : null,
+      },
+      { new: true }
+    );
+    revalidatePath('/');
+    notifyRealtime();
+    return JSON.parse(JSON.stringify(plan));
+  } catch (error) {
+    console.error('Failed to toggle task:', error);
+    if (error instanceof Error && /Unauthorized|not found/i.test(error.message)) throw error;
+    throw new Error('Failed to update task.');
   }
 }
 
 export async function deletePlan(id: string) {
   try {
+    await requireUser();
     await dbConnect();
     await Plan.findByIdAndDelete(id);
     revalidatePath('/');
+    notifyRealtime();
   } catch (error) {
     console.error('Failed to delete plan:', error);
-    throw new Error('Failed to delete plan. Database connection error.');
+    if (error instanceof Error && /Unauthorized/i.test(error.message)) throw error;
+    throw new Error('Failed to delete task. Database connection error.');
   }
 }
 
 // TIMELINE DATES
-export async function createDate(event: string, date: string, createdBy: string) {
+export async function createDate(
+  event: string,
+  date: string,
+  createdBy: string,
+  extras?: { recurringYearly?: boolean; note?: string }
+) {
   try {
+    const me = await requireUser();
+    void createdBy;
+    const eventText = String(event || "").trim().slice(0, 200);
+    if (!eventText || !date) throw new Error("Event and date are required.");
     await dbConnect();
-    const dateEntry = await TimelineDate.create({ event, date, createdBy });
+    const dateEntry = await TimelineDate.create({
+      event: eventText,
+      date,
+      createdBy: me,
+      recurringYearly: Boolean(extras?.recurringYearly),
+      note: String(extras?.note || "").trim().slice(0, 200),
+    });
     revalidatePath('/');
+    notifyRealtime();
     return JSON.parse(JSON.stringify(dateEntry));
   } catch (error) {
     console.error('Failed to create date:', error);
-    throw new Error('Failed to add timeline event. Database connection error.');
+    if (error instanceof Error && /Unauthorized|required/i.test(error.message)) throw error;
+    throw new Error('Failed to add date. Database connection error.');
   }
 }
 
 export async function updateDate(id: string, updates: Record<string, unknown>) {
   try {
+    await requireUser();
     await dbConnect();
-    const dateEntry = await TimelineDate.findByIdAndUpdate(id, updates, { new: true });
+    const safe: Record<string, unknown> = {};
+    if (typeof updates.event === "string") safe.event = updates.event.trim().slice(0, 200);
+    if (typeof updates.date === "string") safe.date = updates.date;
+    if (typeof updates.recurringYearly === "boolean") safe.recurringYearly = updates.recurringYearly;
+    if (typeof updates.note === "string") safe.note = updates.note.trim().slice(0, 200);
+    const dateEntry = await TimelineDate.findByIdAndUpdate(id, safe, { new: true });
     revalidatePath('/');
+    notifyRealtime();
     return JSON.parse(JSON.stringify(dateEntry));
   } catch (error) {
     console.error('Failed to update date:', error);
-    throw new Error('Failed to update timeline event. Database connection error.');
+    if (error instanceof Error && /Unauthorized/i.test(error.message)) throw error;
+    throw new Error('Failed to update date. Database connection error.');
   }
 }
 
 export async function deleteDate(id: string) {
   try {
+    await requireUser();
     await dbConnect();
     await TimelineDate.findByIdAndDelete(id);
     revalidatePath('/');
+    notifyRealtime();
   } catch (error) {
     console.error('Failed to delete date:', error);
-    throw new Error('Failed to delete timeline event. Database connection error.');
+    if (error instanceof Error && /Unauthorized/i.test(error.message)) throw error;
+    throw new Error('Failed to delete date. Database connection error.');
+  }
+}
+
+// REMINDERS
+export async function createReminder(title: string, dueAt: string, linkedDateId?: string | null) {
+  try {
+    const me = await requireUser();
+    const text = String(title || "").trim().slice(0, 200);
+    if (!text) throw new Error("Reminder title is required.");
+    const due = new Date(dueAt);
+    if (Number.isNaN(due.getTime())) throw new Error("Invalid due date.");
+    await dbConnect();
+    const disappearing = await disappearingCreateFields();
+    const reminder = await Reminder.create({
+      title: text,
+      dueAt: due,
+      createdBy: me,
+      linkedDateId: linkedDateId || null,
+    });
+    try {
+      await Message.create({
+        text,
+        createdBy: me,
+        kind: "reminder",
+        sharedItemMeta: {
+          itemId: reminder._id.toString(),
+          itemType: "reminder",
+        },
+        ...disappearing,
+      });
+    } catch (error) {
+      await Reminder.findByIdAndDelete(reminder._id);
+      throw error;
+    }
+    revalidatePath('/');
+    notifyRealtime();
+    return JSON.parse(JSON.stringify(reminder));
+  } catch (error) {
+    console.error("Failed to create reminder:", error);
+    if (error instanceof Error && /Unauthorized|required|Invalid/i.test(error.message)) throw error;
+    throw new Error("Failed to create reminder.");
+  }
+}
+
+export async function toggleReminderDone(id: string) {
+  try {
+    await requireUser();
+    await dbConnect();
+    const existing = await Reminder.findById(id);
+    if (!existing) throw new Error("Reminder not found.");
+    const nextDone = !existing.done;
+    const reminder = await Reminder.findByIdAndUpdate(
+      id,
+      { done: nextDone, doneAt: nextDone ? new Date() : null },
+      { new: true }
+    );
+    revalidatePath('/');
+    notifyRealtime();
+    return JSON.parse(JSON.stringify(reminder));
+  } catch (error) {
+    console.error("Failed to toggle reminder:", error);
+    if (error instanceof Error && /Unauthorized|not found/i.test(error.message)) throw error;
+    throw new Error("Failed to update reminder.");
+  }
+}
+
+export async function deleteReminder(id: string) {
+  try {
+    await requireUser();
+    await dbConnect();
+    await Reminder.findByIdAndDelete(id);
+    revalidatePath('/');
+    notifyRealtime();
+  } catch (error) {
+    console.error("Failed to delete reminder:", error);
+    if (error instanceof Error && /Unauthorized/i.test(error.message)) throw error;
+    throw new Error("Failed to delete reminder.");
+  }
+}
+
+const VALID_MOODS = new Set(["love", "happy", "calm", "tired", "sad", "stressed", "grateful"]);
+
+function localDayKey(d = new Date()): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+// MOOD CHECK-INS
+export async function upsertMoodCheckIn(mood: string, note?: string, day?: string) {
+  try {
+    const me = await requireUser();
+    if (!VALID_MOODS.has(mood)) throw new Error("Invalid mood.");
+    const dayKey = (day && /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : localDayKey()).slice(0, 10);
+    await dbConnect();
+    const entry = await MoodCheckIn.findOneAndUpdate(
+      { user: me, day: dayKey },
+      {
+        user: me,
+        mood,
+        note: String(note || "").trim().slice(0, 200),
+        day: dayKey,
+        updatedAt: new Date(),
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+    revalidatePath('/');
+    notifyRealtime();
+    return JSON.parse(JSON.stringify(entry));
+  } catch (error) {
+    console.error("Failed to upsert mood:", error);
+    if (error instanceof Error && /Unauthorized|Invalid/i.test(error.message)) throw error;
+    throw new Error("Failed to save check-in.");
+  }
+}
+
+// POLLS
+export async function sendPoll(
+  question: string,
+  options: string[],
+  clientMessageId?: string
+) {
+  try {
+    const me = await requireUser();
+    const q = String(question || "").trim().slice(0, 200);
+    if (!q) throw new Error("Poll question is required.");
+    const cleaned = (options || [])
+      .map((o) => String(o || "").trim().slice(0, 80))
+      .filter(Boolean);
+    if (cleaned.length < 2 || cleaned.length > 6) {
+      throw new Error("Polls need between 2 and 6 options.");
+    }
+    await dbConnect();
+    const disappearing = await disappearingCreateFields();
+    const pollMeta = {
+      question: q,
+      options: cleaned.map((text, i) => ({ id: `opt${i + 1}`, text })),
+      votes: [] as Array<{ user: string; optionId: string }>,
+      closed: false,
+    };
+    const data = {
+      text: q,
+      createdBy: me,
+      kind: "poll" as const,
+      pollMeta,
+      ...disappearing,
+      ...(clientMessageId ? { clientMessageId: String(clientMessageId).slice(0, 80) } : {}),
+    };
+    let message;
+    try {
+      message = await Message.create(data);
+    } catch (err: unknown) {
+      if (typeof err === "object" && err !== null && (err as { code?: number }).code === 11000 && data.clientMessageId) {
+        const existing = await Message.findOne({ clientMessageId: data.clientMessageId }).lean();
+        if (existing) return protectMessageMedia(JSON.parse(JSON.stringify(existing)));
+      }
+      throw err;
+    }
+    notifyRealtime();
+    return protectMessageMedia(JSON.parse(JSON.stringify(message)));
+  } catch (error) {
+    console.error("Failed to send poll:", error);
+    if (error instanceof Error && /Unauthorized|required|between/i.test(error.message)) throw error;
+    throw new Error("Failed to create poll.");
+  }
+}
+
+export async function votePoll(messageId: string, optionId: string) {
+  try {
+    const me = await requireUser();
+    await dbConnect();
+    const message = await Message.findById(messageId);
+    if (!message || message.kind !== "poll" || !message.pollMeta) {
+      throw new Error("Poll not found.");
+    }
+    if (message.pollMeta.closed) throw new Error("This poll is closed.");
+    const valid = (message.pollMeta.options || []).some((o: { id: string }) => o.id === optionId);
+    if (!valid) throw new Error("Invalid option.");
+
+    const votes = (message.pollMeta.votes || []).filter(
+      (v: { user: string }) => v.user.trim().toLowerCase() !== me.trim().toLowerCase()
+    );
+    votes.push({ user: me, optionId });
+    message.pollMeta.votes = votes;
+    message.markModified("pollMeta");
+    await message.save();
+    notifyRealtime();
+    return protectMessageMedia(JSON.parse(JSON.stringify(message)));
+  } catch (error) {
+    console.error("Failed to vote:", error);
+    if (error instanceof Error && /Unauthorized|not found|closed|Invalid/i.test(error.message)) throw error;
+    throw new Error("Failed to vote.");
+  }
+}
+
+export async function closePoll(messageId: string) {
+  try {
+    const me = await requireUser();
+    await dbConnect();
+    const message = await Message.findById(messageId);
+    if (!message || message.kind !== "poll" || !message.pollMeta) {
+      throw new Error("Poll not found.");
+    }
+    if (message.createdBy.trim().toLowerCase() !== me.trim().toLowerCase()) {
+      throw new Error("Only the creator can close this poll.");
+    }
+    message.pollMeta.closed = true;
+    message.markModified("pollMeta");
+    await message.save();
+    notifyRealtime();
+    return protectMessageMedia(JSON.parse(JSON.stringify(message)));
+  } catch (error) {
+    console.error("Failed to close poll:", error);
+    if (error instanceof Error && /Unauthorized|not found|Only/i.test(error.message)) throw error;
+    throw new Error("Failed to close poll.");
   }
 }
 
@@ -613,6 +1088,7 @@ export async function sendMessage(
     const documents = validateDocuments(extras?.documents);
     const location = validateLocation(extras?.location);
 
+    const disappearing = await disappearingCreateFields();
     // Never persist raw Cloudinary CDN URLs for photos/videos/audio — only login-gated proxies.
     const data = {
       text,
@@ -621,6 +1097,7 @@ export async function sendMessage(
       videoUrls: protectMediaUrlList(videoUrls),
       audioUrls: protectMediaUrlList(audioUrls),
       repliedTo,
+      ...disappearing,
       ...(documents ? { documents } : {}),
       ...(location ? { location, kind: "location" as const } : {}),
       ...(extras?.clientMessageId ? { clientMessageId: String(extras.clientMessageId).slice(0, 80) } : {}),
@@ -751,19 +1228,26 @@ export async function deleteMessage(id: string, deleteFromCloudinaryToo: boolean
 
 export async function toggleSaveMessage(id: string, username: string) {
   try {
+    const me = await requireUser();
+    void username;
     await dbConnect();
     const message = await Message.findById(id);
     if (!message) throw new Error("Message not found");
 
-    const isSaved = message.savedBy.includes(username);
+    const isSaved = (message.savedBy || []).includes(me);
     if (isSaved) {
-      await Message.findByIdAndUpdate(id, { $pull: { savedBy: username } });
+      // Unsaving does NOT restore disappearing behavior — permanence sticks.
+      await Message.findByIdAndUpdate(id, { $pull: { savedBy: me } });
     } else {
-      await Message.findByIdAndUpdate(id, { $addToSet: { savedBy: username } });
+      await Message.findByIdAndUpdate(id, { $addToSet: { savedBy: me } });
+      // First save permanently converts a disappearing message into a regular one.
+      if (message.disappearing) {
+        await permanentlyKeepMessage(id);
+      }
     }
     revalidatePath('/');
     notifyRealtime();
-    return { saved: !isSaved };
+    return { saved: !isSaved, keptPermanently: !isSaved && Boolean(message.disappearing) };
   } catch (error) {
     console.error('Failed to toggle save message:', error);
     throw new Error('Failed to toggle save message.');
@@ -1001,21 +1485,24 @@ export async function fetchAllMedia(currentUser?: string) {
   noStore();
   try {
     await dbConnect();
-    
-    const mediaQuery: Record<string, unknown> = {
-      $or: [
-        { imageUrl: { $exists: true, $nin: [null, ""] } },
-        { imageUrls: { $exists: true, $not: { $size: 0 } } },
-        { videoUrl: { $exists: true, $nin: [null, ""] } },
-        { videoUrls: { $exists: true, $not: { $size: 0 } } }
-      ]
-    };
+    await purgeExpiredDisappearingMessages().catch(() => 0);
 
+    const clauses: Record<string, unknown>[] = [
+      notExpiredMessageFilter(),
+      {
+        $or: [
+          { imageUrl: { $exists: true, $nin: [null, ""] } },
+          { imageUrls: { $exists: true, $not: { $size: 0 } } },
+          { videoUrl: { $exists: true, $nin: [null, ""] } },
+          { videoUrls: { $exists: true, $not: { $size: 0 } } },
+        ],
+      },
+    ];
     if (currentUser) {
-      mediaQuery.deletedFor = { $ne: currentUser };
+      clauses.push({ deletedFor: { $ne: currentUser } });
     }
 
-    const messages = await Message.find(mediaQuery).sort({ createdAt: -1 }).lean();
+    const messages = await Message.find({ $and: clauses }).sort({ createdAt: -1 }).lean();
 
     return JSON.parse(JSON.stringify(messages));
   } catch (error) {

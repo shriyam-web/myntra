@@ -17,12 +17,15 @@ export function useRealtimeSync(
   view: ViewType,
   onSync: () => void,
   enabled = true,
-  onTyping?: (payload: TypingPayload) => void
+  onTyping?: (payload: TypingPayload) => void,
+  onShared?: () => void
 ) {
   const onSyncRef = useRef(onSync);
   onSyncRef.current = onSync;
   const onTypingRef = useRef(onTyping);
   onTypingRef.current = onTyping;
+  const onSharedRef = useRef(onShared);
+  onSharedRef.current = onShared;
 
   useEffect(() => {
     if (view === "login" || !enabled) return;
@@ -82,6 +85,10 @@ export function useRealtimeSync(
       eventSource = new EventSource(`/api/realtime?user=${encodeURIComponent(view)}`);
 
       eventSource.addEventListener("messages", () => scheduleSync());
+      eventSource.addEventListener("shared", () => {
+        if (disposed || tabHidden) return;
+        onSharedRef.current?.();
+      });
       eventSource.addEventListener("typing", (event) => {
         if (disposed || !onTypingRef.current) return;
         try {

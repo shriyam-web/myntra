@@ -7,7 +7,7 @@ import { useMessageSendQueue } from "./Home/hooks/useMessageSendQueue";
 import { useAudio } from "./Home/hooks/useAudio";
 import { usePresence } from "./Home/hooks/usePresence";
 import { themes, wallpapers } from "./Home/constants";
-import { ViewType, Message, UserType, TabType, ReactionType, MessageReaction, DocumentAttachment, LocationAttachment } from "./Home/types";
+import { ViewType, Message, UserType, TabType, ReactionType, MessageReaction, DocumentAttachment, LocationAttachment, MoodType } from "./Home/types";
 
 // Components
 import { LoginView } from "./Home/components/LoginView";
@@ -24,8 +24,11 @@ import { ChatWallpaper } from "./Home/components/ChatWallpaper";
 import { ThemeSettings } from "./Home/components/ThemeSettings";
 import { EmeButton } from "./Home/components/EmeButton";
 import { ClearHistoryModal } from "./Home/components/ClearHistoryModal";
+import { MessageSearchOverlay } from "./Home/components/MessageSearchOverlay";
+import { CheckInTab } from "./Home/components/CheckInTab";
 import { MediaTab } from "./Home/components/MediaTab";
 import { CallOverlay } from "./Home/components/CallOverlay";
+import { DisappearingModeModal } from "./Home/components/DisappearingModeModal";
 import { useCall } from "./Home/hooks/useCall";
 import { useRealtimeSync } from "./Home/hooks/useRealtimeSync";
 import { useTypingSignal, usePartnerTypingState } from "./Home/hooks/useTypingIndicator";
@@ -35,14 +38,20 @@ import { toProtectedMediaUrl } from "../lib/media-url";
 import { detectIncognitoMode } from "./Home/utils/detectIncognito";
 import { loginAction, logoutAction } from "../lib/auth/actions";
 
+const DISAPPEARING_ACK_KEY = "disappearing_mode_ack_at";
+
 export default function HomeClient({ initialUser = null }: { initialUser?: string | null }) {
   const [isIncognito, setIsIncognito] = useState<boolean | null>(null);
   const [password, setPassword] = useState("");
   const [view, setView] = useState<ViewType>((initialUser as ViewType) || "login");
   const [loginError, setLoginError] = useState<string | null>(null);
+  const [loginAttempts, setLoginAttempts] = useState(0);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>("complaints");
+  const [showMessageSearch, setShowMessageSearch] = useState(false);
+  const [showDisappearingModal, setShowDisappearingModal] = useState(false);
+  const [togglingDisappearing, setTogglingDisappearing] = useState(false);
   
   const [messageLimit, setMessageLimit] = useState(50);
   
@@ -55,14 +64,20 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
     wishlist,
     plans,
     dates,
+    reminders,
+    moods,
     users, setUsers,
     hasMoreMessages,
     isConnected,
     isRefreshing,
     maintenanceMode,
+    disappearingMode,
+    disappearingEnabledAt,
+    disappearingEnabledBy,
     fetchInitialData,
     fetchMessagesOnly,
     scheduleFetchMessages,
+    fetchSharedData,
     fetchAllMedia
   } = useAppData(view, messageLimit);
 
@@ -93,8 +108,15 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
   const [newMessage, setNewMessage] = useState("");
   const [newWish, setNewWish] = useState("");
   const [newPlan, setNewPlan] = useState("");
+  const [newPlanDue, setNewPlanDue] = useState("");
   const [newEvent, setNewEvent] = useState("");
   const [newDate, setNewDate] = useState("");
+  const [newDateYearly, setNewDateYearly] = useState(false);
+  const [newReminderTitle, setNewReminderTitle] = useState("");
+  const [newReminderDue, setNewReminderDue] = useState("");
+  const [selectedMood, setSelectedMood] = useState<MoodType | null>(null);
+  const [moodNote, setMoodNote] = useState("");
+  const [dismissedReminderIds, setDismissedReminderIds] = useState<string[]>([]);
   
   const [editingWish, setEditingWish] = useState<string | null>(null);
   const [editingWishText, setEditingWishText] = useState("");
@@ -103,6 +125,7 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
   const [editingDate, setEditingDate] = useState<string | null>(null);
   const [editingDateText, setEditingDateText] = useState("");
   const [editingEventText, setEditingEventText] = useState("");
+  const [editingDateYearly, setEditingDateYearly] = useState(false);
   const [editingMessage, setEditingMessage] = useState<string | null>(null);
   const [editingMessageText, setEditingMessageText] = useState("");
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
@@ -281,9 +304,15 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
     }, UNSEEN_SEPARATOR_DURATION_MS);
   }, [activeTab, messages, users, currentUser]);
 
-  useRealtimeSync(view, useCallback(() => {
-    scheduleFetchMessages(true);
-  }, [scheduleFetchMessages]), view !== "login", handleTypingEvent);
+  useRealtimeSync(
+    view,
+    useCallback(() => {
+      scheduleFetchMessages(true);
+    }, [scheduleFetchMessages]),
+    view !== "login",
+    handleTypingEvent,
+    fetchSharedData
+  );
 
   useEffect(() => {
     if (view !== "login") {
@@ -412,10 +441,12 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
       const result = await loginAction(passwordOverride ?? password);
       if (!result.ok) {
         setLoginError(result.error);
+        setLoginAttempts(result.attempts);
         return;
       }
       setView(result.user as ViewType);
       setPassword("");
+      setLoginAttempts(0);
     } catch (error) {
       console.error("Login failed:", error);
       setLoginError("Login failed");
@@ -479,11 +510,21 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
   const handleCreatePlan = async () => {
     if (!newPlan.trim()) return;
     try {
-      await actions.createPlan(newPlan, currentUser);
+      await actions.createPlan(newPlan, currentUser, newPlanDue || null);
       setNewPlan("");
-      fetchInitialData();
+      setNewPlanDue("");
+      await Promise.all([fetchSharedData(), fetchMessagesOnly(true)]);
     } catch (error) {
       console.error('Failed to create plan:', error);
+    }
+  };
+
+  const handleCreateTaskFromChat = async (title: string, dueAt?: string | null) => {
+    try {
+      await actions.createPlan(title, currentUser, dueAt || null);
+      await Promise.all([fetchSharedData(), fetchMessagesOnly(true)]);
+    } catch (error) {
+      console.error("Failed to create task from chat:", error);
     }
   };
 
@@ -492,16 +533,25 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
       await actions.updatePlan(id, content);
       setEditingPlan(null);
       setEditingPlanText("");
-      fetchInitialData();
+      fetchSharedData();
     } catch (error) {
       console.error('Failed to update plan:', error);
+    }
+  };
+
+  const handleTogglePlan = async (id: string) => {
+    try {
+      await actions.togglePlanDone(id);
+      fetchSharedData();
+    } catch (error) {
+      console.error('Failed to toggle task:', error);
     }
   };
 
   const handleDeletePlan = async (id: string) => {
     try {
       await actions.deletePlan(id);
-      fetchInitialData();
+      fetchSharedData();
     } catch (error) {
       console.error('Failed to delete plan:', error);
     }
@@ -510,22 +560,24 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
   const handleCreateDate = async () => {
     if (!newEvent.trim() || !newDate.trim()) return;
     try {
-      await actions.createDate(newEvent, newDate, currentUser);
+      await actions.createDate(newEvent, newDate, currentUser, { recurringYearly: newDateYearly });
       setNewEvent("");
       setNewDate("");
-      fetchInitialData();
+      setNewDateYearly(false);
+      fetchSharedData();
     } catch (error) {
       console.error('Failed to create date:', error);
     }
   };
 
-  const handleUpdateDate = async (id: string, event: string, date: string) => {
+  const handleUpdateDate = async (id: string, event: string, date: string, recurringYearly?: boolean) => {
     try {
-      await actions.updateDate(id, { event, date });
+      await actions.updateDate(id, { event, date, recurringYearly: Boolean(recurringYearly) });
       setEditingDate(null);
       setEditingDateText("");
       setEditingEventText("");
-      fetchInitialData();
+      setEditingDateYearly(false);
+      fetchSharedData();
     } catch (error) {
       console.error('Failed to update date:', error);
     }
@@ -534,9 +586,125 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
   const handleDeleteDate = async (id: string) => {
     try {
       await actions.deleteDate(id);
-      fetchInitialData();
+      fetchSharedData();
     } catch (error) {
       console.error('Failed to delete date:', error);
+    }
+  };
+
+  const handleCreateReminder = async () => {
+    if (!newReminderTitle.trim() || !newReminderDue) return;
+    try {
+      await actions.createReminder(newReminderTitle, new Date(newReminderDue).toISOString());
+      setNewReminderTitle("");
+      setNewReminderDue("");
+      await Promise.all([fetchSharedData(), fetchMessagesOnly(true)]);
+    } catch (error) {
+      console.error("Failed to create reminder:", error);
+    }
+  };
+
+  const handleCreateReminderFromChat = async (title: string, dueAt: string) => {
+    try {
+      await actions.createReminder(title, dueAt);
+      await Promise.all([fetchSharedData(), fetchMessagesOnly(true)]);
+    } catch (error) {
+      console.error("Failed to create reminder from chat:", error);
+    }
+  };
+
+  const handleToggleReminder = async (id: string) => {
+    try {
+      await actions.toggleReminderDone(id);
+      fetchSharedData();
+    } catch (error) {
+      console.error("Failed to toggle reminder:", error);
+    }
+  };
+
+  const handleDeleteReminder = async (id: string) => {
+    try {
+      await actions.deleteReminder(id);
+      fetchSharedData();
+    } catch (error) {
+      console.error("Failed to delete reminder:", error);
+    }
+  };
+
+  const handleSaveMood = async () => {
+    if (!selectedMood) return;
+    try {
+      await actions.upsertMoodCheckIn(selectedMood, moodNote);
+      setMoodNote("");
+      fetchSharedData();
+    } catch (error) {
+      console.error("Failed to save mood:", error);
+    }
+  };
+
+  const handleShareMoodToChat = () => {
+    const today = new Date();
+    const day = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    const mine = moods.find(
+      (m) => m.user.trim().toLowerCase() === currentUser.trim().toLowerCase() && m.day === day
+    );
+    if (!mine) return;
+    setNewMessage(`Feeling ${mine.mood} today${mine.note ? ` — ${mine.note}` : ""}`);
+    setActiveTab("messages");
+  };
+
+  const handleCreatePoll = async (question: string, options: string[]) => {
+    const clientMessageId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const optimistic: Message = {
+      _id: clientMessageId,
+      clientMessageId,
+      text: question,
+      kind: "poll",
+      disappearing: disappearingMode || undefined,
+      pollMeta: {
+        question,
+        options: options.map((text, i) => ({ id: `opt${i + 1}`, text })),
+        votes: [],
+        closed: false,
+      },
+      createdBy: currentUser as UserType,
+      createdAt: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, optimistic]);
+    try {
+      const serverMsg = await actions.sendPoll(question, options, clientMessageId);
+      if (serverMsg) {
+        setMessages((prev) =>
+          prev.map((m) => (m._id === clientMessageId || m.clientMessageId === clientMessageId ? serverMsg : m))
+        );
+      } else {
+        fetchMessagesOnly(true);
+      }
+    } catch (error) {
+      console.error("Failed to send poll:", error);
+      setMessages((prev) => prev.filter((m) => m._id !== clientMessageId));
+    }
+  };
+
+  const handleVotePoll = async (messageId: string, optionId: string) => {
+    try {
+      const updated = await actions.votePoll(messageId, optionId);
+      if (updated) {
+        setMessages((prev) => prev.map((m) => (m._id === messageId ? updated : m)));
+      }
+    } catch (error) {
+      console.error("Failed to vote:", error);
+    }
+  };
+
+  const handleClosePoll = async (messageId: string) => {
+    try {
+      const updated = await actions.closePoll(messageId);
+      if (updated) {
+        setMessages((prev) => prev.map((m) => (m._id === messageId ? updated : m)));
+      }
+    } catch (error) {
+      console.error("Failed to close poll:", error);
     }
   };
 
@@ -635,6 +803,7 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
     dismissSendError,
   } = useMessageSendQueue({
     currentUser,
+    disappearingMode,
     setMessages,
     fetchMessagesOnly,
     uploadToCloudinary,
@@ -732,9 +901,19 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
       setMessages(prev => prev.map(m => {
         if (m._id === id) {
           const isSaved = (m.savedBy || []).includes(currentUser);
-          const newSavedBy = isSaved 
+          const newSavedBy = isSaved
             ? (m.savedBy || []).filter(u => u !== currentUser)
             : [...(m.savedBy || []), currentUser];
+          // Saving permanently clears disappearing fields (server does the same).
+          if (!isSaved && m.disappearing) {
+            return {
+              ...m,
+              savedBy: newSavedBy,
+              disappearing: false,
+              viewedAt: null,
+              expiresAt: null,
+            };
+          }
           return { ...m, savedBy: newSavedBy };
         }
         return m;
@@ -745,6 +924,78 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
       fetchInitialData();
     }
   };
+
+  const handleToggleDisappearingMode = async () => {
+    if (togglingDisappearing) return;
+    setTogglingDisappearing(true);
+    setIsMenuOpen(false);
+    try {
+      const next = !disappearingMode;
+      const status = await actions.setDisappearingMode(next);
+      if (status.disappearingMode) {
+        try {
+          localStorage.setItem(DISAPPEARING_ACK_KEY, status.disappearingEnabledAt || "");
+        } catch { /* ignore */ }
+        setShowDisappearingModal(true);
+      }
+      await Promise.all([fetchMessagesOnly(true), fetchSharedData()]);
+    } catch (error) {
+      console.error("Failed to toggle disappearing mode:", error);
+    } finally {
+      setTogglingDisappearing(false);
+    }
+  };
+
+  const handleViewDisappearingMessages = useCallback(async (messageIds: string[]) => {
+    if (!messageIds.length) return;
+    // Optimistic local mark so countdown UI appears immediately for the viewer
+    const nowIso = new Date().toISOString();
+    const expiresIso = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    setMessages((prev) =>
+      prev.map((m) =>
+        messageIds.includes(m._id) && m.disappearing && !m.viewedAt
+          ? { ...m, viewedAt: nowIso, expiresAt: expiresIso }
+          : m
+      )
+    );
+    try {
+      await actions.markMessagesViewed(messageIds);
+    } catch (error) {
+      console.error("Failed to mark disappearing messages viewed:", error);
+    }
+  }, [setMessages]);
+
+  // Show info modal once per activation (both partners).
+  useEffect(() => {
+    if (!disappearingMode || !disappearingEnabledAt || view === "login") return;
+    let ack = "";
+    try {
+      ack = localStorage.getItem(DISAPPEARING_ACK_KEY) || "";
+    } catch { /* ignore */ }
+    if (ack === disappearingEnabledAt) return;
+    setShowDisappearingModal(true);
+  }, [disappearingMode, disappearingEnabledAt, view]);
+
+  // Drop expired disappearing messages from the open client without waiting for SSE/TTL.
+  useEffect(() => {
+    if (view === "login") return;
+    const tick = () => {
+      const now = Date.now();
+      setMessages((prev) => {
+        const next = prev.filter(
+          (m) =>
+            !m.disappearing ||
+            !m.expiresAt ||
+            new Date(m.expiresAt).getTime() > now ||
+            (m.savedBy && m.savedBy.length > 0)
+        );
+        return next.length === prev.length ? prev : next;
+      });
+    };
+    tick();
+    const id = window.setInterval(tick, 15000);
+    return () => window.clearInterval(id);
+  }, [view, setMessages, messages.length]);
 
   const handleTogglePinMessage = async (id: string) => {
     try {
@@ -959,10 +1210,16 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
   const activeTheme = themes.find(t => t.name === themeName) || themes[0];
   const partnerUsername = currentUser.trim().toLowerCase() === "alpha 1" ? "delta 1" : "alpha 1";
   const partnerAvatar = partnerUsername === "alpha 1" ? "/female.png" : "/male.png";
+  const dueReminders = reminders.filter(
+    (r) =>
+      !r.done &&
+      new Date(r.dueAt).getTime() <= Date.now() &&
+      !dismissedReminderIds.includes(r._id)
+  );
 
   if (isIncognito === null) return <IncognitoVerify status="verifying" />;
   if (isIncognito === false) return <IncognitoVerify status="blocked" />;
-  if (view === "login") return <LoginView password={password} setPassword={setPassword} handleLogin={handleLogin} loginError={loginError} isLoggingIn={isLoggingIn} />;
+  if (view === "login") return <LoginView password={password} setPassword={setPassword} handleLogin={handleLogin} loginError={loginError} isLoggingIn={isLoggingIn} failedAttempts={loginAttempts} />;
 
   return (
     <div className="flex flex-col min-h-[100svh] bg-zinc-950 text-zinc-100 font-sans pb-2 selection:bg-white selection:text-black">
@@ -985,6 +1242,7 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
           isRefreshing={isRefreshing}
           fetchInitialData={handleManualRefresh}
           handleLogout={handleLogout}
+          onOpenSearch={() => setShowMessageSearch(true)}
         />
         )}
 
@@ -1035,12 +1293,15 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
             plans={plans}
             newPlan={newPlan}
             setNewPlan={setNewPlan}
+            newPlanDue={newPlanDue}
+            setNewPlanDue={setNewPlanDue}
             handleCreatePlan={handleCreatePlan}
             editingPlan={editingPlan}
             setEditingPlan={setEditingPlan}
             editingPlanText={editingPlanText}
             setEditingPlanText={setEditingPlanText}
             handleUpdatePlan={handleUpdatePlan}
+            handleTogglePlan={handleTogglePlan}
             handleDeletePlan={handleDeletePlan}
           />
         )}
@@ -1048,10 +1309,13 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
         {activeTab === "dates" && (
           <TimelineTab 
             dates={dates}
+            reminders={reminders}
             newEvent={newEvent}
             setNewEvent={setNewEvent}
             newDate={newDate}
             setNewDate={setNewDate}
+            newDateYearly={newDateYearly}
+            setNewDateYearly={setNewDateYearly}
             handleCreateDate={handleCreateDate}
             editingDate={editingDate}
             setEditingDate={setEditingDate}
@@ -1059,8 +1323,30 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
             setEditingDateText={setEditingDateText}
             editingEventText={editingEventText}
             setEditingEventText={setEditingEventText}
+            editingDateYearly={editingDateYearly}
+            setEditingDateYearly={setEditingDateYearly}
             handleUpdateDate={handleUpdateDate}
             handleDeleteDate={handleDeleteDate}
+            newReminderTitle={newReminderTitle}
+            setNewReminderTitle={setNewReminderTitle}
+            newReminderDue={newReminderDue}
+            setNewReminderDue={setNewReminderDue}
+            handleCreateReminder={handleCreateReminder}
+            handleToggleReminder={handleToggleReminder}
+            handleDeleteReminder={handleDeleteReminder}
+          />
+        )}
+
+        {activeTab === "checkin" && currentUser !== "login" && (
+          <CheckInTab
+            currentUser={currentUser as UserType}
+            moods={moods}
+            selectedMood={selectedMood}
+            setSelectedMood={setSelectedMood}
+            moodNote={moodNote}
+            setMoodNote={setMoodNote}
+            handleSaveMood={handleSaveMood}
+            handleShareMoodToChat={handleShareMoodToChat}
           />
         )}
 
@@ -1111,11 +1397,16 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
                     {isMessageExpanded && (
                       <span className="text-sm font-medium text-white truncate capitalize">{partnerUsername}</span>
                     )}
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className={`inline-flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider ${getPartnerStatus() === "Online" ? "text-green-500" : "text-zinc-500"}`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${getPartnerStatus() === "Online" ? "bg-green-500 animate-pulse" : "bg-zinc-600"}`} />
                         {getPartnerStatus() || "Offline"}
                       </span>
+                      {disappearingMode && (
+                        <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md text-violet-200 bg-violet-500/20 border border-violet-400/30 animate-pulse">
+                          ⏱ Disappearing
+                        </span>
+                      )}
                       {!isMessageExpanded && lastRefreshedAt && (
                         <span className="text-[9px] font-medium text-zinc-600 italic">
                           • {lastRefreshedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true })}
@@ -1193,6 +1484,20 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>
                             <span className="text-[11px] font-bold uppercase tracking-wider">Theme & Wallpaper</span>
                           </button>
+                          <button
+                            onClick={() => void handleToggleDisappearingMode()}
+                            disabled={togglingDisappearing}
+                            className={`w-full flex items-center gap-3 px-4 py-2.5 transition-colors text-left ${
+                              disappearingMode
+                                ? "text-violet-200 hover:bg-violet-500/15"
+                                : "text-zinc-300 hover:text-white hover:bg-zinc-800"
+                            }`}
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                            <span className="text-[11px] font-bold uppercase tracking-wider">
+                              {disappearingMode ? "Disappearing: On" : "Disappearing Messages"}
+                            </span>
+                          </button>
                           <div className="h-px bg-zinc-800 my-1 mx-2" />
                           <button
                             onClick={() => {
@@ -1210,19 +1515,61 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
                 </div>
              </div>
 
+             {dueReminders.length > 0 && (
+               <div className="mx-1 mb-2 space-y-1.5 shrink-0">
+                 {dueReminders.slice(0, 3).map((r) => (
+                   <div
+                     key={r._id}
+                     className="flex items-center gap-2 px-3 py-2.5 rounded-2xl bg-amber-500/15 border border-amber-500/30"
+                   >
+                     <span className="text-amber-300 text-xs shrink-0">⏰</span>
+                     <div className="min-w-0 flex-1">
+                       <p className="text-xs font-semibold text-amber-100 truncate">{r.title}</p>
+                       <p className="text-[10px] text-amber-200/70">Reminder due</p>
+                     </div>
+                     <button
+                       onClick={() => handleToggleReminder(r._id)}
+                       className="text-[10px] font-bold uppercase tracking-wider text-amber-200 hover:text-white px-2 py-1 rounded-lg hover:bg-amber-500/20"
+                     >
+                       Done
+                     </button>
+                     <button
+                       onClick={() => setDismissedReminderIds((prev) => [...prev, r._id])}
+                       className="text-amber-200/60 hover:text-white px-1"
+                       aria-label="Dismiss"
+                     >
+                       ✕
+                     </button>
+                   </div>
+                 ))}
+               </div>
+             )}
+
              <div className={`relative flex flex-col min-h-0 flex-1 w-full mx-auto ${
                isMessageExpanded ? "max-w-lg" : "max-w-full"
              } ${chatBgColor} ${
                isMessageExpanded
                  ? "border-none shadow-none rounded-none"
                  : "rounded-[2rem] sm:rounded-[2.5rem] border border-zinc-800/50 shadow-2xl"
-             } overflow-hidden backdrop-blur-xl`}>
+             } overflow-hidden backdrop-blur-xl ${
+               disappearingMode ? "ring-1 ring-violet-500/30" : ""
+             }`}>
                 <div className={`absolute inset-0 pointer-events-none opacity-40 ${activeTheme.glow}`} />
                 {chatWallpaper && (
                     <ChatWallpaper wallpaperValue={chatWallpaper} wallpapers={wallpapers} />
                 )}
+                {disappearingMode && (
+                  <div className="absolute inset-0 pointer-events-none z-[1] bg-[radial-gradient(circle_at_50%_0%,rgba(139,92,246,0.22)_0%,rgba(88,28,135,0.12)_40%,transparent_75%)]" />
+                )}
+                {disappearingMode && (
+                  <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[65] px-3 py-1.5 rounded-full bg-violet-950/90 border border-violet-400/40 text-violet-100 text-[10px] font-bold uppercase tracking-wider shadow-lg shadow-violet-900/30">
+                    Disappearing on · 1h after viewed
+                  </div>
+                )}
                 {showSavedMessagesOnly && (
-                  <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[65] px-3 py-1.5 rounded-full bg-zinc-900/95 border border-zinc-700 text-zinc-200 text-[10px] font-bold uppercase tracking-wider">
+                  <div className={`absolute left-1/2 -translate-x-1/2 z-[65] px-3 py-1.5 rounded-full bg-zinc-900/95 border border-zinc-700 text-zinc-200 text-[10px] font-bold uppercase tracking-wider ${
+                    disappearingMode ? "top-12" : "top-3"
+                  }`}>
                     Saved Messages View
                   </div>
                 )}
@@ -1263,6 +1610,15 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
                     handleDownloadMedia={handleDownloadMedia}
                     handleCopyMessage={handleCopyMessage}
                     setPreviewMessage={setPreviewMessage}
+                    handleVotePoll={handleVotePoll}
+                    handleClosePoll={handleClosePoll}
+                    plans={plans}
+                    reminders={reminders}
+                    handleTogglePlan={handleTogglePlan}
+                    handleToggleReminder={handleToggleReminder}
+                    onOpenSharedItem={(kind) => setActiveTab(kind === "task" ? "plans" : "dates")}
+                    onViewDisappearingMessages={handleViewDisappearingMessages}
+                    handleToggleSaveMessage={handleToggleSaveMessage}
                     setPreviewImageIndex={setPreviewImageIndex}
                     partnerIsTyping={partnerIsTyping}
                 />
@@ -1298,6 +1654,10 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
                     sendError={sendError}
                     lastFailedText={lastFailedText}
                     onDismissSendError={dismissSendError}
+                    onCreatePoll={handleCreatePoll}
+                    onCreateTask={handleCreateTaskFromChat}
+                    onCreateReminder={handleCreateReminderFromChat}
+                    disappearingMode={disappearingMode}
                 />
              </div>
           </div>
@@ -1321,12 +1681,49 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
         handleUpdateChatPreferences={handleUpdateChatPreferences}
       />
 
-      <ClearHistoryModal 
+      {showMessageSearch && (
+        <MessageSearchOverlay
+          onClose={() => setShowMessageSearch(false)}
+          onJump={(messageId) => {
+            setShowMessageSearch(false);
+            setActiveTab("messages");
+            // Message rows render after the tab switch; retry until the row exists.
+            let attempts = 0;
+            const tryScroll = () => {
+              const el = document.getElementById(`message-${messageId}`);
+              if (el) {
+                el.scrollIntoView({ behavior: "smooth", block: "center" });
+                el.classList.add("ring-2", "ring-white/50", "bg-white/5");
+                setTimeout(() => el.classList.remove("ring-2", "ring-white/50", "bg-white/5"), 2000);
+                return;
+              }
+              if (attempts++ < 8) setTimeout(tryScroll, 200);
+            };
+            setTimeout(tryScroll, 150);
+          }}
+        />
+      )}
+
+      <ClearHistoryModal
         showClearHistoryModal={showClearHistoryModal}
         setShowClearHistoryModal={setShowClearHistoryModal}
         includeSavedInDelete={includeSavedInDelete}
         setIncludeSavedInDelete={setIncludeSavedInDelete}
         handleDeleteAllMessages={handleDeleteAllMessages}
+      />
+
+      <DisappearingModeModal
+        open={showDisappearingModal}
+        enabledBy={disappearingEnabledBy}
+        enabledAt={disappearingEnabledAt}
+        onClose={() => {
+          setShowDisappearingModal(false);
+          try {
+            if (disappearingEnabledAt) {
+              localStorage.setItem(DISAPPEARING_ACK_KEY, disappearingEnabledAt);
+            }
+          } catch { /* ignore */ }
+        }}
       />
 
       <CallOverlay 

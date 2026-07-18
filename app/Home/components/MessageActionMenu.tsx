@@ -7,7 +7,9 @@ interface MessageActionMenuProps {
   message: Message;
   isMe: boolean;
   isPinned: boolean;
+  isSaved?: boolean;
   onPin: () => void;
+  onSave?: () => void;
   onReply?: () => void;
   onCopy?: () => void;
   onEdit?: () => void;
@@ -20,14 +22,16 @@ export const MessageActionMenu: React.FC<MessageActionMenuProps> = ({
   message,
   isMe,
   isPinned,
+  isSaved = false,
   onPin,
+  onSave,
   onReply,
   onCopy,
   onEdit,
   onDelete,
   onClose,
 }) => {
-  const canEdit = isMe && !!message.text;
+  const canEdit = isMe && !!message.text && !["poll", "task", "reminder", "call-log"].includes(message.kind || "");
   const [position, setPosition] = React.useState<{ top: number; left: number } | null>(null);
 
   React.useLayoutEffect(() => {
@@ -91,6 +95,20 @@ export const MessageActionMenu: React.FC<MessageActionMenuProps> = ({
         </svg>
         <span className="text-xs font-medium">{isPinned ? "Unpin" : "Pin"}</span>
       </button>
+
+      {onSave && (
+        <button
+          onClick={() => { onSave(); onClose(); }}
+          className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-zinc-200 hover:bg-zinc-800 transition-colors"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill={isSaved ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={isSaved ? "text-emerald-400" : "text-zinc-400"}>
+            <path d="m19 21-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+          </svg>
+          <span className="text-xs font-medium">
+            {isSaved ? "Unsave" : message.disappearing ? "Save (keep forever)" : "Save"}
+          </span>
+        </button>
+      )}
 
       {onCopy && (
         <button

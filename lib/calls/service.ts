@@ -4,6 +4,7 @@ import dbConnect from "../mongodb";
 import { CallLog, CallSession, CallSignal, Message, User } from "../../models/schemas";
 import { partnerOf, type AuthUser } from "../auth/passwords";
 import { publishCallWake } from "./realtime";
+import { disappearingCreateFields } from "../disappearing-messages";
 import {
   HEARTBEAT_STALE_MS,
   RING_TIMEOUT_MS,
@@ -81,6 +82,8 @@ async function finalizeEndedSession(session: Record<string, unknown>, endedBy: s
   const duration = activeAt ? Math.max(0, Math.floor((endedAt.getTime() - activeAt.getTime()) / 1000)) : 0;
   const status = mapEndReasonToLogStatus(endReason, Boolean(activeAt));
 
+  const disappearing = await disappearingCreateFields();
+
   await CallLog.findOneAndUpdate(
     { callId },
     {
@@ -106,6 +109,7 @@ async function finalizeEndedSession(session: Record<string, unknown>, endedBy: s
         kind: "call-log",
         relatedCallId: callId,
         callMeta: { from: caller, to: callee, status, duration },
+        ...disappearing,
       },
     },
     { upsert: true }

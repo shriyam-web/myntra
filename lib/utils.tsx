@@ -117,6 +117,8 @@ export type PreviewableMessage = {
   audioUrls?: string[];
   documents?: Array<{ name?: string; url?: string }>;
   location?: { latitude: number; longitude: number };
+  pollMeta?: { question?: string };
+  kind?: string;
 };
 
 export type ReplyPreviewKind =
@@ -126,7 +128,10 @@ export type ReplyPreviewKind =
   | "audio"
   | "document"
   | "location"
-  | "call";
+  | "call"
+  | "poll"
+  | "task"
+  | "reminder";
 
 /** Human-readable one-line preview for a message (used in reply banners/quotes). */
 export const getMessagePreviewText = (
@@ -143,6 +148,11 @@ export const getMessagePreviewText = (
       : textOrMsg.text;
 
   if (msg?.location) return "Location";
+  if (msg?.kind === "poll" || msg?.pollMeta?.question) {
+    return `Poll · ${msg.pollMeta?.question || "Vote"}`;
+  }
+  if (msg?.kind === "task") return `Task · ${text || "Shared task"}`;
+  if (msg?.kind === "reminder") return `Reminder · ${text || "Shared reminder"}`;
   if (msg?.documents?.length) {
     const name = msg.documents[0]?.name;
     return name ? `📄 ${name}` : "Document";
@@ -169,6 +179,9 @@ export const getMessagePreviewText = (
 export const getReplyPreviewKind = (msg?: PreviewableMessage | null): ReplyPreviewKind => {
   if (!msg) return "text";
   if (msg.location) return "location";
+  if (msg.kind === "poll" || msg.pollMeta?.question) return "poll";
+  if (msg.kind === "task") return "task";
+  if (msg.kind === "reminder") return "reminder";
   if (msg.documents?.length) return "document";
   if (msg.audioUrl || (msg.audioUrls && msg.audioUrls.length > 0)) return "audio";
   if (msg.videoUrl || (msg.videoUrls && msg.videoUrls.length > 0)) return "video";

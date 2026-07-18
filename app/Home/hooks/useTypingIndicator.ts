@@ -71,6 +71,7 @@ export function useTypingSignal(currentUser: ViewType, enabled = true) {
 
 export function usePartnerTypingState(view: ViewType) {
   const [partnerIsTyping, setPartnerIsTyping] = useState(false);
+  const staleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleTypingEvent = useCallback(
     (payload: { user: string; typing: boolean }) => {
@@ -80,13 +81,23 @@ export function usePartnerTypingState(view: ViewType) {
         view.trim().toLowerCase() === "alpha 1" ? "delta 1" : "alpha 1";
       if (payload.user.trim().toLowerCase() !== partnerUsername) return;
 
-      setPartnerIsTyping(Boolean(payload.typing));
+      const typing = Boolean(payload.typing);
+      setPartnerIsTyping(typing);
+
+      // The server re-sends `typing: true` every ~1.2s while the partner types.
+      // If those refreshes stop (dropped SSE, closed tab), auto-clear so the
+      // indicator can never get stuck on.
+      if (staleTimerRef.current) clearTimeout(staleTimerRef.current);
+      if (typing) {
+        staleTimerRef.current = setTimeout(() => setPartnerIsTyping(false), 6000);
+      }
     },
     [view]
   );
 
   useEffect(() => {
     return () => {
+      if (staleTimerRef.current) clearTimeout(staleTimerRef.current);
       setPartnerIsTyping(false);
     };
   }, [view]);

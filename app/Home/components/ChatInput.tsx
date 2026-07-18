@@ -41,6 +41,10 @@ interface ChatInputProps {
   onDismissSendError?: () => void;
   onTypingActivity?: (hasContent: boolean) => void;
   onStopTyping?: () => void;
+  onCreatePoll?: (question: string, options: string[]) => void;
+  onCreateTask?: (title: string, dueAt?: string | null) => void;
+  onCreateReminder?: (title: string, dueAt: string) => void;
+  disappearingMode?: boolean;
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
@@ -71,6 +75,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   onDismissSendError,
   onTypingActivity,
   onStopTyping,
+  onCreatePoll,
+  onCreateTask,
+  onCreateReminder,
+  disappearingMode = false,
 }) => {
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
@@ -78,6 +86,14 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [recordingElapsedSec, setRecordingElapsedSec] = useState(0);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const [attachError, setAttachError] = useState<string | null>(null);
+  const [pollComposerOpen, setPollComposerOpen] = useState(false);
+  const [pollQuestion, setPollQuestion] = useState("");
+  const [pollOptions, setPollOptions] = useState(["", ""]);
+  const [pollError, setPollError] = useState<string | null>(null);
+  const [sharedComposer, setSharedComposer] = useState<"task" | "reminder" | null>(null);
+  const [sharedTitle, setSharedTitle] = useState("");
+  const [sharedDue, setSharedDue] = useState("");
+  const [sharedError, setSharedError] = useState<string | null>(null);
   const [locationStatus, setLocationStatus] = useState<"idle" | "acquiring" | "ready" | "error">("idle");
   const [locationError, setLocationError] = useState<string | null>(null);
   const mediaRecorderRef = React.useRef<MediaRecorder | null>(null);
@@ -391,7 +407,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
   return (
     <div
-      className={`relative shrink-0 bg-zinc-900/70 backdrop-blur-3xl border-t border-zinc-800/50 z-20 ${
+      className={`relative shrink-0 backdrop-blur-3xl border-t z-20 ${
+        disappearingMode
+          ? "bg-violet-950/50 border-violet-500/30"
+          : "bg-zinc-900/70 border-zinc-800/50"
+      } ${
         isMessageExpanded
           ? "p-3 sm:p-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
           : "p-4 sm:p-5"
@@ -427,8 +447,198 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               </span>
               Location
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAttachMenuOpen(false);
+                setPollComposerOpen(true);
+                setPollError(null);
+              }}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm text-zinc-200 hover:bg-white/5 active:bg-white/10"
+            >
+              <span className="w-8 h-8 rounded-full bg-amber-500/15 text-amber-400 flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M7 16V8"/><path d="M12 16v-5"/><path d="M17 16V4"/></svg>
+              </span>
+              Create poll
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAttachMenuOpen(false);
+                setSharedComposer("task");
+                setSharedError(null);
+              }}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm text-zinc-200 hover:bg-white/5 active:bg-white/10"
+            >
+              <span className="w-8 h-8 rounded-full bg-blue-500/15 text-blue-300 flex items-center justify-center font-bold">✓</span>
+              Create task
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAttachMenuOpen(false);
+                setSharedComposer("reminder");
+                setSharedError(null);
+              }}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm text-zinc-200 hover:bg-white/5 active:bg-white/10"
+            >
+              <span className="w-8 h-8 rounded-full bg-amber-500/15 text-amber-300 flex items-center justify-center">⏰</span>
+              Create reminder
+            </button>
           </div>
         </>
+      )}
+
+      {sharedComposer && (
+        <div className="mb-3 space-y-3 rounded-2xl border border-zinc-700/60 bg-zinc-950 p-4 animate-in slide-in-from-bottom-2 duration-200">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-bold uppercase tracking-widest text-zinc-400">
+              New shared {sharedComposer}
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setSharedComposer(null);
+                setSharedTitle("");
+                setSharedDue("");
+                setSharedError(null);
+              }}
+              className="text-xs text-zinc-500 hover:text-white"
+            >
+              Cancel
+            </button>
+          </div>
+          <input
+            value={sharedTitle}
+            onChange={(event) => setSharedTitle(event.target.value)}
+            placeholder={sharedComposer === "task" ? "What needs to be done?" : "Remind us to…"}
+            maxLength={200}
+            className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2.5 text-sm text-white outline-none focus:border-zinc-600"
+            autoFocus
+          />
+          <input
+            type="datetime-local"
+            value={sharedDue}
+            onChange={(event) => setSharedDue(event.target.value)}
+            className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2.5 text-sm text-zinc-300 outline-none focus:border-zinc-600 [color-scheme:dark]"
+          />
+          <p className="text-[10px] text-zinc-600">
+            {sharedComposer === "task" ? "Due time is optional." : "Choose when this reminder is due."}
+          </p>
+          {sharedError && <p className="text-[11px] text-red-400">{sharedError}</p>}
+          <button
+            type="button"
+            onClick={() => {
+              const title = sharedTitle.trim();
+              if (!title) {
+                setSharedError(`Add a ${sharedComposer} title.`);
+                return;
+              }
+              if (sharedComposer === "reminder" && !sharedDue) {
+                setSharedError("Choose a reminder time.");
+                return;
+              }
+              if (sharedComposer === "task") {
+                onCreateTask?.(title, sharedDue ? new Date(sharedDue).toISOString() : null);
+              } else {
+                onCreateReminder?.(title, new Date(sharedDue).toISOString());
+              }
+              setSharedComposer(null);
+              setSharedTitle("");
+              setSharedDue("");
+              setSharedError(null);
+            }}
+            className={`w-full rounded-xl py-2.5 text-xs font-black uppercase tracking-widest active:scale-[0.98] ${
+              sharedComposer === "task" ? "bg-blue-400 text-zinc-950" : "bg-amber-400 text-zinc-950"
+            }`}
+          >
+            Share in chat
+          </button>
+        </div>
+      )}
+
+      {pollComposerOpen && (
+        <div className="mb-3 p-4 rounded-2xl border border-zinc-700/60 bg-zinc-950 space-y-3 animate-in slide-in-from-bottom-2 duration-200">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-bold uppercase tracking-widest text-zinc-400">New poll</p>
+            <button
+              type="button"
+              onClick={() => {
+                setPollComposerOpen(false);
+                setPollQuestion("");
+                setPollOptions(["", ""]);
+                setPollError(null);
+              }}
+              className="text-zinc-500 hover:text-white text-xs"
+            >
+              Cancel
+            </button>
+          </div>
+          <input
+            value={pollQuestion}
+            onChange={(e) => setPollQuestion(e.target.value)}
+            placeholder="Ask a question…"
+            maxLength={200}
+            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-zinc-600"
+          />
+          {pollOptions.map((opt, idx) => (
+            <div key={idx} className="flex gap-2">
+              <input
+                value={opt}
+                onChange={(e) => {
+                  const next = [...pollOptions];
+                  next[idx] = e.target.value;
+                  setPollOptions(next);
+                }}
+                placeholder={`Option ${idx + 1}`}
+                maxLength={80}
+                className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-zinc-600"
+              />
+              {pollOptions.length > 2 && (
+                <button
+                  type="button"
+                  onClick={() => setPollOptions(pollOptions.filter((_, i) => i !== idx))}
+                  className="text-zinc-500 hover:text-red-400 px-2"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          ))}
+          {pollOptions.length < 6 && (
+            <button
+              type="button"
+              onClick={() => setPollOptions([...pollOptions, ""])}
+              className="text-[11px] font-semibold text-zinc-400 hover:text-white"
+            >
+              + Add option
+            </button>
+          )}
+          {pollError && <p className="text-[11px] text-red-400">{pollError}</p>}
+          <button
+            type="button"
+            onClick={() => {
+              const q = pollQuestion.trim();
+              const opts = pollOptions.map((o) => o.trim()).filter(Boolean);
+              if (!q) {
+                setPollError("Add a question.");
+                return;
+              }
+              if (opts.length < 2) {
+                setPollError("Need at least 2 options.");
+                return;
+              }
+              onCreatePoll?.(q, opts);
+              setPollComposerOpen(false);
+              setPollQuestion("");
+              setPollOptions(["", ""]);
+              setPollError(null);
+            }}
+            className="w-full py-2.5 rounded-xl bg-amber-400 text-black text-xs font-black uppercase tracking-widest active:scale-[0.98]"
+          >
+            Send poll
+          </button>
+        </div>
       )}
 
       {sendError && (
@@ -528,6 +738,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 {replyKind === "document" && "📄 "}
                 {replyKind === "location" && "📍 "}
                 {replyKind === "call" && "📞 "}
+                {replyKind === "poll" && "📊 "}
+                {replyKind === "task" && "✅ "}
+                {replyKind === "reminder" && "⏰ "}
                 {replyPreview}
               </p>
             </div>
@@ -658,7 +871,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               )}
             </div>
           )}
-          <div className="relative group/input flex items-center bg-zinc-950/90 border border-zinc-700/50 rounded-2xl sm:rounded-[1.5rem] focus-within:border-zinc-500/60 focus-within:ring-1 focus-within:ring-white/10 transition-all shadow-inner overflow-hidden px-1.5">
+          <div className={`relative group/input flex items-center rounded-2xl sm:rounded-[1.5rem] transition-all shadow-inner overflow-hidden px-1.5 ${
+            disappearingMode
+              ? "bg-violet-950/70 border border-violet-400/35 focus-within:border-violet-300/50 focus-within:ring-1 focus-within:ring-violet-400/20"
+              : "bg-zinc-950/90 border border-zinc-700/50 focus-within:border-zinc-500/60 focus-within:ring-1 focus-within:ring-white/10"
+          }`}>
             <div className="flex items-center gap-1 pr-1.5 relative">
               <button
                 type="button"
@@ -716,6 +933,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   ? ""
                   : sendQueueStatus.isActive
                   ? "Type another message…"
+                  : disappearingMode
+                  ? "Ephemeral message…"
                   : "Say, Hello!"
               }
               rows={1}
@@ -805,7 +1024,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           aria-label="Send message"
           className={`relative h-12 w-12 flex items-center justify-center rounded-full shrink-0 transition-all duration-300 ease-out ${
             canSend
-              ? `${activeTheme.bubbleMe} text-white shadow-lg ${activeTheme.shadow} hover:brightness-110 active:scale-90`
+              ? disappearingMode
+                ? "bg-violet-500 text-white shadow-lg shadow-violet-900/40 hover:brightness-110 active:scale-90"
+                : `${activeTheme.bubbleMe} text-white shadow-lg ${activeTheme.shadow} hover:brightness-110 active:scale-90`
               : "bg-zinc-800/35 text-zinc-600 opacity-45 cursor-not-allowed"
           }`}
         >

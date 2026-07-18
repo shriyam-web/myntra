@@ -1,11 +1,13 @@
 import React, { Fragment } from "react";
-import { Message, PresenceUser, Theme, ReactionType, isOptimisticMessageId } from "../types";
+import { Message, PlanItem, PresenceUser, ReminderItem, Theme, ReactionType, isOptimisticMessageId } from "../types";
 import { renderMessage, getVideoPoster, getMessagePreviewText, getReplyPreviewKind, getReplyThumbUrl } from "../../../lib/utils";
 import { mapsUrl, formatFileSize } from "../../../lib/attachments";
 import { toProtectedMediaUrl } from "../../../lib/media-url";
 import { REACTION_EMOJIS } from "../constants";
 import { ReactionBurst } from "./ReactionBurst";
 import { MediaSafetyModal, MediaSafetyInfo } from "./MediaSafetyModal";
+import { PollCard } from "./PollCard";
+import { SharedItemCard } from "./SharedItemCard";
 import { MessageActionMenu } from "./MessageActionMenu";
 import { ReactionPickerBar } from "./ReactionPickerBar";
 
@@ -186,6 +188,15 @@ interface MessageListProps {
   setPreviewMessage: (m: Message | null) => void;
   setPreviewImageIndex: (index: number) => void;
   partnerIsTyping?: boolean;
+  handleVotePoll?: (messageId: string, optionId: string) => void;
+  handleClosePoll?: (messageId: string) => void;
+  plans: PlanItem[];
+  reminders: ReminderItem[];
+  handleTogglePlan: (id: string) => void;
+  handleToggleReminder: (id: string) => void;
+  onOpenSharedItem: (kind: "task" | "reminder") => void;
+  onViewDisappearingMessages?: (messageIds: string[]) => void;
+  handleToggleSaveMessage?: (id: string) => void;
 }
 
 export const MessageList: React.FC<MessageListProps> = ({
@@ -226,10 +237,24 @@ export const MessageList: React.FC<MessageListProps> = ({
   setPreviewMessage,
   setPreviewImageIndex,
   partnerIsTyping = false,
+  handleVotePoll,
+  handleClosePoll,
+  plans,
+  reminders,
+  handleTogglePlan,
+  handleToggleReminder,
+  onOpenSharedItem,
+  onViewDisappearingMessages,
+  handleToggleSaveMessage,
 }) => {
   const [swipingMessageId, setSwipingMessageId] = React.useState<string | null>(null);
   const [swipeDistance, setSwipeDistance] = React.useState(0);
   const [mediaSafetyInfo, setMediaSafetyInfo] = React.useState<MediaSafetyInfo | null>(null);
+  const [nowTick, setNowTick] = React.useState(() => Date.now());
+  const viewedBatchRef = React.useRef<Set<string>>(new Set());
+  const viewFlushTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onViewRef = React.useRef(onViewDisappearingMessages);
+  onViewRef.current = onViewDisappearingMessages;
 
   const openMediaSafety = (kind: MediaSafetyInfo["kind"], url: string) => {
     // New uploads are authenticated assets behind the login proxy. Legacy files
@@ -266,6 +291,45 @@ export const MessageList: React.FC<MessageListProps> = ({
       scrollToBottom(true);
     }
   }, [partnerIsTyping, showScrollButton, scrollToBottom]);
+
+  React.useEffect(() => {
+    const hasCountdown = messages.some((m) => m.disappearing && m.expiresAt);
+    if (!hasCountdown) return;
+    const id = window.setInterval(() => setNowTick(Date.now()), 30000);
+    return () => window.clearInterval(id);
+  }, [messages]);
+
+  React.useEffect(() => {
+    const root = messagesContainerRef.current;
+    if (!root || !onViewRef.current) return;
+
+    const flush = () => {
+      if (!viewedBatchRef.current.size) return;
+      const ids = Array.from(viewedBatchRef.current);
+      viewedBatchRef.current.clear();
+      onViewRef.current?.(ids);
+    };
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting || entry.intersectionRatio < 0.55) continue;
+          const id = (entry.target as HTMLElement).dataset.disappearingId;
+          if (!id) continue;
+          viewedBatchRef.current.add(id);
+        }
+        if (viewFlushTimerRef.current) clearTimeout(viewFlushTimerRef.current);
+        viewFlushTimerRef.current = setTimeout(flush, 400);
+      },
+      { root, threshold: [0.55] }
+    );
+
+    root.querySelectorAll<HTMLElement>("[data-disappearing-id]").forEach((el) => observer.observe(el));
+    return () => {
+      observer.disconnect();
+      if (viewFlushTimerRef.current) clearTimeout(viewFlushTimerRef.current);
+    };
+  }, [messages, messagesContainerRef, currentUser]);
 
   const partnerAvatarSrc =
     currentUser.trim().toLowerCase() === "alpha 1" ? "/male.png" : "/female.png";
@@ -493,8 +557,17 @@ export const MessageList: React.FC<MessageListProps> = ({
                   {group.label}
                 </div>
               </div>
-              {group.messages.map((m) => {
+              {group.messages.map((m, msgIdx) => {
                 const isMe = m.createdBy.trim().toLowerCase() === currentUser.trim().toLowerCase();
+                // Group consecutive messages from the same sender: avatar only on the
+                // first of a run, tighter spacing between the rest.
+                const prevMsg = group.messages[msgIdx - 1];
+                const nextMsg = group.messages[msgIdx + 1];
+                const sameSenderAsPrev =
+                  !!prevMsg && prevMsg.createdBy.trim().toLowerCase() === m.createdBy.trim().toLowerCase();
+                const sameSenderAsNext =
+                  !!nextMsg && nextMsg.createdBy.trim().toLowerCase() === m.createdBy.trim().toLowerCase();
+                const showAvatar = !sameSenderAsPrev || unseenSeparatorMessageId === m._id;
                 const partnerUsername = currentUser.trim().toLowerCase() === "alpha 1" ? "delta 1" : "alpha 1";
                 const userObj = users.find((u) => u.username.trim().toLowerCase() === m.createdBy.trim().toLowerCase());
                 const partner = users.find((u) => u.username.trim().toLowerCase() === partnerUsername);
@@ -507,6 +580,56 @@ export const MessageList: React.FC<MessageListProps> = ({
                   new Date(m.createdAt).getTime() <= new Date(partner.lastReadAt).getTime();
                 const isOptimistic = isOptimisticMessageId(m._id);
                 const avatarSrc = m.createdBy.trim().toLowerCase() === "alpha 1" ? "/female.png" : "/male.png";
+                const systemText = (m.text || "").trim().toUpperCase();
+                const isDisappearingSystem =
+                  systemText.startsWith("[SYSTEM:DISAPPEARING_ON]") ||
+                  systemText.startsWith("[SYSTEM:DISAPPEARING_OFF]");
+                const isDisappearingMsg = Boolean(m.disappearing);
+                const needsViewMark =
+                  isDisappearingMsg &&
+                  !isMe &&
+                  !m.viewedAt &&
+                  !isOptimistic &&
+                  !(m.savedBy && m.savedBy.length > 0);
+
+                if (isDisappearingSystem) {
+                  const turnedOn = systemText.startsWith("[SYSTEM:DISAPPEARING_ON]");
+                  return (
+                    <Fragment key={m._id}>
+                      <div className="my-3 flex justify-center px-2">
+                        <div
+                          className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-wider border ${
+                            turnedOn
+                              ? "bg-violet-500/15 text-violet-200 border-violet-400/30"
+                              : "bg-zinc-800/80 text-zinc-400 border-zinc-700/60"
+                          }`}
+                        >
+                          <span>{turnedOn ? "⏱" : "○"}</span>
+                          <span>{turnedOn ? "Disappearing mode on" : "Disappearing mode off"}</span>
+                        </div>
+                      </div>
+                    </Fragment>
+                  );
+                }
+
+                let disappearLabel: string | null = null;
+                if (isDisappearingMsg) {
+                  if (m.savedBy && m.savedBy.length > 0) {
+                    disappearLabel = "Saved · kept permanently";
+                  } else if (m.expiresAt) {
+                    const remaining = new Date(m.expiresAt).getTime() - nowTick;
+                    if (remaining <= 0) disappearLabel = "Expiring…";
+                    else {
+                      const mins = Math.max(1, Math.ceil(remaining / 60000));
+                      disappearLabel =
+                        mins >= 60
+                          ? `Disappears in ${Math.floor(mins / 60)}h ${mins % 60}m`
+                          : `Disappears in ${mins}m`;
+                    }
+                  } else {
+                    disappearLabel = "Disappears 1h after viewed";
+                  }
+                }
 
                 return (
                   <Fragment key={m._id}>
@@ -521,6 +644,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                     )}
                     <div
                       id={`message-${m._id}`}
+                      data-disappearing-id={needsViewMark ? m._id : undefined}
                       onTouchStart={(e) => {
                       if (isInteractiveTouchTarget(e.target)) return;
                       swipeMovedRef.current = false;
@@ -577,7 +701,9 @@ export const MessageList: React.FC<MessageListProps> = ({
                       transform: swipingMessageId === m._id ? `translateX(${swipeDistance}px)` : 'none',
                       transition: swipingMessageId === m._id ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)'
                     }}
-                      className={`flex flex-col w-full transition-all duration-300 relative group/msg mb-2.5 ${
+                      className={`flex flex-col w-full transition-all duration-300 relative group/msg ${
+                        sameSenderAsNext ? "mb-1" : "mb-2.5"
+                      } ${
                         isMe ? "items-end" : "items-start"
                       } ${actionMenuId === m._id ? "z-[160]" : ""} ${
                         editingMessage === m._id ? "max-sm:scroll-mt-16 scroll-mb-24" : ""
@@ -599,17 +725,21 @@ export const MessageList: React.FC<MessageListProps> = ({
                         ? "w-full max-w-full sm:max-w-[85%]"
                         : "max-w-[95%] sm:max-w-[85%]"
                     } ${isMe ? "flex-row-reverse" : "flex-row"}`}>
-                      <div 
-                        className="flex-shrink-0 cursor-pointer active:scale-95 transition-transform mt-0.5 relative"
-                        onClick={() => setZoomedAvatar(avatarSrc)}
-                      >
-                        <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full border border-zinc-800/50 overflow-hidden shadow-md">
-                          <img src={avatarSrc} className="w-full h-full object-cover" alt="avatar" />
+                      {showAvatar ? (
+                        <div
+                          className="flex-shrink-0 cursor-pointer active:scale-95 transition-transform mt-0.5 relative"
+                          onClick={() => setZoomedAvatar(avatarSrc)}
+                        >
+                          <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full border border-zinc-800/50 overflow-hidden shadow-md">
+                            <img src={avatarSrc} className="w-full h-full object-cover" alt="avatar" />
+                          </div>
+                          {isOnline && (
+                            <div className="absolute bottom-0 right-0 w-2 h-2 bg-green-500 rounded-full border-2 border-zinc-950 shadow-sm"></div>
+                          )}
                         </div>
-                        {isOnline && (
-                          <div className="absolute bottom-0 right-0 w-2 h-2 bg-green-500 rounded-full border-2 border-zinc-950 shadow-sm"></div>
-                        )}
-                      </div>
+                      ) : (
+                        <div className="flex-shrink-0 w-6 sm:w-7" aria-hidden="true" />
+                      )}
 
                       <div
                         className={`flex flex-col gap-0.5 relative min-w-0 ${
@@ -656,6 +786,10 @@ export const MessageList: React.FC<MessageListProps> = ({
                             (m.pinnedBy || []).includes(currentUser)
                               ? "ring-2 ring-amber-300/70 border-amber-200/40 bg-gradient-to-br from-amber-400/20 via-amber-300/10 to-transparent shadow-[0_0_30px_rgba(251,191,36,0.22)]"
                               : ""
+                          } ${
+                            isDisappearingMsg
+                              ? "border-dashed border-violet-300/45 ring-1 ring-violet-400/20"
+                              : ""
                           }`}
                         >
                           {(m.pinnedBy || []).includes(currentUser) && (
@@ -694,8 +828,11 @@ export const MessageList: React.FC<MessageListProps> = ({
                                         {kind === "video" && "🎬 "}
                                         {kind === "audio" && "🎵 "}
                                         {kind === "document" && "📄 "}
+                                        {kind === "poll" && "📊 "}
                                         {kind === "location" && "📍 "}
                                         {kind === "call" && "📞 "}
+                                        {kind === "task" && "✅ "}
+                                        {kind === "reminder" && "⏰ "}
                                         {preview}
                                       </p>
                                     </div>
@@ -714,7 +851,37 @@ export const MessageList: React.FC<MessageListProps> = ({
                               );
                            })()}
 
-                          {m.text && (
+                          {m.kind === "poll" && m.pollMeta && handleVotePoll && handleClosePoll && (
+                            <PollCard
+                              message={m}
+                              currentUser={currentUser as "alpha 1" | "delta 1"}
+                              isMe={isMe}
+                              onVote={handleVotePoll}
+                              onClose={handleClosePoll}
+                            />
+                          )}
+
+                          {m.kind === "task" && m.sharedItemMeta?.itemId && (
+                            <SharedItemCard
+                              kind="task"
+                              item={plans.find((plan) => plan._id === m.sharedItemMeta?.itemId)}
+                              fallbackTitle={m.text || "Shared task"}
+                              onToggle={handleTogglePlan}
+                              onOpen={() => onOpenSharedItem("task")}
+                            />
+                          )}
+
+                          {m.kind === "reminder" && m.sharedItemMeta?.itemId && (
+                            <SharedItemCard
+                              kind="reminder"
+                              item={reminders.find((reminder) => reminder._id === m.sharedItemMeta?.itemId)}
+                              fallbackTitle={m.text || "Shared reminder"}
+                              onToggle={handleToggleReminder}
+                              onOpen={() => onOpenSharedItem("reminder")}
+                            />
+                          )}
+
+                          {m.text && !["poll", "task", "reminder"].includes(m.kind || "") && (
                             editingMessage === m._id ? (
                               <div className="flex flex-col gap-2">
                                   <textarea
@@ -980,6 +1147,11 @@ export const MessageList: React.FC<MessageListProps> = ({
                           )}
 
                           <div className={`text-[8px] mt-1 flex items-center gap-1 font-normal uppercase tracking-wider opacity-60 ${isMe ? 'justify-end' : 'justify-start'}`}>
+                              {isDisappearingMsg && (
+                                <span className="text-violet-200/90 normal-case tracking-normal" title={disappearLabel || ""}>
+                                  ⏱
+                                </span>
+                              )}
                               {new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                               {isMe && isOptimistic && (
                                 <span className="text-[7px] text-zinc-400 normal-case tracking-normal italic">Sending…</span>
@@ -994,6 +1166,15 @@ export const MessageList: React.FC<MessageListProps> = ({
                                   </span>
                               )}
                           </div>
+                          {disappearLabel && (
+                            <p className={`mt-1 text-[9px] font-medium tracking-wide ${
+                              disappearLabel.startsWith("Saved")
+                                ? "text-emerald-300/90"
+                                : "text-violet-200/80"
+                            }`}>
+                              {disappearLabel}
+                            </p>
+                          )}
 
                           {(m.reactions || []).length > 0 && (
                             <div className={`absolute -bottom-2 ${isMe ? 'right-2' : 'left-2'} flex items-center gap-0.5 px-1.5 py-0.5 bg-zinc-900/90 border border-zinc-700/50 rounded-full shadow-lg backdrop-blur-sm reaction-badge-pop z-10`}>
@@ -1012,10 +1193,12 @@ export const MessageList: React.FC<MessageListProps> = ({
                             message={m}
                             isMe={isMe}
                             isPinned={(m.pinnedBy || []).includes(currentUser)}
+                            isSaved={(m.savedBy || []).includes(currentUser)}
                             onPin={() => handleTogglePinMessage(m._id)}
+                            onSave={handleToggleSaveMessage ? () => handleToggleSaveMessage(m._id) : undefined}
                             onReply={() => setReplyingTo(m)}
                             onCopy={m.text ? () => handleCopyMessage(m.text || "") : undefined}
-                            onEdit={isMe && m.text ? () => {
+                            onEdit={isMe && m.text && !["poll", "task", "reminder", "call-log"].includes(m.kind || "") ? () => {
                               setEditingMessage(m._id);
                               setEditingMessageText(m.text || "");
                             } : undefined}

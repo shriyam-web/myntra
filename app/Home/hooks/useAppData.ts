@@ -1,6 +1,18 @@
 import { useState, useCallback, useRef } from "react";
 import * as actions from "../../../lib/actions";
-import { Ticket, Message, WishlistItem, PlanItem, TimelineDate, PresenceUser, ViewType, CallLog, isOptimisticMessageId } from "../types";
+import {
+  Ticket,
+  Message,
+  WishlistItem,
+  PlanItem,
+  TimelineDate,
+  ReminderItem,
+  MoodCheckInItem,
+  PresenceUser,
+  ViewType,
+  CallLog,
+  isOptimisticMessageId,
+} from "../types";
 
 export function useAppData(view: ViewType, messageLimit: number) {
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -10,6 +22,8 @@ export function useAppData(view: ViewType, messageLimit: number) {
   const [wishlist, setWishlist] = useState<WishlistItem[]>([]);
   const [plans, setPlans] = useState<PlanItem[]>([]);
   const [dates, setDates] = useState<TimelineDate[]>([]);
+  const [reminders, setReminders] = useState<ReminderItem[]>([]);
+  const [moods, setMoods] = useState<MoodCheckInItem[]>([]);
   const [users, setUsers] = useState<PresenceUser[]>([]);
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [isConnected, setIsConnected] = useState(true);
@@ -17,6 +31,9 @@ export function useAppData(view: ViewType, messageLimit: number) {
   const [maintenanceMode, setMaintenanceMode] = useState(false);
   const [maintenanceEnabledAt, setMaintenanceEnabledAt] = useState<string | null>(null);
   const [maintenanceEnabledBy, setMaintenanceEnabledBy] = useState<string | null>(null);
+  const [disappearingMode, setDisappearingMode] = useState(false);
+  const [disappearingEnabledAt, setDisappearingEnabledAt] = useState<string | null>(null);
+  const [disappearingEnabledBy, setDisappearingEnabledBy] = useState<string | null>(null);
 
   const syncInFlightRef = useRef(false);
   const syncAgainRef = useRef(false);
@@ -26,6 +43,9 @@ export function useAppData(view: ViewType, messageLimit: number) {
     maintenanceMode?: boolean;
     maintenanceEnabledAt?: string | null;
     maintenanceEnabledBy?: string | null;
+    disappearingMode?: boolean;
+    disappearingEnabledAt?: string | null;
+    disappearingEnabledBy?: string | null;
   }) => {
     if (typeof data.maintenanceMode === "boolean") {
       setMaintenanceMode(data.maintenanceMode);
@@ -35,6 +55,15 @@ export function useAppData(view: ViewType, messageLimit: number) {
     }
     if (data.maintenanceEnabledBy !== undefined) {
       setMaintenanceEnabledBy(data.maintenanceEnabledBy);
+    }
+    if (typeof data.disappearingMode === "boolean") {
+      setDisappearingMode(data.disappearingMode);
+    }
+    if (data.disappearingEnabledAt !== undefined) {
+      setDisappearingEnabledAt(data.disappearingEnabledAt);
+    }
+    if (data.disappearingEnabledBy !== undefined) {
+      setDisappearingEnabledBy(data.disappearingEnabledBy);
     }
   }, []);
 
@@ -73,7 +102,11 @@ export function useAppData(view: ViewType, messageLimit: number) {
           m.text !== finalMessages[i].text ||
           (m.savedBy?.length || 0) !== (finalMessages[i].savedBy?.length || 0) ||
           (m.pinnedBy?.length || 0) !== (finalMessages[i].pinnedBy?.length || 0) ||
-          JSON.stringify(m.reactions || []) !== JSON.stringify(finalMessages[i].reactions || [])
+          Boolean(m.disappearing) !== Boolean(finalMessages[i].disappearing) ||
+          (m.viewedAt || null) !== (finalMessages[i].viewedAt || null) ||
+          (m.expiresAt || null) !== (finalMessages[i].expiresAt || null) ||
+          JSON.stringify(m.reactions || []) !== JSON.stringify(finalMessages[i].reactions || []) ||
+          JSON.stringify(m.pollMeta || null) !== JSON.stringify(finalMessages[i].pollMeta || null)
         );
         if (!hasChange) return prev;
       }
@@ -139,6 +172,8 @@ export function useAppData(view: ViewType, messageLimit: number) {
       setWishlist(data.wishlist);
       setPlans(data.plans);
       setDates(data.dates);
+      setReminders(data.reminders || []);
+      setMoods(data.moods || []);
       setUsers(data.users || []);
       setCallLogs(data.callLogs || []);
       setHasMoreMessages(data.messages.length >= messageLimit);
@@ -153,6 +188,20 @@ export function useAppData(view: ViewType, messageLimit: number) {
       if (!silent) setIsRefreshing(false);
     }
   }, [messageLimit, view, updateMessagesState, applyMaintenance]);
+
+  const fetchSharedData = useCallback(async () => {
+    if (view === "login") return;
+    try {
+      const data = await actions.fetchSharedData();
+      setPlans(data.plans || []);
+      setDates(data.dates || []);
+      setReminders(data.reminders || []);
+      setMoods(data.moods || []);
+      setIsConnected(true);
+    } catch (error) {
+      console.error("Failed to fetch shared data:", error);
+    }
+  }, [view]);
 
   const fetchAllMedia = useCallback(async (silent = false) => {
     if (view === "login") return;
@@ -177,6 +226,8 @@ export function useAppData(view: ViewType, messageLimit: number) {
     wishlist, setWishlist,
     plans, setPlans,
     dates, setDates,
+    reminders, setReminders,
+    moods, setMoods,
     users, setUsers,
     hasMoreMessages,
     isConnected,
@@ -184,9 +235,13 @@ export function useAppData(view: ViewType, messageLimit: number) {
     maintenanceMode,
     maintenanceEnabledAt,
     maintenanceEnabledBy,
+    disappearingMode,
+    disappearingEnabledAt,
+    disappearingEnabledBy,
     fetchInitialData,
     fetchMessagesOnly,
     scheduleFetchMessages,
+    fetchSharedData,
     fetchAllMedia
   };
 }

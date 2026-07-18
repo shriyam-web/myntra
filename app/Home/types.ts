@@ -43,6 +43,28 @@ export interface LocationAttachment {
   accuracy?: number;
 }
 
+export interface PollOption {
+  id: string;
+  text: string;
+}
+
+export interface PollVote {
+  user: string;
+  optionId: string;
+}
+
+export interface PollMeta {
+  question: string;
+  options: PollOption[];
+  votes: PollVote[];
+  closed?: boolean;
+}
+
+export interface SharedItemMeta {
+  itemId: string;
+  itemType: "task" | "reminder";
+}
+
 export interface Message {
   _id: string;
   text?: string;
@@ -55,7 +77,12 @@ export interface Message {
   documents?: DocumentAttachment[];
   location?: LocationAttachment;
   clientMessageId?: string;
-  kind?: "message" | "call-log" | "location";
+  kind?: "message" | "call-log" | "location" | "poll" | "task" | "reminder";
+  pollMeta?: PollMeta;
+  sharedItemMeta?: SharedItemMeta;
+  disappearing?: boolean;
+  viewedAt?: string | null;
+  expiresAt?: string | null;
   createdAt: string;
   createdBy: UserType;
   savedBy?: string[];
@@ -72,6 +99,10 @@ export interface Message {
     audioUrls?: string[];
     documents?: DocumentAttachment[];
     location?: LocationAttachment;
+    pollMeta?: PollMeta;
+    kind?: "message" | "call-log" | "location" | "poll" | "task" | "reminder";
+    sharedItemMeta?: SharedItemMeta;
+    disappearing?: boolean;
     createdBy: UserType;
   };
 }
@@ -98,6 +129,12 @@ export interface PlanItem {
   _id: string;
   content: string;
   createdBy: string;
+  done?: boolean;
+  doneAt?: string | null;
+  doneBy?: string | null;
+  dueAt?: string | null;
+  createdAt?: string;
+  expiresAt?: string | null;
 }
 
 export interface TimelineDate {
@@ -105,10 +142,47 @@ export interface TimelineDate {
   event: string;
   date: string;
   createdBy: string;
+  recurringYearly?: boolean;
+  note?: string;
+  createdAt?: string;
+}
+
+export interface ReminderItem {
+  _id: string;
+  title: string;
+  dueAt: string;
+  done?: boolean;
+  doneAt?: string | null;
+  createdBy: string;
+  createdAt?: string;
+  linkedDateId?: string | null;
+  expiresAt?: string | null;
+}
+
+export type MoodType = "love" | "happy" | "calm" | "tired" | "sad" | "stressed" | "grateful";
+
+export interface MoodCheckInItem {
+  _id: string;
+  user: string;
+  mood: MoodType;
+  note?: string;
+  day: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export type ViewType = "login" | UserType;
-export type TabType = "complaints" | "wishlist" | "plans" | "dates" | "messages" | "emergency" | "news" | "media" | "calls";
+export type TabType =
+  | "complaints"
+  | "wishlist"
+  | "plans"
+  | "dates"
+  | "checkin"
+  | "messages"
+  | "emergency"
+  | "news"
+  | "media"
+  | "calls";
 
 export interface CallLog {
   _id: string;
@@ -117,7 +191,14 @@ export interface CallLog {
   status: 'missed' | 'completed' | 'rejected';
   duration: number;
   createdAt: string;
+  expiresAt?: string | null;
   type?: 'call'; // Added to distinguish in interleaved lists
+}
+
+export interface DisappearingModeState {
+  disappearingMode: boolean;
+  disappearingEnabledAt: string | null;
+  disappearingEnabledBy: string | null;
 }
 
 export interface Theme {

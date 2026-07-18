@@ -6,6 +6,7 @@ interface LoginViewProps {
   handleLogin: (e?: React.FormEvent, passwordOverride?: string) => void | Promise<void>;
   loginError?: string | null;
   isLoggingIn?: boolean;
+  failedAttempts?: number;
 }
 
 export function LoginView({
@@ -14,6 +15,7 @@ export function LoginView({
   handleLogin,
   loginError = null,
   isLoggingIn = false,
+  failedAttempts = 0,
 }: LoginViewProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [showError, setShowError] = useState(false);
@@ -80,10 +82,16 @@ export function LoginView({
           data-lpignore="true"
           data-1p-ignore="true"
           data-form-type="other"
-          className="w-full px-6 py-4 bg-zinc-900 border border-zinc-800 rounded-2xl text-white focus:border-white focus:ring-1 focus:ring-white/20 outline-none transition-all font-mono text-center text-sm"
+          placeholder="enter the mp referrel link"
+          className="w-full px-6 py-4 bg-zinc-900 border border-zinc-800 rounded-2xl text-white placeholder:text-zinc-600 focus:border-white focus:ring-1 focus:ring-white/20 outline-none transition-all font-mono text-center text-sm"
         />
         {loginError && showError && (
           <p className="text-[10px] font-bold uppercase tracking-widest text-red-400">{loginError}</p>
+        )}
+        {failedAttempts > 0 && (
+          <p className="text-[10px] font-mono uppercase tracking-widest text-zinc-500">
+            Attempts: {failedAttempts}
+          </p>
         )}
       </form>
     </div>

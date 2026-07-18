@@ -28,6 +28,7 @@ export interface EnqueueMessagePayload {
 interface QueuedSendJob extends EnqueueMessagePayload {
   id: string;
   createdAt: string;
+  disappearing: boolean;
 }
 
 export interface SendQueueStatus {
@@ -40,6 +41,7 @@ export interface SendQueueStatus {
 
 interface UseMessageSendQueueOptions {
   currentUser: string;
+  disappearingMode?: boolean;
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
   fetchMessagesOnly: (silent?: boolean) => Promise<void>;
   uploadToCloudinary: (file: File, onProgress: (percent: number) => void) => Promise<UploadResult>;
@@ -65,6 +67,7 @@ function buildOptimisticMessage(job: QueuedSendJob, currentUser: string): Messag
     documents,
     location: job.location || undefined,
     kind: job.location ? "location" : "message",
+    disappearing: job.disappearing || undefined,
     imageUrl: imageUrls?.[0],
     videoUrl: videoUrls?.[0],
     audioUrl: audioUrls?.[0],
@@ -104,6 +107,7 @@ const IDLE_STATUS: SendQueueStatus = {
 
 export function useMessageSendQueue({
   currentUser,
+  disappearingMode = false,
   setMessages,
   fetchMessagesOnly,
   uploadToCloudinary,
@@ -112,6 +116,11 @@ export function useMessageSendQueue({
   const processingRef = useRef(false);
   const seqRef = useRef(0);
   const mountedRef = useRef(true);
+  const disappearingModeRef = useRef(disappearingMode);
+
+  useEffect(() => {
+    disappearingModeRef.current = disappearingMode;
+  }, [disappearingMode]);
 
   const [sendQueueStatus, setSendQueueStatus] = useState<SendQueueStatus>(IDLE_STATUS);
   const [sendError, setSendError] = useState<string | null>(null);
@@ -280,6 +289,7 @@ export function useMessageSendQueue({
         location: payload.location || null,
         replyingTo: payload.replyingTo,
         createdAt: new Date().toISOString(),
+        disappearing: disappearingModeRef.current,
       };
 
       setSendError(null);

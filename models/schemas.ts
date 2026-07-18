@@ -15,13 +15,50 @@ const WishlistSchema = new Schema({
 const PlanSchema = new Schema({
   content: { type: String, required: true },
   createdBy: { type: String, required: true },
+  done: { type: Boolean, default: false },
+  doneAt: { type: Date, default: null },
+  doneBy: { type: String, default: null },
+  dueAt: { type: Date, default: null },
+  createdAt: { type: Date, default: Date.now },
+  // Mirrored from the linked disappearing chat card (null = permanent)
+  expiresAt: { type: Date, default: null },
 });
 
 const DateSchema = new Schema({
   event: { type: String, required: true },
   date: { type: String, required: true },
   createdBy: { type: String, required: true },
+  recurringYearly: { type: Boolean, default: false },
+  note: { type: String, default: '' },
+  createdAt: { type: Date, default: Date.now },
 });
+
+const ReminderSchema = new Schema({
+  title: { type: String, required: true },
+  dueAt: { type: Date, required: true },
+  done: { type: Boolean, default: false },
+  doneAt: { type: Date, default: null },
+  createdBy: { type: String, required: true },
+  createdAt: { type: Date, default: Date.now },
+  linkedDateId: { type: String, default: null },
+  expiresAt: { type: Date, default: null },
+});
+
+const MoodCheckInSchema = new Schema({
+  user: { type: String, required: true },
+  mood: {
+    type: String,
+    enum: ['love', 'happy', 'calm', 'tired', 'sad', 'stressed', 'grateful'],
+    required: true,
+  },
+  note: { type: String, default: '' },
+  day: { type: String, required: true }, // YYYY-MM-DD local day key
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now },
+});
+
+MoodCheckInSchema.index({ user: 1, day: 1 }, { unique: true });
+MoodCheckInSchema.index({ day: -1 });
 
 const MessageSchema = new Schema({
   text: { type: String, required: false },
@@ -65,7 +102,7 @@ const MessageSchema = new Schema({
     type: { type: String, enum: ['love', 'adore', 'kiss', 'hearteyes', 'hug', 'rose', 'fire', 'sparkle', 'funny', 'missyou', 'sad', 'confused', 'angry'], required: true },
   }],
   // Structured call-log metadata (preferred over parsing [CALL_LOG:...] text)
-  kind: { type: String, enum: ['message', 'call-log', 'location'], default: 'message' },
+  kind: { type: String, enum: ['message', 'call-log', 'location', 'poll', 'task', 'reminder'], default: 'message' },
   relatedCallId: { type: String, default: null },
   callMeta: {
     from: String,
@@ -73,6 +110,26 @@ const MessageSchema = new Schema({
     status: String,
     duration: Number,
   },
+  pollMeta: {
+    question: { type: String },
+    options: [{
+      id: { type: String },
+      text: { type: String },
+    }],
+    votes: [{
+      user: { type: String },
+      optionId: { type: String },
+    }],
+    closed: { type: Boolean, default: false },
+  },
+  sharedItemMeta: {
+    itemId: { type: String },
+    itemType: { type: String, enum: ['task', 'reminder'] },
+  },
+  // Disappearing-mode snapshot (set at creation; cleared permanently if saved)
+  disappearing: { type: Boolean, default: false },
+  viewedAt: { type: Date, default: null },
+  expiresAt: { type: Date, default: null },
 });
 
 MessageSchema.index({ createdAt: -1 });
@@ -84,11 +141,17 @@ MessageSchema.index(
   { clientMessageId: 1 },
   { unique: true, partialFilterExpression: { clientMessageId: { $type: 'string' } } }
 );
+MessageSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0, partialFilterExpression: { expiresAt: { $type: 'date' }, disappearing: true } });
+PlanSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0, partialFilterExpression: { expiresAt: { $type: 'date' } } });
+ReminderSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0, partialFilterExpression: { expiresAt: { $type: 'date' } } });
 
 const UserSchema = new Schema({
   username: { type: String, required: true, unique: true },
   lastSeen: { type: Date, default: Date.now },
   lastReadAt: { type: Date },
+  // Typing indicator: user counts as typing while typingUntil is in the future.
+  // Stored in Mongo (not memory) so it works across serverless instances.
+  typingUntil: { type: Date, default: null },
   chatBackgroundColor: { type: String, default: "bg-zinc-900/50" },
   chatBubbleColor: { type: String, default: "bg-indigo-600" },
   chatWallpaper: { type: String, default: "" },
@@ -117,7 +180,10 @@ const CallLogSchema = new Schema({
   },
   duration: { type: Number, default: 0 },
   createdAt: { type: Date, default: Date.now },
+  expiresAt: { type: Date, default: null },
 });
+
+CallLogSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0, partialFilterExpression: { expiresAt: { $type: 'date' } } });
 
 const CallSessionSchema = new Schema({
   callId: { type: String, required: true, unique: true },
@@ -186,15 +252,36 @@ const AppSettingsSchema = new Schema({
   maintenanceMode: { type: Boolean, default: false },
   maintenanceEnabledAt: { type: Date },
   maintenanceEnabledBy: { type: String },
+  failedLoginAttempts: { type: Number, default: 0 },
+  disappearingMode: { type: Boolean, default: false },
+  disappearingEnabledAt: { type: Date, default: null },
+  disappearingEnabledBy: { type: String, default: null },
 });
+
+/** Deferred Cloudinary purge for expired disappearing media (runs via daily cron). */
+const MediaCleanupJobSchema = new Schema({
+  messageId: { type: String, required: true, index: true },
+  assets: [{
+    publicId: { type: String, required: true },
+    resourceType: { type: String, default: 'image' },
+    deliveryType: { type: String, default: 'authenticated' },
+  }],
+  purgeAt: { type: Date, required: true },
+  createdAt: { type: Date, default: Date.now },
+});
+
+MediaCleanupJobSchema.index({ purgeAt: 1 });
 
 export const Ticket = models.Ticket || model('Ticket', TicketSchema);
 export const Wishlist = models.Wishlist || model('Wishlist', WishlistSchema);
 export const Plan = models.Plan || model('Plan', PlanSchema);
 export const TimelineDate = models.TimelineDate || model('TimelineDate', DateSchema);
+export const Reminder = models.Reminder || model('Reminder', ReminderSchema);
+export const MoodCheckIn = models.MoodCheckIn || model('MoodCheckIn', MoodCheckInSchema);
 export const Message = models.Message || model('Message', MessageSchema);
 export const User = models.User || model('User', UserSchema);
 export const CallLog = models.CallLog || model('CallLog', CallLogSchema);
 export const CallSession = models.CallSession || model('CallSession', CallSessionSchema);
 export const CallSignal = models.CallSignal || model('CallSignal', CallSignalSchema);
 export const AppSettings = models.AppSettings || model('AppSettings', AppSettingsSchema);
+export const MediaCleanupJob = models.MediaCleanupJob || model('MediaCleanupJob', MediaCleanupJobSchema);
