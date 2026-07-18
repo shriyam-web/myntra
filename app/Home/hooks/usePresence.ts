@@ -1,11 +1,24 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import * as actions from "../../../lib/actions";
 import { Message, PresenceUser, ViewType } from "../types";
 
 export function usePresence(users: PresenceUser[], setUsers: React.Dispatch<React.SetStateAction<PresenceUser[]>>, view: ViewType, messages: Message[]) {
   const [isOnline, setIsOnline] = useState(true);
+  // Tracks the device's own network status via browser online/offline events.
   const [connectionStatusDisplay, setConnectionStatusDisplay] = useState(true);
   const isMarkingReadRef = useRef(false);
+
+  useEffect(() => {
+    setConnectionStatusDisplay(navigator.onLine);
+    const handleOnline = () => setConnectionStatusDisplay(true);
+    const handleOffline = () => setConnectionStatusDisplay(false);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
 
   const handleMarkAsRead = useCallback(async () => {
     if (isMarkingReadRef.current || view === "login") return;

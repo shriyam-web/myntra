@@ -56,6 +56,7 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
     dates,
     users, setUsers,
     hasMoreMessages,
+    isConnected,
     isRefreshing,
     maintenanceMode,
     fetchInitialData,
@@ -958,8 +959,8 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
       )}
       <div className="sticky top-0 z-50">
         {!(isMessageExpanded && activeTab === "messages") && (
-        <ChatHeader 
-          connectionStatusDisplay={connectionStatusDisplay}
+        <ChatHeader
+          connectionStatusDisplay={connectionStatusDisplay && isConnected}
           currentUser={currentUser}
           isSoundEnabled={isSoundEnabled}
           handleToggleSound={handleToggleSound}
