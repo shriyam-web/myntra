@@ -28,6 +28,12 @@ export function useCall(currentUser: string, view: string) {
   const pendingRemoteCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
   const remoteDescSetRef = useRef(false);
 
+  // Local candidates are held here until initiateCall/acceptCall has reached the
+  // server — otherwise a slow network can push candidates before the queue reset,
+  // and they get wiped (old phones lost this race and calls failed).
+  const signalingOpenRef = useRef(false);
+  const candidateOutboxRef = useRef<string[]>([]);
+
   // Refs mirroring state for use inside the polling loop (avoids stale closures)
   const callStatusRef = useRef<'idle' | 'ringing' | 'on-call'>('idle');
   useEffect(() => { callStatusRef.current = callStatus; }, [callStatus]);
@@ -56,7 +62,28 @@ export function useCall(currentUser: string, view: string) {
     incomingOfferRef.current = null;
     pendingRemoteCandidatesRef.current = [];
     remoteDescSetRef.current = false;
+    signalingOpenRef.current = false;
+    candidateOutboxRef.current = [];
   }, []);
+
+  const sendLocalCandidate = useCallback((payload: string) => {
+    if (!signalingOpenRef.current) {
+      candidateOutboxRef.current.push(payload);
+      return;
+    }
+    actions.pushCallSignal(otherUser, 'candidate', payload)
+      .catch((e) => console.error("Failed to send candidate:", e));
+  }, [otherUser]);
+
+  const openSignaling = useCallback(() => {
+    signalingOpenRef.current = true;
+    const outbox = candidateOutboxRef.current;
+    candidateOutboxRef.current = [];
+    for (const payload of outbox) {
+      actions.pushCallSignal(otherUser, 'candidate', payload)
+        .catch((e) => console.error("Failed to flush candidate:", e));
+    }
+  }, [otherUser]);
 
   const teardownMedia = useCallback(() => {
     if (peerConnection.current) {
@@ -132,11 +159,11 @@ export function useCall(currentUser: string, view: string) {
       iceCandidatePoolSize: 4,
     });
 
-    // Trickle ICE: send each candidate as it is discovered (lossless append).
+    // Trickle ICE: candidates are buffered until the offer/answer has reached the
+    // server, then sent as they are discovered (lossless append).
     pc.onicecandidate = (event) => {
       if (event.candidate) {
-        actions.pushCallSignal(otherUser, 'candidate', JSON.stringify(event.candidate))
-          .catch((e) => console.error("Failed to send candidate:", e));
+        sendLocalCandidate(JSON.stringify(event.candidate));
       }
     };
 
@@ -151,9 +178,18 @@ export function useCall(currentUser: string, view: string) {
       // 'disconnected' is often transient — let ICE try to recover instead of ending.
     };
 
+    // Old browsers (older Android Chrome) don't have connectionState —
+    // iceConnectionState is the compatible signal for connected/failed.
     pc.oniceconnectionstatechange = () => {
-      if (pc.iceConnectionState === 'failed') {
-        try { pc.restartIce?.(); } catch { /* older browsers */ }
+      const st = pc.iceConnectionState;
+      if (st === 'connected' || st === 'completed') {
+        setCallStatus('on-call');
+      } else if (st === 'failed') {
+        if (typeof pc.restartIce === 'function') {
+          try { pc.restartIce(); return; } catch { /* fall through */ }
+        }
+        console.error("🔌 ICE failed (no restart support)");
+        endCall();
       }
     };
 
@@ -168,14 +204,28 @@ export function useCall(currentUser: string, view: string) {
       });
     };
 
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    // Voice-call processing dramatically improves quality on phone mics/speakers.
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+        video: false,
+      });
+    } catch {
+      // Very old browsers can reject constraint objects — retry with plain audio.
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    }
     localStreamRef.current = stream;
     setLocalStream(stream);
     stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
     peerConnection.current = pc;
     return pc;
-  }, [otherUser, endCall]);
+  }, [sendLocalCandidate, endCall]);
 
   // Applies new signaling messages in order. Candidates are buffered until the
   // remote description is set (a WebRTC requirement).
@@ -227,8 +277,10 @@ export function useCall(currentUser: string, view: string) {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
-      // Send immediately (trickle) — remaining candidates follow via onicecandidate.
+      // Send the offer; buffered candidates flush only after the server has
+      // seeded the queue, so none get wiped by the reset (old-phone race).
       await actions.initiateCall(currentUser, otherUser, JSON.stringify(pc.localDescription));
+      openSignaling();
     } catch (err) {
       console.error("❌ Failed to start call:", err);
       teardownMedia();
@@ -254,6 +306,7 @@ export function useCall(currentUser: string, view: string) {
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
       await actions.acceptCall(currentUser, JSON.stringify(pc.localDescription));
+      openSignaling();
 
       setCallStatus('on-call');
       await flushRemoteCandidates();
@@ -261,7 +314,7 @@ export function useCall(currentUser: string, view: string) {
       console.error("❌ Failed to accept call:", err);
       endCall();
     }
-  }, [currentUser, setupPeerConnection, flushRemoteCandidates, endCall]);
+  }, [currentUser, setupPeerConnection, openSignaling, flushRemoteCandidates, endCall]);
 
   // Signaling poll: detects incoming/ended calls and drains the signal queue.
   useEffect(() => {
