@@ -75,6 +75,49 @@ export const getVideoPoster = (url: string) => {
   return undefined;
 };
 
+const formatCallDuration = (seconds: number) => {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  if (mins === 0) return `${secs}s`;
+  return `${mins}m ${secs}s`;
+};
+
+const callStatusLabel = (status: string) => {
+  switch (status) {
+    case 'completed':
+    case 'disconnected':
+      return 'Voice Call';
+    case 'missed':
+    case 'timeout':
+      return 'Missed Call';
+    case 'rejected':
+      return 'Call Declined';
+    case 'cancelled':
+      return 'Call Cancelled';
+    case 'failed':
+      return 'Call Failed';
+    default:
+      return 'Voice Call';
+  }
+};
+
+/** Human-readable one-line preview for a message (used in reply banners/quotes). */
+export const getMessagePreviewText = (text?: string | null): string => {
+  if (!text) return "";
+  const trimmed = text.trim();
+  if (trimmed.toUpperCase().startsWith('[CALL_LOG:')) {
+    const parts = trimmed.replace(/\]$/, '').split(':');
+    const status = (parts[1] || '').toLowerCase();
+    const duration = parseInt(parts[2]) || 0;
+    const label = callStatusLabel(status);
+    if ((status === 'completed' || status === 'disconnected') && duration > 0) {
+      return `${label} · ${formatCallDuration(duration)}`;
+    }
+    return label;
+  }
+  return trimmed;
+};
+
 export const renderMessage = (text: string) => {
   const trimmedText = text.trim();
   const upperText = trimmedText.toUpperCase();
@@ -82,13 +125,8 @@ export const renderMessage = (text: string) => {
     const parts = trimmedText.split(':');
     const status = parts[1].toLowerCase();
     const duration = parseInt(parts[2]) || 0;
-    
-    const formatDuration = (seconds: number) => {
-      const mins = Math.floor(seconds / 60);
-      const secs = seconds % 60;
-      if (mins === 0) return `${secs}s`;
-      return `${mins}m ${secs}s`;
-    };
+
+    const formatDuration = formatCallDuration;
 
     return (
       <div className="flex items-center gap-3 py-1">
@@ -110,10 +148,18 @@ export const renderMessage = (text: string) => {
         </div>
         <div className="flex flex-col">
           <span className="text-[11px] font-black uppercase tracking-widest opacity-90">
-            {status === 'completed' ? 'Voice Call' : status === 'missed' ? 'Missed Call' : 'Call Rejected'}
+            {callStatusLabel(status)}
           </span>
           <span className="text-[10px] font-bold opacity-50 tracking-tight">
-            {status === 'completed' ? formatDuration(duration) : 'No Answer'}
+            {(status === 'completed' || status === 'disconnected') && duration > 0
+              ? formatDuration(duration)
+              : status === 'cancelled'
+                ? 'Cancelled before pickup'
+                : status === 'rejected'
+                  ? 'Declined'
+                  : status === 'failed'
+                    ? 'Could not connect'
+                    : 'No Answer'}
           </span>
         </div>
       </div>

@@ -1,6 +1,6 @@
 import React, { Fragment } from "react";
 import { Message, PresenceUser, Theme, ReactionType, isOptimisticMessageId } from "../types";
-import { renderMessage, getVideoPoster } from "../../../lib/utils";
+import { renderMessage, getVideoPoster, getMessagePreviewText } from "../../../lib/utils";
 import { REACTION_EMOJIS } from "../constants";
 import { ReactionBurst } from "./ReactionBurst";
 import { MessageActionMenu } from "./MessageActionMenu";
@@ -662,7 +662,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                                   <p className="font-medium uppercase tracking-widest mb-0.5 text-[7px] opacity-50">
                                       {m.repliedTo.createdBy}
                                   </p>
-                                  <p className="line-clamp-1 italic font-normal leading-relaxed">{m.repliedTo.text || 'Media'}</p>
+                                  <p className="line-clamp-1 italic font-normal leading-relaxed">{getMessagePreviewText(m.repliedTo.text) || 'Media'}</p>
                               </div>
                            )}
 

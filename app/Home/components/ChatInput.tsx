@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect } from "react";
 import { Message, Theme } from "../types";
 import { SendQueueStatus } from "../hooks/useMessageSendQueue";
+import { getMessagePreviewText } from "../../../lib/utils";
 
 interface ChatInputProps {
   newMessage: string;
@@ -318,7 +319,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 Replying to {replyingTo.createdBy}
               </p>
               <p className="text-xs text-white/80 line-clamp-1 font-normal italic">
-                {replyingTo.text || "Media Content"}
+                {getMessagePreviewText(replyingTo.text) || "Media Content"}
               </p>
             </div>
           </div>
