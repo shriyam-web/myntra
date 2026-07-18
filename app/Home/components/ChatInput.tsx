@@ -441,11 +441,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           <div className="fixed inset-0 z-30" onClick={() => setAttachMenuOpen(false)} />
           {/* Menu sits above the input row, outside its overflow-hidden box.
               Photo & Video featured on top; other options two per row. */}
-          <div className="absolute bottom-full left-4 mb-2 z-40 w-52 rounded-xl border border-zinc-800 bg-zinc-950 p-1.5 max-h-[min(60vh,320px)] overflow-y-auto no-scrollbar animate-in slide-in-from-bottom-2 fade-in duration-150">
+          <div className="absolute bottom-full left-4 mb-2 z-40 w-64 rounded-xl border border-zinc-800 bg-zinc-950 p-2 max-h-[min(60vh,340px)] overflow-y-auto no-scrollbar animate-in slide-in-from-bottom-2 fade-in duration-150">
             <button
               type="button"
               onClick={() => { setAttachMenuOpen(false); mediaInputRef.current?.click(); }}
-              className="w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-lg text-left bg-zinc-900 hover:bg-zinc-800/90 active:bg-zinc-800"
+              className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-left bg-zinc-900 border border-zinc-700/70 hover:bg-zinc-800/90 hover:border-zinc-600 active:bg-zinc-800"
             >
               <span className="w-8 h-8 rounded-lg bg-rose-500/15 text-rose-400 flex items-center justify-center shrink-0">
                 <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
@@ -453,24 +453,24 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               <span className="text-[13px] font-medium text-white">Photo &amp; Video</span>
             </button>
 
-            <div className="mt-1.5 grid grid-cols-2 gap-1">
-              <button type="button" onClick={() => { setAttachMenuOpen(false); audioInputRef.current?.click(); }} className="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-zinc-900 active:bg-zinc-800">
+            <div className="mt-2 grid grid-cols-2 gap-1.5">
+              <button type="button" onClick={() => { setAttachMenuOpen(false); audioInputRef.current?.click(); }} className="flex items-center gap-2 px-2.5 py-2 rounded-lg bg-zinc-900 border border-zinc-800 hover:bg-zinc-800/90 hover:border-zinc-700 active:bg-zinc-800">
                 <span className="w-6 h-6 rounded-md bg-violet-500/15 text-violet-400 flex items-center justify-center shrink-0">
                   <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
                 </span>
-                <span className="text-[12px] text-zinc-300">Audio</span>
+                <span className="text-[12px] text-zinc-200 truncate">Audio</span>
               </button>
-              <button type="button" onClick={() => { setAttachMenuOpen(false); docInputRef.current?.click(); }} className="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-zinc-900 active:bg-zinc-800">
+              <button type="button" onClick={() => { setAttachMenuOpen(false); docInputRef.current?.click(); }} className="flex items-center gap-2 px-2.5 py-2 rounded-lg bg-zinc-900 border border-zinc-800 hover:bg-zinc-800/90 hover:border-zinc-700 active:bg-zinc-800">
                 <span className="w-6 h-6 rounded-md bg-sky-500/15 text-sky-400 flex items-center justify-center shrink-0">
                   <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
                 </span>
-                <span className="text-[12px] text-zinc-300">Document</span>
+                <span className="text-[12px] text-zinc-200 truncate">Document</span>
               </button>
-              <button type="button" onClick={shareLocation} className="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-zinc-900 active:bg-zinc-800">
+              <button type="button" onClick={shareLocation} className="flex items-center gap-2 px-2.5 py-2 rounded-lg bg-zinc-900 border border-zinc-800 hover:bg-zinc-800/90 hover:border-zinc-700 active:bg-zinc-800">
                 <span className="w-6 h-6 rounded-md bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0">
                   <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
                 </span>
-                <span className="text-[12px] text-zinc-300">Location</span>
+                <span className="text-[12px] text-zinc-200 truncate">Location</span>
               </button>
               <button
                 type="button"
@@ -479,12 +479,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   setPollComposerOpen(true);
                   setPollError(null);
                 }}
-                className="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-zinc-900 active:bg-zinc-800"
+                className="flex items-center gap-2 px-2.5 py-2 rounded-lg bg-zinc-900 border border-zinc-800 hover:bg-zinc-800/90 hover:border-zinc-700 active:bg-zinc-800"
               >
                 <span className="w-6 h-6 rounded-md bg-amber-500/15 text-amber-400 flex items-center justify-center shrink-0">
                   <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M7 16V8"/><path d="M12 16v-5"/><path d="M17 16V4"/></svg>
                 </span>
-                <span className="text-[12px] text-zinc-300">Poll</span>
+                <span className="text-[12px] text-zinc-200 truncate">Poll</span>
               </button>
               <button
                 type="button"
@@ -493,12 +493,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   setSharedComposer("task");
                   setSharedError(null);
                 }}
-                className="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-zinc-900 active:bg-zinc-800"
+                className="flex items-center gap-2 px-2.5 py-2 rounded-lg bg-zinc-900 border border-zinc-800 hover:bg-zinc-800/90 hover:border-zinc-700 active:bg-zinc-800"
               >
                 <span className="w-6 h-6 rounded-md bg-blue-500/15 text-blue-400 flex items-center justify-center shrink-0">
                   <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="6" height="6" rx="1"/><path d="m3 17 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg>
                 </span>
-                <span className="text-[12px] text-zinc-300">Todo list</span>
+                <span className="text-[12px] text-zinc-200 truncate">Todo list</span>
               </button>
               <button
                 type="button"
@@ -507,12 +507,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   setSharedComposer("reminder");
                   setSharedError(null);
                 }}
-                className="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-zinc-900 active:bg-zinc-800"
+                className="flex items-center gap-2 px-2.5 py-2 rounded-lg bg-zinc-900 border border-zinc-800 hover:bg-zinc-800/90 hover:border-zinc-700 active:bg-zinc-800"
               >
                 <span className="w-6 h-6 rounded-md bg-orange-500/15 text-orange-400 flex items-center justify-center shrink-0">
                   <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2"/><path d="M5 3 2 6"/><path d="m22 6-3-3"/></svg>
                 </span>
-                <span className="text-[12px] text-zinc-300">Reminder</span>
+                <span className="text-[12px] text-zinc-200 truncate">Reminder</span>
               </button>
             </div>
           </div>
