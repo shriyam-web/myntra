@@ -3,18 +3,36 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import * as actions from "../../../lib/actions";
 
+type IceServer = { urls: string | string[]; username?: string; credential?: string };
+type CallSignal = { kind: string; payload: string };
+
+const IDLE_POLL_MS = 2000;
+const ACTIVE_POLL_MS = 900;
+
 export function useCall(currentUser: string, view: string) {
   const [callStatus, setCallStatus] = useState<'idle' | 'ringing' | 'on-call'>('idle');
   const [endReason, setEndReason] = useState<'completed' | 'missed' | 'rejected' | null>(null);
   const [isIncoming, setIsIncoming] = useState(false);
   const [partnerName, setPartnerName] = useState("");
-  const [incomingSignal, setIncomingSignal] = useState<string | null>(null);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
-  const peerConnection = useRef<RTCPeerConnection | null>(null);
-  const lastSignalRef = useRef<string | null>(null);
 
+  const peerConnection = useRef<RTCPeerConnection | null>(null);
   const callStartTime = useRef<number | null>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const iceServersRef = useRef<IceServer[] | null>(null);
+
+  // Signaling consumer state
+  const consumedIndexRef = useRef(0);
+  const incomingOfferRef = useRef<string | null>(null);
+  const pendingRemoteCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
+  const remoteDescSetRef = useRef(false);
+
+  // Refs mirroring state for use inside the polling loop (avoids stale closures)
+  const callStatusRef = useRef<'idle' | 'ringing' | 'on-call'>('idle');
+  useEffect(() => { callStatusRef.current = callStatus; }, [callStatus]);
+
+  const otherUser = currentUser.trim().toLowerCase() === "alpha 1" ? "delta 1" : "alpha 1";
 
   useEffect(() => {
     if (callStatus === 'on-call' && !callStartTime.current) {
@@ -24,6 +42,49 @@ export function useCall(currentUser: string, view: string) {
     }
   }, [callStatus]);
 
+  // Preload ICE servers (incl. TURN) so the first call connects without delay.
+  useEffect(() => {
+    let mounted = true;
+    actions.getIceServers()
+      .then((servers) => { if (mounted) iceServersRef.current = servers; })
+      .catch(() => { /* fall back to STUN at call time */ });
+    return () => { mounted = false; };
+  }, []);
+
+  const resetSignalState = useCallback(() => {
+    consumedIndexRef.current = 0;
+    incomingOfferRef.current = null;
+    pendingRemoteCandidatesRef.current = [];
+    remoteDescSetRef.current = false;
+  }, []);
+
+  const teardownMedia = useCallback(() => {
+    if (peerConnection.current) {
+      peerConnection.current.close();
+      peerConnection.current = null;
+    }
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach((t) => t.stop());
+      localStreamRef.current = null;
+    }
+    setLocalStream(null);
+    setRemoteStream(null);
+  }, []);
+
+  const flushRemoteCandidates = useCallback(async () => {
+    const pc = peerConnection.current;
+    if (!pc) return;
+    const pending = pendingRemoteCandidatesRef.current;
+    pendingRemoteCandidatesRef.current = [];
+    for (const cand of pending) {
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(cand));
+      } catch (e) {
+        console.error("Error flushing ICE candidate:", e);
+      }
+    }
+  }, []);
+
   const endCall = useCallback(async (statusOverride?: 'missed' | 'rejected' | 'completed') => {
     let finalStatus: 'missed' | 'rejected' | 'completed' = statusOverride || 'completed';
     let duration = 0;
@@ -31,92 +92,74 @@ export function useCall(currentUser: string, view: string) {
     if (callStartTime.current) {
       duration = Math.floor((Date.now() - callStartTime.current) / 1000);
       finalStatus = 'completed';
-    } else if (callStatus === 'ringing') {
+    } else if (callStatusRef.current === 'ringing') {
       finalStatus = isIncoming ? 'rejected' : 'missed';
     }
 
-    const partner = partnerName || (currentUser === "alpha 1" ? "delta 1" : "alpha 1");
-
-    if (peerConnection.current) {
-      peerConnection.current.close();
-      peerConnection.current = null;
-    }
-    if (localStream) {
-      localStream.getTracks().forEach(track => track.stop());
-      setLocalStream(null);
-    }
-    setRemoteStream(null);
+    teardownMedia();
+    resetSignalState();
     setCallStatus('idle');
     setEndReason(finalStatus);
     setIsIncoming(false);
-    lastSignalRef.current = null;
 
-    setTimeout(() => {
-      setEndReason(null);
-    }, 3000);
+    setTimeout(() => setEndReason(null), 3000);
 
-    await actions.endCall(currentUser, {
-      from: isIncoming ? partner : currentUser,
-      to: isIncoming ? currentUser : partner,
-      status: finalStatus,
-      duration: duration
-    });
-  }, [currentUser, localStream, callStatus, isIncoming, partnerName]);
-
-  const awaitIceGathering = useCallback(async (pc: RTCPeerConnection) => {
-    if (pc.iceGatheringState === 'complete') return;
-    return new Promise((resolve) => {
-      const timeout = setTimeout(() => {
-        pc.removeEventListener('icegatheringstatechange', check);
-        resolve(null);
-      }, 1000); 
-      function check() {
-        if (pc.iceGatheringState === 'complete') {
-          clearTimeout(timeout);
-          pc.removeEventListener('icegatheringstatechange', check);
-          resolve(null);
-        }
-      }
-      pc.addEventListener('icegatheringstatechange', check);
-    });
-  }, []);
+    try {
+      await actions.endCall(currentUser, {
+        from: isIncoming ? otherUser : currentUser,
+        to: isIncoming ? currentUser : otherUser,
+        status: finalStatus,
+        duration,
+      });
+    } catch (e) {
+      console.error("Failed to end call:", e);
+    }
+  }, [currentUser, otherUser, isIncoming, teardownMedia, resetSignalState]);
 
   const setupPeerConnection = useCallback(async () => {
-    console.log("📞 Setting up PeerConnection...");
+    let iceServers = iceServersRef.current;
+    if (!iceServers) {
+      try {
+        iceServers = await actions.getIceServers();
+        iceServersRef.current = iceServers;
+      } catch {
+        iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
+      }
+    }
+
     const pc = new RTCPeerConnection({
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-      ]
+      iceServers: iceServers as RTCIceServer[],
+      iceCandidatePoolSize: 4,
     });
 
+    // Trickle ICE: send each candidate as it is discovered (lossless append).
     pc.onicecandidate = (event) => {
       if (event.candidate) {
-        console.log("🧊 New ICE candidate");
-        // Send candidate to partner
-        const target = partnerName || (currentUser === "alpha 1" ? "delta 1" : "alpha 1");
-        actions.updateSignal(target, JSON.stringify({ type: 'candidate', candidate: event.candidate }));
-      } else {
-        console.log("🧊 ICE gathering complete");
+        actions.pushCallSignal(otherUser, 'candidate', JSON.stringify(event.candidate))
+          .catch((e) => console.error("Failed to send candidate:", e));
       }
     };
 
     pc.onconnectionstatechange = () => {
-      console.log("🔌 Connection state:", pc.connectionState);
-      if (pc.connectionState === 'connected') {
+      const st = pc.connectionState;
+      if (st === 'connected') {
         setCallStatus('on-call');
-      } else if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
-        console.error("🔌 Connection failed/disconnected");
+      } else if (st === 'failed') {
+        console.error("🔌 Connection failed");
         endCall();
+      }
+      // 'disconnected' is often transient — let ICE try to recover instead of ending.
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      if (pc.iceConnectionState === 'failed') {
+        try { pc.restartIce?.(); } catch { /* older browsers */ }
       }
     };
 
     pc.ontrack = (event) => {
-      console.log("🎵 Received remote track:", event.track.kind);
-      setRemoteStream(prev => {
-        if (event.streams && event.streams[0]) {
-          return event.streams[0];
-        }
+      setRemoteStream((prev) => {
+        if (event.streams && event.streams[0]) return event.streams[0];
         if (prev) {
           prev.addTrack(event.track);
           return new MediaStream(prev.getTracks());
@@ -125,24 +168,57 @@ export function useCall(currentUser: string, view: string) {
       });
     };
 
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-      setLocalStream(stream);
-      stream.getTracks().forEach(track => pc.addTrack(track, stream));
-      console.log("🎤 Local stream acquired and tracks added");
-    } catch (err) {
-      console.error("🎤 Failed to get local stream:", err);
-    }
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    localStreamRef.current = stream;
+    setLocalStream(stream);
+    stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
     peerConnection.current = pc;
     return pc;
-  }, []);
+  }, [otherUser, endCall]);
+
+  // Applies new signaling messages in order. Candidates are buffered until the
+  // remote description is set (a WebRTC requirement).
+  const consumeSignals = useCallback(async (signals: CallSignal[]) => {
+    for (let i = consumedIndexRef.current; i < signals.length; i++) {
+      consumedIndexRef.current = i + 1;
+      const s = signals[i];
+      if (!s || !s.kind) continue;
+
+      if (s.kind === 'offer') {
+        incomingOfferRef.current = s.payload;
+      } else if (s.kind === 'answer') {
+        const pc = peerConnection.current;
+        if (pc && !remoteDescSetRef.current) {
+          try {
+            await pc.setRemoteDescription(new RTCSessionDescription(JSON.parse(s.payload)));
+            remoteDescSetRef.current = true;
+            setCallStatus('on-call');
+            await flushRemoteCandidates();
+          } catch (e) {
+            console.error("Error applying answer:", e);
+          }
+        }
+      } else if (s.kind === 'candidate') {
+        const pc = peerConnection.current;
+        const cand = JSON.parse(s.payload) as RTCIceCandidateInit;
+        if (pc && remoteDescSetRef.current) {
+          try {
+            await pc.addIceCandidate(new RTCIceCandidate(cand));
+          } catch (e) {
+            console.error("Error adding candidate:", e);
+          }
+        } else {
+          pendingRemoteCandidatesRef.current.push(cand);
+        }
+      }
+    }
+  }, [flushRemoteCandidates]);
 
   const handleStartCall = useCallback(async () => {
     try {
-      const targetUser = currentUser === "alpha 1" ? "delta 1" : "alpha 1";
-      console.log(`📞 Starting call to ${targetUser}...`);
-      setPartnerName(targetUser);
+      resetSignalState();
+      setPartnerName(otherUser);
       setCallStatus('ringing');
       setEndReason(null);
       setIsIncoming(false);
@@ -151,152 +227,106 @@ export function useCall(currentUser: string, view: string) {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
-      console.log("⏳ Waiting for ICE candidates...");
-      await awaitIceGathering(pc);
-
-      const finalOffer = pc.localDescription;
-      const signalStr = JSON.stringify(finalOffer);
-      await actions.initiateCall(currentUser, targetUser, signalStr);
-      lastSignalRef.current = signalStr;
-      console.log("📲 Call initiated with signal data");
+      // Send immediately (trickle) — remaining candidates follow via onicecandidate.
+      await actions.initiateCall(currentUser, otherUser, JSON.stringify(pc.localDescription));
     } catch (err) {
       console.error("❌ Failed to start call:", err);
+      teardownMedia();
+      resetSignalState();
       setCallStatus('idle');
     }
-  }, [currentUser, setupPeerConnection, awaitIceGathering]);
+  }, [currentUser, otherUser, setupPeerConnection, resetSignalState, teardownMedia]);
 
   const handleAcceptCall = useCallback(async () => {
     try {
-      console.log("📞 Accepting call...");
-      
-      let signalData = incomingSignal;
-      if (!signalData) {
-        console.error("❌ No incoming signal data available in state, fetching...");
+      let offerPayload = incomingOfferRef.current;
+      if (!offerPayload) {
         const status = await actions.fetchCallStatus(currentUser);
-        if (!status || !status.signalData) {
-            throw new Error("No signal data found even after fetch");
-        }
-        signalData = status.signalData;
+        const offerSig = (status?.callSignals as CallSignal[] | undefined)?.find((s) => s.kind === 'offer');
+        offerPayload = offerSig?.payload || null;
       }
+      if (!offerPayload) throw new Error("No incoming offer available");
 
       const pc = await setupPeerConnection();
-      if (!signalData) throw new Error("Signal data is missing");
-      const offer = JSON.parse(signalData);
-      console.log("📩 Received offer, setting remote description");
-      await pc.setRemoteDescription(new RTCSessionDescription(offer));
-      
+      await pc.setRemoteDescription(new RTCSessionDescription(JSON.parse(offerPayload)));
+      remoteDescSetRef.current = true;
+
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
-      
-      console.log("⏳ Waiting for ICE candidates (answer)...");
-      await awaitIceGathering(pc);
+      await actions.acceptCall(currentUser, JSON.stringify(pc.localDescription));
 
-      const finalAnswer = pc.localDescription;
-      const answerStr = JSON.stringify(finalAnswer);
-      await actions.acceptCall(currentUser, answerStr);
-      lastSignalRef.current = answerStr;
       setCallStatus('on-call');
-      setIncomingSignal(null);
-      console.log("📲 Call accepted and answer sent");
+      await flushRemoteCandidates();
     } catch (err) {
       console.error("❌ Failed to accept call:", err);
       endCall();
     }
-  }, [currentUser, incomingSignal, setupPeerConnection, awaitIceGathering, endCall]);
+  }, [currentUser, setupPeerConnection, flushRemoteCandidates, endCall]);
 
-  // Polling for call status
+  // Signaling poll: detects incoming/ended calls and drains the signal queue.
   useEffect(() => {
     if (view === "login") return;
 
-    const interval = setInterval(async () => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const tick = async () => {
       try {
         const status = await actions.fetchCallStatus(currentUser);
-        if (!status) return;
+        if (cancelled || !status) return;
 
-        if (status.callStatus === 'idle' && callStatus !== 'idle') {
-          console.log("📴 Call ended by remote, reason:", status.lastCallEndReason);
-          if (peerConnection.current) {
-              peerConnection.current.close();
-              peerConnection.current = null;
-          }
-          if (localStream) {
-              localStream.getTracks().forEach(track => track.stop());
-              setLocalStream(null);
-          }
-          setRemoteStream(null);
-          
+        const localStatus = callStatusRef.current;
+
+        // Remote ended the call
+        if (status.callStatus === 'idle' && localStatus !== 'idle') {
+          teardownMedia();
+          resetSignalState();
+          setCallStatus('idle');
+          setIsIncoming(false);
           if (status.lastCallEndReason) {
             setEndReason(status.lastCallEndReason);
-            setCallStatus('idle');
-            // Keep the endReason for 3 seconds to show the status in the UI
-            setTimeout(() => {
-              setEndReason(null);
-            }, 3000);
-          } else {
-            setCallStatus('idle');
+            setTimeout(() => setEndReason(null), 3000);
           }
-        } 
-        else if (status.callStatus === 'ringing' && callStatus === 'idle') {
-          console.log("🔔 Incoming call from:", status.callerId);
+        }
+        // New incoming call
+        else if (status.callStatus === 'ringing' && localStatus === 'idle') {
+          resetSignalState();
           setCallStatus('ringing');
           setEndReason(null);
           setIsIncoming(true);
-          setPartnerName(status.callerId);
-          if (status.signalData) {
-            setIncomingSignal(status.signalData);
-          }
-        } 
-        else if (status.callStatus === 'ringing' && callStatus === 'ringing' && isIncoming) {
-          // Update signal if it changes while ringing
-          if (status.signalData && status.signalData !== incomingSignal) {
-            setIncomingSignal(status.signalData);
-          }
+          setPartnerName(status.callerId || otherUser);
         }
-        else if (status.callStatus === 'on-call' && callStatus === 'on-call') {
-          // Process incremental candidates
-          if (status.signalData && status.signalData !== lastSignalRef.current) {
-            try {
-              const signal = JSON.parse(status.signalData);
-              if (signal.type === 'candidate' && peerConnection.current) {
-                console.log("🧊 Received remote ICE candidate");
-                await peerConnection.current.addIceCandidate(new RTCIceCandidate(signal.candidate));
-                lastSignalRef.current = status.signalData;
-              }
-            } catch (e) {
-              console.error("Error adding ice candidate:", e);
-            }
-          }
-        }
-        else if (status.callStatus === 'on-call' && callStatus === 'ringing' && !isIncoming) {
-          // Other person accepted my call
-          if (status.signalData && status.signalData !== lastSignalRef.current) {
-              const answer = JSON.parse(status.signalData);
-              if (answer.type === 'answer' && peerConnection.current) {
-                  console.log("📩 Received answer, setting remote description");
-                  await peerConnection.current.setRemoteDescription(new RTCSessionDescription(answer));
-                  setCallStatus('on-call');
-                  lastSignalRef.current = status.signalData;
-              }
-          }
+
+        // Always drain queued signals (offer stored, answer/candidates applied)
+        if (Array.isArray(status.callSignals)) {
+          await consumeSignals(status.callSignals as CallSignal[]);
         }
       } catch (err) {
-        console.error("📡 Polling error:", err);
+        console.error("📡 Call polling error:", err);
+      } finally {
+        if (!cancelled) {
+          const delay = callStatusRef.current === 'idle' ? IDLE_POLL_MS : ACTIVE_POLL_MS;
+          timer = setTimeout(tick, delay);
+        }
       }
-    }, 1500);
+    };
 
-    return () => clearInterval(interval);
-  }, [currentUser, view, callStatus, isIncoming, localStream]);
+    tick();
 
-  // Handle tab close/navigation
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [currentUser, view, otherUser, teardownMedia, resetSignalState, consumeSignals]);
+
+  // End the call cleanly if the tab is closed mid-call.
   useEffect(() => {
     const handleUnload = () => {
-      if (callStatus !== 'idle') {
-        endCall();
-      }
+      if (callStatusRef.current !== 'idle') endCall();
     };
     window.addEventListener('beforeunload', handleUnload);
     return () => window.removeEventListener('beforeunload', handleUnload);
-  }, [callStatus, endCall]);
+  }, [endCall]);
 
   return {
     callStatus,
@@ -308,6 +338,6 @@ export function useCall(currentUser: string, view: string) {
     handleStartCall,
     handleAcceptCall,
     handleEndCall: endCall,
-    handleRejectCall: endCall
+    handleRejectCall: endCall,
   };
 }

@@ -800,27 +800,112 @@ export async function fetchAllMedia(currentUser?: string) {
 }
 
 // CALLING FEATURE
-export async function initiateCall(fromUser: string, toUser: string, signalData: string) {
+
+type IceServerEntry = { urls: string | string[]; username?: string; credential?: string };
+
+// Metered credentials cached in memory so we don't hit their API on every page load.
+let cachedIceServers: { servers: IceServerEntry[]; fetchedAt: number } | null = null;
+const ICE_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+// Returns ICE servers (STUN + TURN) for WebRTC.
+// TURN is required for reliable connections across mobile data / strict NATs.
+// Preferred source: Metered credentials API (METERED_DOMAIN + METERED_API_KEY).
+// Fallback: static TURN_URLS / TURN_USERNAME / TURN_CREDENTIAL env vars, then STUN-only.
+export async function getIceServers(): Promise<IceServerEntry[]> {
+  noStore();
+
+  if (cachedIceServers && Date.now() - cachedIceServers.fetchedAt < ICE_CACHE_TTL_MS) {
+    return cachedIceServers.servers;
+  }
+
+  const meteredDomain = process.env.METERED_DOMAIN;
+  const meteredApiKey = process.env.METERED_API_KEY;
+
+  if (meteredDomain && meteredApiKey) {
+    try {
+      const res = await fetch(
+        `https://${meteredDomain}/api/v1/turn/credentials?apiKey=${meteredApiKey}`,
+        { cache: 'no-store' }
+      );
+      if (res.ok) {
+        const servers = (await res.json()) as IceServerEntry[];
+        if (Array.isArray(servers) && servers.length > 0) {
+          cachedIceServers = { servers, fetchedAt: Date.now() };
+          return servers;
+        }
+      }
+      console.error('Metered TURN API returned unexpected response:', res.status);
+    } catch (error) {
+      console.error('Failed to fetch Metered TURN credentials:', error);
+    }
+  }
+
+  const iceServers: IceServerEntry[] = [
+    {
+      urls: [
+        'stun:stun.l.google.com:19302',
+        'stun:stun1.l.google.com:19302',
+      ],
+    },
+  ];
+
+  const turnUrls = process.env.TURN_URLS;
+  const turnUsername = process.env.TURN_USERNAME;
+  const turnCredential = process.env.TURN_CREDENTIAL;
+
+  if (turnUrls && turnUsername && turnCredential) {
+    iceServers.push({
+      urls: turnUrls.split(',').map((u) => u.trim()).filter(Boolean),
+      username: turnUsername,
+      credential: turnCredential,
+    });
+  }
+
+  return iceServers;
+}
+
+// Append a signaling message to the target's queue (never overwrites).
+export async function pushCallSignal(targetUser: string, kind: string, payload: string) {
+  noStore();
+  try {
+    await dbConnect();
+    await User.findOneAndUpdate(
+      { username: targetUser.trim().toLowerCase() },
+      { $push: { callSignals: { kind, payload } } }
+    );
+  } catch (error) {
+    console.error('Failed to push call signal:', error);
+  }
+}
+
+export async function initiateCall(fromUser: string, toUser: string, offer: string) {
   noStore();
   try {
     await dbConnect();
     const toUname = toUser.trim().toLowerCase();
-    
-    // Update target user's call status
+
+    // Seed the callee with a fresh signal queue containing the offer.
     await User.findOneAndUpdate(
       { username: toUname },
-      { 
-        callStatus: 'ringing', 
-        callerId: fromUser, 
-        signalData: signalData,
-        lastCallEndReason: null 
+      {
+        callStatus: 'ringing',
+        callerId: fromUser,
+        signalData: null,
+        callSignals: [{ kind: 'offer', payload: offer }],
+        lastCallEndReason: null,
       }
     );
-    
-    // Update own call status to avoid multiple calls
+
+    // Mark caller engaged with a clean queue ready to receive the answer/candidates.
     await User.findOneAndUpdate(
       { username: fromUser.trim().toLowerCase() },
-      { callStatus: 'on-call', callerId: toUser, lastCallEndReason: null }
+      {
+        callStatus: 'on-call',
+        callerId: toUser,
+        signalData: null,
+        callSignals: [],
+        lastCallEndReason: null,
+      }
     );
   } catch (error) {
     console.error('Failed to initiate call:', error);
@@ -828,18 +913,18 @@ export async function initiateCall(fromUser: string, toUser: string, signalData:
   }
 }
 
-export async function acceptCall(username: string, signalData: string) {
+export async function acceptCall(username: string, answer: string) {
   noStore();
   try {
     await dbConnect();
     const uname = username.trim().toLowerCase();
-    
-    // Update target user (the caller) with my response signal
+
+    // Deliver my answer into the caller's queue.
     const me = await User.findOne({ username: uname });
     if (me && me.callerId) {
       await User.findOneAndUpdate(
         { username: me.callerId.trim().toLowerCase() },
-        { signalData: signalData }
+        { $push: { callSignals: { kind: 'answer', payload: answer } } }
       );
     }
 
@@ -867,14 +952,14 @@ export async function endCall(username: string, logData?: { status: 'completed' 
       // Reset the other person and set reason
       await User.findOneAndUpdate(
         { username: user.callerId.trim().toLowerCase() },
-        { callStatus: 'idle', callerId: null, signalData: null, lastCallEndReason: reason }
+        { callStatus: 'idle', callerId: null, signalData: null, callSignals: [], lastCallEndReason: reason }
       );
     }
 
     // Reset self and set reason
     await User.findOneAndUpdate(
       { username: uname },
-      { callStatus: 'idle', callerId: null, signalData: null, lastCallEndReason: reason }
+      { callStatus: 'idle', callerId: null, signalData: null, callSignals: [], lastCallEndReason: reason }
     );
 
     // Log the call if data is provided
@@ -912,24 +997,11 @@ export async function getCallLogs() {
   }
 }
 
-export async function updateSignal(username: string, signalData: string) {
-  noStore();
-  try {
-    await dbConnect();
-    await User.findOneAndUpdate(
-      { username: username.trim().toLowerCase() },
-      { signalData: signalData }
-    );
-  } catch (error) {
-    console.error('Failed to update signal:', error);
-  }
-}
-
 export async function fetchCallStatus(username: string) {
   noStore();
   try {
     await dbConnect();
-    const user = await User.findOne({ username: username.trim().toLowerCase() }).select('callStatus callerId signalData lastCallEndReason').lean();
+    const user = await User.findOne({ username: username.trim().toLowerCase() }).select('callStatus callerId callSignals lastCallEndReason').lean();
     return JSON.parse(JSON.stringify(user));
   } catch (error) {
     console.error('Failed to fetch call status:', error);

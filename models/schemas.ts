@@ -55,7 +55,12 @@ const UserSchema = new Schema({
   themeName: { type: String, default: "Midnight (Default)" },
   callStatus: { type: String, enum: ['idle', 'ringing', 'on-call'], default: 'idle' },
   callerId: { type: String, default: null },
-  signalData: { type: String, default: null }, // Store WebRTC offer/answer/candidates
+  signalData: { type: String, default: null }, // Legacy (unused) — kept for backward compatibility
+  // Ordered, append-only WebRTC signaling queue (offer/answer/candidates). Never overwritten.
+  callSignals: {
+    type: [{ kind: { type: String }, payload: { type: String } }],
+    default: [],
+  },
   lastCallEndReason: { type: String, default: null }, // 'missed', 'rejected', 'completed', 'ended'
 });
 

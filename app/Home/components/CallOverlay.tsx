@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState, useMemo } from "react";
+import React, { useEffect, useRef, useState, useMemo, memo } from "react";
 
 interface CallOverlayProps {
   currentUser: string;
@@ -15,7 +15,36 @@ interface CallOverlayProps {
   remoteStream: MediaStream | null;
 }
 
-export function CallOverlay({
+// Isolated so the 1s tick doesn't re-render the whole overlay.
+const CallTimer = memo(function CallTimer({ active }: { active: boolean }) {
+  const [duration, setDuration] = useState(0);
+
+  useEffect(() => {
+    if (!active) {
+      setDuration(0);
+      return;
+    }
+    const interval = setInterval(() => setDuration((prev) => prev + 1), 1000);
+    return () => clearInterval(interval);
+  }, [active]);
+
+  if (!active) return null;
+
+  const mins = Math.floor(duration / 60);
+  const secs = duration % 60;
+
+  return (
+    <div className="px-6 py-2 rounded-2xl bg-zinc-900/70 border border-white/5">
+      <span className="text-2xl font-mono font-medium tracking-widest text-indigo-400">
+        {mins}:{secs.toString().padStart(2, '0')}
+      </span>
+    </div>
+  );
+});
+
+const BAR_COUNT = 16;
+
+export const CallOverlay = memo(function CallOverlay({
   partnerName,
   callStatus,
   endReason,
@@ -26,74 +55,106 @@ export function CallOverlay({
   stream,
   remoteStream
 }: CallOverlayProps) {
-  const remoteVideoRef = useRef<HTMLVideoElement>(null);
-  const localVideoRef = useRef<HTMLVideoElement>(null);
-  const [duration, setDuration] = useState(0);
+  const remoteAudioRef = useRef<HTMLAudioElement>(null);
+  const localAudioRef = useRef<HTMLAudioElement>(null);
+  const [accepting, setAccepting] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isSpeakerOn, setIsSpeakerOn] = useState(false);
+  const [speakerSupported, setSpeakerSupported] = useState(false);
 
-  const barHeights = useMemo(() => {
-    return [...Array(24)].map(() => Math.floor(30 + Math.random() * 70));
-  }, []);
+  // Fixed heights computed once — no per-render randomness.
+  const barHeights = useMemo(
+    () => Array.from({ length: BAR_COUNT }, (_, i) => 30 + ((i * 37) % 60)),
+    []
+  );
 
   useEffect(() => {
-    if (remoteVideoRef.current && remoteStream) {
-      remoteVideoRef.current.srcObject = remoteStream;
+    if (remoteAudioRef.current && remoteStream) {
+      remoteAudioRef.current.srcObject = remoteStream;
     }
   }, [remoteStream]);
 
   useEffect(() => {
-    if (localVideoRef.current && stream) {
-      localVideoRef.current.srcObject = stream;
+    if (localAudioRef.current && stream) {
+      localAudioRef.current.srcObject = stream;
     }
   }, [stream]);
 
   useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (callStatus === 'on-call') {
-      interval = setInterval(() => {
-        setDuration(prev => prev + 1);
-      }, 1000);
-    } else {
-      setDuration(0);
-    }
-    return () => clearInterval(interval);
+    if (callStatus !== 'ringing') setAccepting(false);
   }, [callStatus]);
 
-  const formatDuration = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
+  // Speaker toggle needs setSinkId (Chrome/Edge/Android). Hidden where unsupported (iOS Safari).
+  useEffect(() => {
+    const el = remoteAudioRef.current;
+    setSpeakerSupported(Boolean(el && typeof (el as HTMLAudioElement & { setSinkId?: unknown }).setSinkId === "function"));
+  }, [callStatus]);
+
+  // Reset per-call toggles and re-apply mute to the current mic track.
+  useEffect(() => {
+    if (callStatus === 'idle') {
+      setIsMuted(false);
+      setIsSpeakerOn(false);
+    }
+  }, [callStatus]);
+
+  useEffect(() => {
+    if (!stream) return;
+    stream.getAudioTracks().forEach((track) => {
+      track.enabled = !isMuted;
+    });
+  }, [stream, isMuted]);
 
   if (callStatus === 'idle' && !endReason) return null;
 
+  const handleAcceptTap = () => {
+    if (accepting) return;
+    setAccepting(true);
+    onAccept();
+  };
+
+  const toggleMute = () => setIsMuted((prev) => !prev);
+
+  const toggleSpeaker = async () => {
+    const el = remoteAudioRef.current as (HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> }) | null;
+    if (!el?.setSinkId) return;
+
+    const next = !isSpeakerOn;
+    try {
+      if (next) {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const speaker = devices.find(
+          (d) => d.kind === 'audiooutput' && /speaker/i.test(d.label)
+        );
+        await el.setSinkId(speaker ? speaker.deviceId : 'default');
+      } else {
+        await el.setSinkId('default');
+      }
+      setIsSpeakerOn(next);
+    } catch (e) {
+      console.error("Failed to switch audio output:", e);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-[1000] bg-zinc-950 flex flex-col items-center justify-between text-white overflow-hidden font-sans">
-      {/* Dynamic Animated Background */}
-      <div className="absolute inset-0 z-0">
-        <div className="absolute top-[-10%] left-[-10%] w-[120%] h-[120%] bg-[radial-gradient(circle_at_center,rgba(99,102,241,0.15)_0%,rgba(168,85,247,0.1)_25%,rgba(0,0,0,1)_100%)] animate-pulse" />
-        
-        {/* Floating particles/glows */}
-        <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-indigo-500/20 rounded-full blur-[120px] animate-blob" />
-        <div className="absolute bottom-1/4 right-1/4 w-64 h-64 bg-purple-500/20 rounded-full blur-[120px] animate-blob animation-delay-2000" />
-        
-        {/* Mesh Gradient Overlay */}
-        <div className="absolute inset-0 opacity-30 mix-blend-overlay bg-[url('https://grainy-gradients.vercel.app/noise.svg')]" />
-      </div>
+      {/* Static, cheap background — no animated mega-blurs */}
+      <div className="absolute inset-0 z-0 pointer-events-none bg-[radial-gradient(circle_at_50%_30%,rgba(99,102,241,0.14)_0%,rgba(168,85,247,0.08)_35%,rgba(9,9,11,1)_75%)]" />
 
       {/* Top Bar / Status */}
-      <div className="relative z-10 w-full px-8 pt-12 flex flex-col items-center animate-in fade-in slide-in-from-top-8 duration-1000">
-        <div className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/10 backdrop-blur-2xl shadow-2xl">
+      <div className="relative z-10 w-full px-8 pt-12 flex flex-col items-center">
+        <div className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/10 shadow-2xl">
           <div className={`w-2 h-2 rounded-full ${
-            endReason ? 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)]' : 
-            callStatus === 'on-call' ? 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.8)]' : 
-            'bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.8)] animate-pulse'
+            endReason ? 'bg-red-500' :
+            callStatus === 'on-call' ? 'bg-green-500' :
+            'bg-indigo-500 animate-pulse'
           }`} />
           <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white/80">
             {endReason === 'rejected' ? 'Call Rejected' :
              endReason === 'missed' ? 'Call Missed' :
              endReason === 'completed' ? 'Call Ended' :
-             callStatus === 'ringing' 
-              ? (isIncoming ? 'Incoming Audio Call' : 'Calling...') 
+             callStatus === 'ringing'
+              ? (isIncoming ? (accepting ? 'Connecting…' : 'Incoming Audio Call') : 'Calling...')
               : 'Secure Connection Active'}
           </span>
         </div>
@@ -101,21 +162,14 @@ export function CallOverlay({
 
       {/* Center Content: Avatar & Info */}
       <div className="relative z-10 flex flex-col items-center gap-8 mt-4">
-        <div className="relative group">
-          {/* Outer Ring Animations */}
-          <div className="absolute -inset-8 rounded-full border border-white/5 animate-[spin_10s_linear_infinite]" />
-          <div className="absolute -inset-12 rounded-full border border-white/5 animate-[spin_15s_linear_infinite_reverse]" />
-          
-          {/* Pulse Effect for Ringing */}
-          {callStatus === 'ringing' && !endReason && (
-            <>
-              <div className="absolute -inset-4 rounded-full border-2 border-indigo-500/30 animate-ping" />
-              <div className="absolute -inset-8 rounded-full border border-purple-500/20 animate-ping animation-delay-700" />
-            </>
+        <div className="relative">
+          {/* Single lightweight ping while ringing */}
+          {callStatus === 'ringing' && !endReason && !accepting && (
+            <div className="absolute -inset-4 rounded-full border-2 border-indigo-500/30 animate-ping" />
           )}
 
           {/* Avatar */}
-          <div className="relative w-40 h-40 rounded-full p-1 bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 shadow-[0_0_80px_rgba(99,102,241,0.3)]">
+          <div className="relative w-40 h-40 rounded-full p-1 bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 shadow-xl">
             <div className="w-full h-full rounded-full bg-zinc-900 flex items-center justify-center overflow-hidden border-4 border-zinc-950">
               <span className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-b from-white to-white/50 tracking-tighter">
                 {partnerName[0]?.toUpperCase()}
@@ -128,45 +182,41 @@ export function CallOverlay({
           <h2 className="text-5xl font-black tracking-tighter uppercase italic bg-clip-text text-transparent bg-gradient-to-b from-white via-white to-white/20">
             {partnerName}
           </h2>
-          {callStatus === 'on-call' && (
-            <div className="px-6 py-2 rounded-2xl bg-zinc-900/50 border border-white/5 backdrop-blur-xl">
-               <span className="text-2xl font-mono font-medium tracking-widest text-indigo-400">
-                {formatDuration(duration)}
-               </span>
-            </div>
-          )}
+          <CallTimer active={callStatus === 'on-call'} />
         </div>
       </div>
 
-      {/* Visualizer / Audio Wave */}
+      {/* Visualizer — pure CSS animation, fixed heights, GPU-friendly scaleY */}
       <div className="relative z-10 w-full max-w-lg h-32 flex items-center justify-center px-12">
-        <div className="flex items-center justify-center gap-1.5 w-full h-16">
-          {[...Array(24)].map((_, i) => (
-            <div 
-              key={i} 
-              className={`w-1 rounded-full bg-gradient-to-t from-indigo-500 via-purple-500 to-pink-500 transition-all duration-300 ${callStatus === 'on-call' ? 'opacity-100' : 'opacity-20'}`}
-              style={{ 
-                height: callStatus === 'on-call' ? `${30 + Math.random() * 70}%` : '10%',
-                animation: callStatus === 'on-call' ? `wave-enhanced 1.2s ease-in-out infinite` : 'none',
-                animationDelay: `${i * 0.05}s`
+        <div className="flex items-end justify-center gap-1.5 w-full h-16">
+          {barHeights.map((h, i) => (
+            <div
+              key={i}
+              className={`w-1 rounded-full bg-gradient-to-t from-indigo-500 via-purple-500 to-pink-500 origin-bottom ${
+                callStatus === 'on-call' ? 'opacity-100 call-wave-bar' : 'opacity-20'
+              }`}
+              style={{
+                height: `${h}%`,
+                animationDelay: `${i * 0.08}s`,
               }}
-            ></div>
+            />
           ))}
         </div>
       </div>
 
-      {/* Control Buttons */}
+      {/* Control Buttons — tap-based, instant feedback */}
       {!endReason && (
-        <div className="relative z-10 w-full max-w-md px-12 pb-20 flex justify-center gap-10 animate-in slide-in-from-bottom-12 duration-1000 delay-300">
+        <div className="relative z-10 w-full max-w-md px-12 pb-20 flex justify-center gap-10">
           {callStatus === 'ringing' && isIncoming ? (
           <>
             <div className="flex flex-col items-center gap-4">
-              <button 
+              <button
+                type="button"
                 onClick={onReject}
-                className="group relative w-20 h-20 rounded-full bg-zinc-900 border border-white/10 flex items-center justify-center text-red-500 transition-all hover:bg-red-500 hover:text-white hover:scale-110 active:scale-90"
+                disabled={accepting}
+                className="w-20 h-20 rounded-full bg-zinc-900 border border-white/10 flex items-center justify-center text-red-500 active:scale-90 active:bg-red-500 active:text-white transition-transform duration-100 touch-manipulation select-none disabled:opacity-50"
               >
-                <div className="absolute inset-0 rounded-full bg-red-500 blur-xl opacity-0 group-hover:opacity-40 transition-opacity" />
-                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="rotate-[135deg] relative z-10">
+                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="rotate-[135deg] pointer-events-none">
                   <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l2.28-2.28a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
                 </svg>
               </button>
@@ -174,53 +224,124 @@ export function CallOverlay({
             </div>
 
             <div className="flex flex-col items-center gap-4">
-              <button 
-                onClick={onAccept}
-                className="group relative w-20 h-20 rounded-full bg-green-500 flex items-center justify-center text-white shadow-[0_0_40px_rgba(34,197,94,0.5)] transition-all active:scale-95"
+              <button
+                type="button"
+                onClick={handleAcceptTap}
+                disabled={accepting}
+                className="w-20 h-20 rounded-full bg-green-500 flex items-center justify-center text-white shadow-lg shadow-green-500/40 active:scale-90 transition-transform duration-100 touch-manipulation select-none disabled:opacity-70"
               >
-                <div className="absolute inset-0 rounded-full bg-green-400 blur-2xl opacity-40" />
-                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="relative z-10">
-                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l2.28-2.28a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
-                </svg>
+                {accepting ? (
+                  <span className="w-7 h-7 border-[3px] border-white/40 border-t-white rounded-full animate-spin pointer-events-none" />
+                ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="pointer-events-none">
+                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l2.28-2.28a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+                  </svg>
+                )}
               </button>
-              <span className="text-[10px] font-black uppercase tracking-widest text-green-500">Accept</span>
+              <span className="text-[10px] font-black uppercase tracking-widest text-green-500">
+                {accepting ? 'Connecting' : 'Accept'}
+              </span>
             </div>
           </>
         ) : (
-          <div className="flex flex-col items-center gap-4">
-            <button 
-              onClick={onEnd}
-              className="group relative w-20 h-20 rounded-full bg-red-600 flex items-center justify-center text-white shadow-[0_0_50px_rgba(220,38,38,0.4)] transition-all hover:scale-110 hover:bg-red-500 active:scale-95"
-            >
-              <div className="absolute inset-0 rounded-full bg-red-600 blur-2xl opacity-40 group-hover:opacity-70 transition-opacity" />
-              <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="rotate-[135deg] relative z-10">
-                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l2.28-2.28a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
-              </svg>
-            </button>
-            <span className="text-[10px] font-black uppercase tracking-widest text-white/30">End Session</span>
-          </div>
+          <>
+            {callStatus === 'on-call' && (
+              <div className="flex flex-col items-center gap-4">
+                <button
+                  type="button"
+                  onClick={toggleMute}
+                  className={`w-16 h-16 rounded-full flex items-center justify-center active:scale-90 transition-transform duration-100 touch-manipulation select-none border ${
+                    isMuted
+                      ? 'bg-white text-zinc-900 border-white'
+                      : 'bg-zinc-900 text-white border-white/10'
+                  }`}
+                  aria-pressed={isMuted}
+                >
+                  {isMuted ? (
+                    <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="pointer-events-none">
+                      <line x1="2" y1="2" x2="22" y2="22"/>
+                      <path d="M18.89 13.23A7.12 7.12 0 0 0 19 12v-2"/>
+                      <path d="M5 10v2a7 7 0 0 0 12 5"/>
+                      <path d="M15 9.34V5a3 3 0 0 0-5.68-1.33"/>
+                      <path d="M9 9v3a3 3 0 0 0 5.12 2.12"/>
+                      <line x1="12" y1="19" x2="12" y2="22"/>
+                    </svg>
+                  ) : (
+                    <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="pointer-events-none">
+                      <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+                      <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                      <line x1="12" y1="19" x2="12" y2="22"/>
+                    </svg>
+                  )}
+                </button>
+                <span className="text-[10px] font-black uppercase tracking-widest text-white/40">
+                  {isMuted ? 'Unmute' : 'Mute'}
+                </span>
+              </div>
+            )}
+
+            <div className="flex flex-col items-center gap-4">
+              <button
+                type="button"
+                onClick={onEnd}
+                className="w-20 h-20 rounded-full bg-red-600 flex items-center justify-center text-white shadow-lg shadow-red-600/40 active:scale-90 transition-transform duration-100 touch-manipulation select-none"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="rotate-[135deg] pointer-events-none">
+                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l2.28-2.28a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+                </svg>
+              </button>
+              <span className="text-[10px] font-black uppercase tracking-widest text-white/30">
+                {callStatus === 'on-call' ? 'End' : 'End Session'}
+              </span>
+            </div>
+
+            {callStatus === 'on-call' && speakerSupported && (
+              <div className="flex flex-col items-center gap-4">
+                <button
+                  type="button"
+                  onClick={toggleSpeaker}
+                  className={`w-16 h-16 rounded-full flex items-center justify-center active:scale-90 transition-transform duration-100 touch-manipulation select-none border ${
+                    isSpeakerOn
+                      ? 'bg-white text-zinc-900 border-white'
+                      : 'bg-zinc-900 text-white border-white/10'
+                  }`}
+                  aria-pressed={isSpeakerOn}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="pointer-events-none">
+                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                    {isSpeakerOn ? (
+                      <>
+                        <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+                        <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+                      </>
+                    ) : (
+                      <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+                    )}
+                  </svg>
+                </button>
+                <span className="text-[10px] font-black uppercase tracking-widest text-white/40">
+                  Speaker
+                </span>
+              </div>
+            )}
+          </>
         )}
       </div>
       )}
 
       <style jsx>{`
-        @keyframes wave-enhanced {
-          0%, 100% { height: 15%; opacity: 0.3; }
-          50% { height: 100%; opacity: 1; transform: scaleY(1.2); }
+        .call-wave-bar {
+          animation: call-wave 1.2s ease-in-out infinite;
         }
-        @keyframes blob {
-          0%, 100% { transform: translate(0, 0) scale(1); }
-          33% { transform: translate(30px, -50px) scale(1.1); }
-          66% { transform: translate(-20px, 20px) scale(0.9); }
-        }
-        .animation-delay-2000 {
-          animation-delay: 2s;
+        @keyframes call-wave {
+          0%, 100% { transform: scaleY(0.35); opacity: 0.4; }
+          50% { transform: scaleY(1); opacity: 1; }
         }
       `}</style>
 
       {/* Audio elements */}
-      <audio ref={remoteVideoRef} autoPlay playsInline />
-      <audio ref={localVideoRef} autoPlay playsInline muted />
+      <audio ref={remoteAudioRef} autoPlay playsInline />
+      <audio ref={localAudioRef} autoPlay playsInline muted />
     </div>
   );
-}
+});
