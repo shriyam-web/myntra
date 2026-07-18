@@ -627,7 +627,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                           } ${
                             editingMessage === m._id
                               ? "w-full max-w-[calc(100vw-3.5rem)] sm:min-w-[260px] sm:w-[min(65vw,520px)] sm:max-w-[min(65vw,520px)]"
-                              : ""
+                              : "max-w-full min-w-0"
                           } ${
                             reactionPickerId === m._id && !isMe
                               ? "ring-2 ring-white/40 shadow-lg scale-[1.02]"

@@ -34,9 +34,15 @@ const UrlPreview = ({ url }: { url: string }) => {
   if (!metadata || (!metadata.title && !metadata.description)) return null;
 
   return (
-    <div className="mt-2 bg-black/20 rounded-xl overflow-hidden border border-white/10 flex flex-col sm:flex-row max-w-full">
+    <a
+      href={metadata.url || url}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(e) => e.stopPropagation()}
+      className="mt-2 bg-black/20 rounded-xl overflow-hidden border border-white/10 flex flex-col sm:flex-row w-full max-w-full sm:max-w-sm hover:bg-black/30 transition-colors"
+    >
       {metadata.image && (
-        <div className="sm:w-32 h-32 flex-shrink-0">
+        <div className="w-full h-32 sm:w-32 sm:h-auto flex-shrink-0">
           <img 
             src={metadata.image} 
             alt={metadata.title} 
@@ -44,19 +50,19 @@ const UrlPreview = ({ url }: { url: string }) => {
           />
         </div>
       )}
-      <div className="p-3 flex flex-col justify-center min-w-0">
+      <div className="p-3 flex flex-col justify-center min-w-0 flex-1">
         {metadata.title && (
-          <h4 className="text-sm font-bold text-white truncate mb-1">
+          <h4 className="text-sm font-bold text-white line-clamp-2 break-words mb-1">
             {metadata.title}
           </h4>
         )}
         {metadata.description && (
-          <p className="text-xs text-zinc-400 line-clamp-2 leading-relaxed">
+          <p className="text-xs text-zinc-400 line-clamp-2 leading-relaxed break-words">
             {metadata.description}
           </p>
         )}
       </div>
-    </div>
+    </a>
   );
 };
 
