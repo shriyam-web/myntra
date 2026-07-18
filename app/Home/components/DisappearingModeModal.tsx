@@ -55,10 +55,10 @@ export function DisappearingModeModal({
             <span className="text-white font-medium"> 1 hour later</span>.
           </p>
           <p className="text-zinc-400 text-xs">
-            Save a message before it expires and it becomes a regular, permanent message — even if you later unsave it.
+            Pin a message before it expires and it becomes a regular, permanent message — even if you later unpin it.
           </p>
           <p className="text-zinc-500 text-[11px]">
-            Turning the mode off only affects future messages. Ones already marked to disappear still expire on schedule unless saved.
+            Turning the mode off only affects future messages. Ones already marked to disappear still expire on schedule unless pinned.
           </p>
         </div>
 

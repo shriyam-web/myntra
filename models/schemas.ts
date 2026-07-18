@@ -132,7 +132,7 @@ const MessageSchema = new Schema({
     listTitle: { type: String },
     itemType: { type: String, enum: ['task', 'reminder', 'todo-list'] },
   },
-  // Disappearing-mode snapshot (set at creation; cleared permanently if saved)
+  // Disappearing-mode snapshot (set at creation; cleared permanently if pinned)
   disappearing: { type: Boolean, default: false },
   viewedAt: { type: Date, default: null },
   expiresAt: { type: Date, default: null },

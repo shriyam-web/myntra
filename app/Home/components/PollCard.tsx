@@ -37,6 +37,7 @@ export const PollCard: React.FC<PollCardProps> = ({
             <button
               key={opt.id}
               disabled={closed}
+              title={closed ? undefined : selected ? "Tap again to remove your vote" : "Vote"}
               onClick={(e) => {
                 e.stopPropagation();
                 if (!closed) onVote(message._id, opt.id);

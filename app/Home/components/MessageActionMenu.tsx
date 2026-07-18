@@ -7,9 +7,7 @@ interface MessageActionMenuProps {
   message: Message;
   isMe: boolean;
   isPinned: boolean;
-  isSaved?: boolean;
   onPin: () => void;
-  onSave?: () => void;
   onReply?: () => void;
   onCopy?: () => void;
   onEdit?: () => void;
@@ -22,9 +20,7 @@ export const MessageActionMenu: React.FC<MessageActionMenuProps> = ({
   message,
   isMe,
   isPinned,
-  isSaved = false,
   onPin,
-  onSave,
   onReply,
   onCopy,
   onEdit,
@@ -93,22 +89,10 @@ export const MessageActionMenu: React.FC<MessageActionMenuProps> = ({
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={isPinned ? "text-amber-400" : "text-zinc-400"}>
           <path d="M12 17v5" /><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2z" />
         </svg>
-        <span className="text-xs font-medium">{isPinned ? "Unpin" : "Pin"}</span>
+        <span className="text-xs font-medium">
+          {isPinned ? "Unpin" : message.disappearing ? "Pin (keep forever)" : "Pin"}
+        </span>
       </button>
-
-      {onSave && (
-        <button
-          onClick={() => { onSave(); onClose(); }}
-          className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-zinc-200 hover:bg-zinc-800 transition-colors"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill={isSaved ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={isSaved ? "text-emerald-400" : "text-zinc-400"}>
-            <path d="m19 21-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-          </svg>
-          <span className="text-xs font-medium">
-            {isSaved ? "Unsave" : message.disappearing ? "Save (keep forever)" : "Save"}
-          </span>
-        </button>
-      )}
 
       {onCopy && (
         <button

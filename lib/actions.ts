@@ -981,10 +981,17 @@ export async function votePoll(messageId: string, optionId: string) {
     const valid = (message.pollMeta.options || []).some((o: { id: string }) => o.id === optionId);
     if (!valid) throw new Error("Invalid option.");
 
-    const votes = (message.pollMeta.votes || []).filter(
-      (v: { user: string }) => v.user.trim().toLowerCase() !== me.trim().toLowerCase()
+    const meKey = me.trim().toLowerCase();
+    const existingVote = (message.pollMeta.votes || []).find(
+      (v: { user: string }) => v.user.trim().toLowerCase() === meKey
     );
-    votes.push({ user: me, optionId });
+    const votes = (message.pollMeta.votes || []).filter(
+      (v: { user: string }) => v.user.trim().toLowerCase() !== meKey
+    );
+    // Tapping the already-selected option retracts the vote instead of re-casting it.
+    if (!existingVote || existingVote.optionId !== optionId) {
+      votes.push({ user: me, optionId });
+    }
     message.pollMeta.votes = votes;
     message.markModified("pollMeta");
     await message.save();
@@ -1282,7 +1289,7 @@ export async function deleteMessage(id: string, deleteFromCloudinaryToo: boolean
   }
 }
 
-export async function toggleSaveMessage(id: string, username: string) {
+export async function togglePinMessage(id: string, username: string) {
   try {
     const me = await requireUser();
     void username;
@@ -1290,41 +1297,28 @@ export async function toggleSaveMessage(id: string, username: string) {
     const message = await Message.findById(id);
     if (!message) throw new Error("Message not found");
 
-    const isSaved = (message.savedBy || []).includes(me);
-    if (isSaved) {
-      // Unsaving does NOT restore disappearing behavior — permanence sticks.
-      await Message.findByIdAndUpdate(id, { $pull: { savedBy: me } });
+    // savedBy is retained only as legacy data. Existing saved messages behave as
+    // pinned until the user unpins them, avoiding accidental loss during migration.
+    const isPinned =
+      (message.pinnedBy || []).includes(me) ||
+      (message.savedBy || []).includes(me);
+    if (isPinned) {
+      await Message.findByIdAndUpdate(id, {
+        $pull: { pinnedBy: me, savedBy: me },
+      });
     } else {
-      await Message.findByIdAndUpdate(id, { $addToSet: { savedBy: me } });
-      // First save permanently converts a disappearing message into a regular one.
+      await Message.findByIdAndUpdate(id, { $addToSet: { pinnedBy: me } });
+      // Pinning a disappearing message permanently exempts it from expiry.
       if (message.disappearing) {
         await permanentlyKeepMessage(id);
       }
     }
     revalidatePath('/');
     notifyRealtime();
-    return { saved: !isSaved, keptPermanently: !isSaved && Boolean(message.disappearing) };
-  } catch (error) {
-    console.error('Failed to toggle save message:', error);
-    throw new Error('Failed to toggle save message.');
-  }
-}
-
-export async function togglePinMessage(id: string, username: string) {
-  try {
-    await dbConnect();
-    const message = await Message.findById(id);
-    if (!message) throw new Error("Message not found");
-
-    const isPinned = (message.pinnedBy || []).includes(username);
-    if (isPinned) {
-      await Message.findByIdAndUpdate(id, { $pull: { pinnedBy: username } });
-    } else {
-      await Message.findByIdAndUpdate(id, { $addToSet: { pinnedBy: username } });
-    }
-    revalidatePath('/');
-    notifyRealtime();
-    return { pinned: !isPinned };
+    return {
+      pinned: !isPinned,
+      keptPermanently: !isPinned && Boolean(message.disappearing),
+    };
   } catch (error) {
     console.error('Failed to toggle pin message:', error);
     throw new Error('Failed to toggle pin message.');
@@ -1450,28 +1444,35 @@ export async function getUrlMetadata(url: string) {
   }
 }
 
-export async function deleteAllMessages(deleteForEveryone = false, username?: string, includeSaved = false) {
+export async function deleteAllMessages(deleteForEveryone = false, username?: string, includePinned = false) {
   try {
     await dbConnect();
     if (deleteForEveryone) {
-      if (includeSaved) {
+      if (includePinned) {
         await Message.deleteMany({});
       } else {
-        // Only delete messages that are NOT saved by anyone
-        await Message.deleteMany({ savedBy: { $size: 0 } });
+        // Preserve pinned messages. savedBy remains a legacy protection field.
+        await Message.deleteMany({
+          $and: [
+            { $or: [{ pinnedBy: { $exists: false } }, { pinnedBy: { $size: 0 } }] },
+            { $or: [{ savedBy: { $exists: false } }, { savedBy: { $size: 0 } }] },
+          ],
+        });
       }
     } else if (username) {
-      if (includeSaved) {
+      if (includePinned) {
         await Message.updateMany(
           { deletedFor: { $ne: username } },
           { $addToSet: { deletedFor: username } }
         );
       } else {
-        // Only mark as deleted for me if NOT saved by me
+        // Only mark as deleted for me if not pinned by me.
+        // Legacy savedBy records receive the same protection.
         await Message.updateMany(
           { 
             deletedFor: { $ne: username },
-            savedBy: { $ne: username }
+            pinnedBy: { $ne: username },
+            savedBy: { $ne: username },
           },
           { $addToSet: { deletedFor: username } }
         );

@@ -196,7 +196,6 @@ interface MessageListProps {
   handleToggleReminder: (id: string) => void;
   onOpenSharedItem: (kind: "task" | "reminder") => void;
   onViewDisappearingMessages?: (messageIds: string[]) => void;
-  handleToggleSaveMessage?: (id: string) => void;
 }
 
 export const MessageList: React.FC<MessageListProps> = ({
@@ -245,7 +244,6 @@ export const MessageList: React.FC<MessageListProps> = ({
   handleToggleReminder,
   onOpenSharedItem,
   onViewDisappearingMessages,
-  handleToggleSaveMessage,
 }) => {
   const [swipingMessageId, setSwipingMessageId] = React.useState<string | null>(null);
   const [swipeDistance, setSwipeDistance] = React.useState(0);
@@ -579,6 +577,9 @@ export const MessageList: React.FC<MessageListProps> = ({
                   !!partner?.lastReadAt &&
                   new Date(m.createdAt).getTime() <= new Date(partner.lastReadAt).getTime();
                 const isOptimistic = isOptimisticMessageId(m._id);
+                const isPinnedForMe =
+                  (m.pinnedBy || []).includes(currentUser) ||
+                  (m.savedBy || []).includes(currentUser);
                 const avatarSrc = m.createdBy.trim().toLowerCase() === "alpha 1" ? "/female.png" : "/male.png";
                 const systemText = (m.text || "").trim().toUpperCase();
                 const isDisappearingSystem =
@@ -590,6 +591,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                   !isMe &&
                   !m.viewedAt &&
                   !isOptimistic &&
+                  !(m.pinnedBy && m.pinnedBy.length > 0) &&
                   !(m.savedBy && m.savedBy.length > 0);
 
                 if (isDisappearingSystem) {
@@ -614,10 +616,12 @@ export const MessageList: React.FC<MessageListProps> = ({
                           }`}
                         >
                           <span>{turnedOn ? "⏱" : "○"}</span>
-                          <span>
-                            {turnedOn ? "Disappearing mode on" : "Disappearing mode off"}
-                            {switchedLabel ? ` · ${switchedLabel}` : ""}
-                          </span>
+                          <span>{turnedOn ? "Disappearing mode on" : "Disappearing mode off"}</span>
+                          {switchedLabel && (
+                            <span className="text-[8px] font-normal normal-case tracking-normal opacity-70">
+                              {switchedLabel}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </Fragment>
@@ -626,8 +630,11 @@ export const MessageList: React.FC<MessageListProps> = ({
 
                 let disappearLabel: string | null = null;
                 if (isDisappearingMsg) {
-                  if (m.savedBy && m.savedBy.length > 0) {
-                    disappearLabel = "Saved · kept permanently";
+                  if (
+                    (m.pinnedBy && m.pinnedBy.length > 0) ||
+                    (m.savedBy && m.savedBy.length > 0)
+                  ) {
+                    disappearLabel = "Pinned · kept permanently";
                   } else if (m.expiresAt) {
                     const remaining = new Date(m.expiresAt).getTime() - nowTick;
                     if (remaining <= 0) disappearLabel = "Expiring…";
@@ -795,7 +802,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                           } ${
                             actionMenuId === m._id ? "ring-2 ring-amber-400/50 shadow-lg" : ""
                           } ${
-                            (m.pinnedBy || []).includes(currentUser)
+                            isPinnedForMe
                               ? "ring-2 ring-amber-300/70 border-amber-200/40 bg-gradient-to-br from-amber-400/20 via-amber-300/10 to-transparent shadow-[0_0_30px_rgba(251,191,36,0.22)]"
                               : ""
                           } ${
@@ -804,7 +811,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                               : ""
                           }`}
                         >
-                          {(m.pinnedBy || []).includes(currentUser) && (
+                          {isPinnedForMe && (
                             <span className="absolute -top-1.5 right-2 text-amber-400" title="Pinned">
                               <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1"><path d="M12 17v5" /><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2z" /></svg>
                             </span>
@@ -1196,7 +1203,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                           </div>
                           {disappearLabel && (
                             <p className={`mt-1 text-[9px] font-medium tracking-wide ${
-                              disappearLabel.startsWith("Saved")
+                              disappearLabel.startsWith("Pinned")
                                 ? "text-emerald-300/90"
                                 : "text-violet-200/80"
                             }`}>
@@ -1220,10 +1227,8 @@ export const MessageList: React.FC<MessageListProps> = ({
                             messageId={m._id}
                             message={m}
                             isMe={isMe}
-                            isPinned={(m.pinnedBy || []).includes(currentUser)}
-                            isSaved={(m.savedBy || []).includes(currentUser)}
+                            isPinned={isPinnedForMe}
                             onPin={() => handleTogglePinMessage(m._id)}
-                            onSave={handleToggleSaveMessage ? () => handleToggleSaveMessage(m._id) : undefined}
                             onReply={() => setReplyingTo(m)}
                             onCopy={m.text ? () => handleCopyMessage(m.text || "") : undefined}
                             onEdit={isMe && m.text && !["poll", "task", "reminder", "call-log"].includes(m.kind || "") ? () => {

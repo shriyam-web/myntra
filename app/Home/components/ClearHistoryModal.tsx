@@ -3,16 +3,16 @@ import React from "react";
 interface ClearHistoryModalProps {
   showClearHistoryModal: boolean;
   setShowClearHistoryModal: (show: boolean) => void;
-  includeSavedInDelete: boolean;
-  setIncludeSavedInDelete: (include: boolean) => void;
+  includePinnedInDelete: boolean;
+  setIncludePinnedInDelete: (include: boolean) => void;
   handleDeleteAllMessages: () => void;
 }
 
 export const ClearHistoryModal: React.FC<ClearHistoryModalProps> = ({
   showClearHistoryModal,
   setShowClearHistoryModal,
-  includeSavedInDelete,
-  setIncludeSavedInDelete,
+  includePinnedInDelete,
+  setIncludePinnedInDelete,
   handleDeleteAllMessages,
 }) => {
   if (!showClearHistoryModal) return null;
@@ -56,8 +56,8 @@ export const ClearHistoryModal: React.FC<ClearHistoryModalProps> = ({
               <input
                 type="checkbox"
                 className="peer appearance-none w-6 h-6 bg-zinc-950 border-2 border-zinc-800 rounded-lg checked:bg-red-600 checked:border-red-600 transition-all"
-                checked={includeSavedInDelete}
-                onChange={(e) => setIncludeSavedInDelete(e.target.checked)}
+                checked={includePinnedInDelete}
+                onChange={(e) => setIncludePinnedInDelete(e.target.checked)}
               />
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -76,12 +76,12 @@ export const ClearHistoryModal: React.FC<ClearHistoryModalProps> = ({
             </div>
             <div className="flex flex-col">
               <span className="text-xs font-black text-white uppercase tracking-widest group-hover/check:text-red-500 transition-colors">
-                Also delete saved messages
+                Also delete pinned messages
               </span>
               <span className="text-[10px] font-medium text-zinc-500 leading-relaxed normal-case tracking-normal">
-                {includeSavedInDelete
-                  ? "Saved and pinned messages will be deleted too"
-                  : "Saved and pinned messages will be kept"}
+                {includePinnedInDelete
+                  ? "Pinned messages will be deleted too"
+                  : "Pinned messages will be kept"}
               </span>
             </div>
           </label>
@@ -91,12 +91,12 @@ export const ClearHistoryModal: React.FC<ClearHistoryModalProps> = ({
               onClick={handleDeleteAllMessages}
               className="w-full py-5 bg-red-600 text-white rounded-2xl font-black uppercase tracking-[0.2em] text-[10px] hover:bg-red-500 hover:scale-[1.02] transition-all active:scale-95 shadow-xl shadow-red-900/20"
             >
-              {includeSavedInDelete ? "Delete Everything" : "Delete Messages"}
+              {includePinnedInDelete ? "Delete Everything" : "Delete Messages"}
             </button>
             <p className="text-[9px] text-zinc-600 text-center font-medium -mt-1">
-              {includeSavedInDelete
-                ? "Deletes all messages, including saved and pinned ones"
-                : "Deletes all messages except saved and pinned ones"}
+              {includePinnedInDelete
+                ? "Deletes all messages, including pinned ones"
+                : "Deletes all messages except pinned ones"}
             </p>
             <button
               onClick={() => setShowClearHistoryModal(false)}

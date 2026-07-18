@@ -55,6 +55,16 @@ export function notExpiredMessageFilter(now = new Date()) {
   };
 }
 
+/** Messages with neither a pin nor a legacy save are eligible to expire. */
+function noPermanentProtectionFilter() {
+  return {
+    $and: [
+      { $or: [{ pinnedBy: { $exists: false } }, { pinnedBy: { $size: 0 } }] },
+      { $or: [{ savedBy: { $exists: false } }, { savedBy: { $size: 0 } }] },
+    ],
+  };
+}
+
 export function notExpiredSharedFilter(now = new Date()) {
   return {
     $or: [{ expiresAt: null }, { expiresAt: { $exists: false } }, { expiresAt: { $gt: now } }],
@@ -144,10 +154,11 @@ export async function markDisappearingMessagesViewed(
     createdBy: { $ne: me },
   }).lean();
 
-  // Skip anything already saved by either partner (save permanently clears disappearing,
-  // but race windows may still leave a brief disappearing=true + savedBy state).
+  // Skip anything pinned by either partner. Legacy saves remain protected during migration.
   const eligible = candidates.filter(
-    (m) => !(Array.isArray(m.savedBy) && m.savedBy.length > 0)
+    (m) =>
+      !(Array.isArray(m.pinnedBy) && m.pinnedBy.length > 0) &&
+      !(Array.isArray(m.savedBy) && m.savedBy.length > 0)
   );
 
   let updated = 0;
@@ -157,7 +168,7 @@ export async function markDisappearingMessagesViewed(
         _id: msg._id,
         disappearing: true,
         viewedAt: null,
-        $or: [{ savedBy: { $exists: false } }, { savedBy: { $size: 0 } }],
+        ...noPermanentProtectionFilter(),
       },
       { viewedAt: now, expiresAt },
       { new: true }
@@ -249,10 +260,13 @@ export async function processMediaCleanupJobs(limit = 40): Promise<number> {
   let processed = 0;
   for (const job of due) {
     // Only purge if the message is gone or still marked disappearing+expired
-    const msg = await Message.findById(job.messageId).select("disappearing expiresAt savedBy").lean();
+    const msg = await Message.findById(job.messageId)
+      .select("disappearing expiresAt pinnedBy savedBy")
+      .lean();
     const stillProtected =
       msg &&
       (!msg.disappearing ||
+        (Array.isArray(msg.pinnedBy) && msg.pinnedBy.length > 0) ||
         (Array.isArray(msg.savedBy) && msg.savedBy.length > 0) ||
         (msg.expiresAt && new Date(msg.expiresAt).getTime() > Date.now()));
     if (stillProtected) {
@@ -277,7 +291,7 @@ export async function processMediaCleanupJobs(limit = 40): Promise<number> {
         _id: job.messageId,
         disappearing: true,
         expiresAt: { $lte: new Date() },
-        $or: [{ savedBy: { $exists: false } }, { savedBy: { $size: 0 } }],
+        ...noPermanentProtectionFilter(),
       });
     }
     await MediaCleanupJob.deleteOne({ _id: job._id });
@@ -293,7 +307,7 @@ export async function purgeExpiredDisappearingMessages(): Promise<number> {
   const expired = await Message.find({
     disappearing: true,
     expiresAt: { $lte: now },
-    $or: [{ savedBy: { $exists: false } }, { savedBy: { $size: 0 } }],
+    ...noPermanentProtectionFilter(),
   })
     .limit(50)
     .lean();
@@ -321,7 +335,7 @@ export async function purgeExpiredDisappearingMessages(): Promise<number> {
       _id: msg._id,
       disappearing: true,
       expiresAt: { $lte: now },
-      $or: [{ savedBy: { $exists: false } }, { savedBy: { $size: 0 } }],
+      ...noPermanentProtectionFilter(),
     });
     count += 1;
   }

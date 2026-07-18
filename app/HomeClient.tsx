@@ -138,13 +138,13 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [activeMessageActions, setActiveMessageActions] = useState<string | null>(null);
   const [isMessageExpanded, setIsMessageExpanded] = useState(false);
-  const [showSavedMessagesOnly, setShowSavedMessagesOnly] = useState(false);
+  const [showPinnedMessagesOnly, setShowPinnedMessagesOnly] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [showThemeSettings, setShowThemeSettings] = useState(false);
   const [showClearHistoryModal, setShowClearHistoryModal] = useState(false);
-  const [includeSavedInDelete, setIncludeSavedInDelete] = useState(false);
+  const [includePinnedInDelete, setIncludePinnedInDelete] = useState(false);
   
   const [chatWallpaper, setChatWallpaper] = useState<string>("");
   const [chatBgColor, setChatBgColor] = useState<string>("bg-zinc-900/50");
@@ -257,7 +257,7 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
 
   useEffect(() => {
     if (activeTab !== "messages") {
-      setShowSavedMessagesOnly(false);
+      setShowPinnedMessagesOnly(false);
     }
   }, [activeTab]);
 
@@ -946,35 +946,6 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
     }
   };
 
-  const handleToggleSaveMessage = async (id: string) => {
-    try {
-      setMessages(prev => prev.map(m => {
-        if (m._id === id) {
-          const isSaved = (m.savedBy || []).includes(currentUser);
-          const newSavedBy = isSaved
-            ? (m.savedBy || []).filter(u => u !== currentUser)
-            : [...(m.savedBy || []), currentUser];
-          // Saving permanently clears disappearing fields (server does the same).
-          if (!isSaved && m.disappearing) {
-            return {
-              ...m,
-              savedBy: newSavedBy,
-              disappearing: false,
-              viewedAt: null,
-              expiresAt: null,
-            };
-          }
-          return { ...m, savedBy: newSavedBy };
-        }
-        return m;
-      }));
-      await actions.toggleSaveMessage(id, currentUser);
-    } catch (error) {
-      console.error('Failed to toggle save message:', error);
-      fetchInitialData();
-    }
-  };
-
   const handleToggleDisappearingMode = async () => {
     if (togglingDisappearing) return;
     setTogglingDisappearing(true);
@@ -1037,6 +1008,7 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
             !m.disappearing ||
             !m.expiresAt ||
             new Date(m.expiresAt).getTime() > now ||
+            (m.pinnedBy && m.pinnedBy.length > 0) ||
             (m.savedBy && m.savedBy.length > 0)
         );
         return next.length === prev.length ? prev : next;
@@ -1051,11 +1023,29 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
     try {
       setMessages(prev => prev.map(m => {
         if (m._id === id) {
-          const isPinned = (m.pinnedBy || []).includes(currentUser);
+          const isPinned =
+            (m.pinnedBy || []).includes(currentUser) ||
+            (m.savedBy || []).includes(currentUser);
           const newPinnedBy = isPinned
             ? (m.pinnedBy || []).filter(u => u !== currentUser)
             : [...(m.pinnedBy || []), currentUser];
-          return { ...m, pinnedBy: newPinnedBy };
+          if (!isPinned && m.disappearing) {
+            return {
+              ...m,
+              pinnedBy: newPinnedBy,
+              savedBy: (m.savedBy || []).filter(u => u !== currentUser),
+              disappearing: false,
+              viewedAt: null,
+              expiresAt: null,
+            };
+          }
+          return {
+            ...m,
+            pinnedBy: newPinnedBy,
+            savedBy: isPinned
+              ? (m.savedBy || []).filter(u => u !== currentUser)
+              : m.savedBy,
+          };
         }
         return m;
       }));
@@ -1100,7 +1090,7 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
       if (activeTab === "messages") {
         setMessages([]);
       }
-      await actions.deleteAllMessages(false, currentUser, includeSavedInDelete);
+      await actions.deleteAllMessages(false, currentUser, includePinnedInDelete);
       setShowClearHistoryModal(false);
     } catch (error) {
       console.error('Failed to purge history:', error);
@@ -1232,14 +1222,14 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
 
   const visibleMessages = useMemo(
     () =>
-      showSavedMessagesOnly
+      showPinnedMessagesOnly
         ? messages.filter((m) => {
-            const isSaved = (m.savedBy || []).includes(currentUser);
             const isPinned = (m.pinnedBy || []).includes(currentUser);
-            return isSaved || isPinned;
+            const isLegacySaved = (m.savedBy || []).includes(currentUser);
+            return isPinned || isLegacySaved;
           })
         : messages,
-    [messages, showSavedMessagesOnly, currentUser]
+    [messages, showPinnedMessagesOnly, currentUser]
   );
 
   const groupedMessages = useMemo(() => {
@@ -1446,9 +1436,9 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
                     {isMessageExpanded && (
                       <span className="text-sm font-medium text-white truncate capitalize">{partnerUsername}</span>
                     )}
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className={`inline-flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider ${getPartnerStatus() === "Online" ? "text-green-500" : "text-zinc-500"}`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${getPartnerStatus() === "Online" ? "bg-green-500 animate-pulse" : "bg-zinc-600"}`} />
+                    <div className="flex items-center gap-2 flex-nowrap min-w-0">
+                      <span className={`inline-flex items-center gap-1 text-[8.5px] font-medium uppercase tracking-wide whitespace-nowrap ${getPartnerStatus() === "Online" ? "text-green-500" : "text-zinc-500"}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${getPartnerStatus() === "Online" ? "bg-green-500 animate-pulse" : "bg-zinc-600"}`} />
                         {getPartnerStatus() || "Offline"}
                       </span>
                       {disappearingMode && (
@@ -1554,14 +1544,14 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
                           </button>
                           <button
                             onClick={() => {
-                              setShowSavedMessagesOnly((prev) => !prev);
+                              setShowPinnedMessagesOnly((prev) => !prev);
                               setIsMenuOpen(false);
                             }}
                             className="w-full flex items-center gap-3 px-4 py-2.5 text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors text-left"
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m19 21-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
                             <span className="text-[11px] font-bold uppercase tracking-wider">
-                              {showSavedMessagesOnly ? "All Messages" : "Saved Messages"}
+                              {showPinnedMessagesOnly ? "All Messages" : "Pinned Messages"}
                             </span>
                           </button>
                           <button
@@ -1638,18 +1628,20 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
                   <div className="absolute inset-0 pointer-events-none z-[1] bg-[radial-gradient(circle_at_50%_0%,rgba(139,92,246,0.22)_0%,rgba(88,28,135,0.12)_40%,transparent_75%)]" />
                 )}
                 {disappearingMode && (
-                  <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[65] px-3 py-1.5 rounded-full bg-violet-950/90 border border-violet-400/40 text-violet-100 text-[10px] font-bold uppercase tracking-wider shadow-lg shadow-violet-900/30 whitespace-nowrap">
-                    Disappearing on
-                    {disappearingEnabledAt
-                      ? ` · since ${new Date(disappearingEnabledAt).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`
-                      : " · 1h after viewed"}
+                  <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[65] px-3 py-1.5 rounded-full bg-violet-950/90 border border-violet-400/40 text-violet-100 text-[10px] font-bold uppercase tracking-wider shadow-lg shadow-violet-900/30 whitespace-nowrap inline-flex items-center gap-1.5">
+                    <span>Disappearing on</span>
+                    <span className="text-[8px] font-normal normal-case tracking-normal opacity-70">
+                      {disappearingEnabledAt
+                        ? `since ${new Date(disappearingEnabledAt).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`
+                        : "1h after viewed"}
+                    </span>
                   </div>
                 )}
-                {showSavedMessagesOnly && (
+                {showPinnedMessagesOnly && (
                   <div className={`absolute left-1/2 -translate-x-1/2 z-[65] px-3 py-1.5 rounded-full bg-zinc-900/95 border border-zinc-700 text-zinc-200 text-[10px] font-bold uppercase tracking-wider ${
                     disappearingMode ? "top-12" : "top-3"
                   }`}>
-                    Saved Messages View
+                    Pinned Messages View
                   </div>
                 )}
                 
@@ -1697,7 +1689,6 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
                     handleToggleReminder={handleToggleReminder}
                     onOpenSharedItem={(kind) => setActiveTab(kind === "task" ? "plans" : "dates")}
                     onViewDisappearingMessages={handleViewDisappearingMessages}
-                    handleToggleSaveMessage={handleToggleSaveMessage}
                     setPreviewImageIndex={setPreviewImageIndex}
                     partnerIsTyping={partnerIsTyping}
                 />
@@ -1786,8 +1777,8 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
       <ClearHistoryModal
         showClearHistoryModal={showClearHistoryModal}
         setShowClearHistoryModal={setShowClearHistoryModal}
-        includeSavedInDelete={includeSavedInDelete}
-        setIncludeSavedInDelete={setIncludeSavedInDelete}
+        includePinnedInDelete={includePinnedInDelete}
+        setIncludePinnedInDelete={setIncludePinnedInDelete}
         handleDeleteAllMessages={handleDeleteAllMessages}
       />
 
