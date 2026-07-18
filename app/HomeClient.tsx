@@ -1488,6 +1488,37 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
                         )}
                     </button>
 
+                    <button
+                        type="button"
+                        role="switch"
+                        aria-checked={disappearingMode}
+                        aria-label="Disappearing messages"
+                        onClick={() => void handleToggleDisappearingMode()}
+                        disabled={togglingDisappearing}
+                        title={disappearingMode ? "Disappearing messages: on" : "Disappearing messages: off"}
+                        className={`relative w-10 h-6 rounded-full border transition-colors shrink-0 ${
+                          togglingDisappearing
+                            ? "opacity-70 cursor-wait"
+                            : "active:scale-95"
+                        } ${
+                          disappearingMode
+                            ? "bg-violet-500 border-violet-400"
+                            : "bg-zinc-800 border-zinc-700"
+                        }`}
+                    >
+                        <span
+                          className={`absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full flex items-center justify-center transition-all duration-200 ${
+                            disappearingMode ? "left-[calc(100%-1.25rem)] bg-white text-violet-600" : "left-1 bg-zinc-400 text-zinc-700"
+                          }`}
+                        >
+                          {togglingDisappearing ? (
+                            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" className="animate-spin"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                          ) : (
+                            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                          )}
+                        </span>
+                    </button>
+
                     <div className="relative z-[170]" ref={menuRef}>
                       <button 
                         onClick={() => setIsMenuOpen(!isMenuOpen)}
@@ -1542,20 +1573,6 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>
                             <span className="text-[11px] font-bold uppercase tracking-wider">Theme & Wallpaper</span>
-                          </button>
-                          <button
-                            onClick={() => void handleToggleDisappearingMode()}
-                            disabled={togglingDisappearing}
-                            className={`w-full flex items-center gap-3 px-4 py-2.5 transition-colors text-left ${
-                              disappearingMode
-                                ? "text-violet-200 hover:bg-violet-500/15"
-                                : "text-zinc-300 hover:text-white hover:bg-zinc-800"
-                            }`}
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                            <span className="text-[11px] font-bold uppercase tracking-wider">
-                              {disappearingMode ? "Disappearing: On" : "Disappearing Messages"}
-                            </span>
                           </button>
                           <div className="h-px bg-zinc-800 my-1 mx-2" />
                           <button
