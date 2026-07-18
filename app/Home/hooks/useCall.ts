@@ -19,8 +19,13 @@ type EndReason =
 
 type IceServer = { urls: string | string[]; username?: string; credential?: string };
 
-const IDLE_POLL_MS = 2500;
-const ACTIVE_POLL_MS = 800;
+const IDLE_POLL_MS = 3000;
+// Fast polling only while signaling matters (dialing/ringing/connecting/reconnecting).
+const SIGNALING_POLL_MS = 800;
+// Once media flows peer-to-peer the server is only needed for hangup/ICE-restart
+// signals, so poll gently — hammering server actions queues them up and lags the UI.
+const ACTIVE_POLL_MS = 3000;
+const HEARTBEAT_MS = 10_000; // server marks stale at 45s
 
 export function useCall(currentUser: string, view: string) {
   const [callStatus, setCallStatus] = useState<UiStatus>("idle");
@@ -51,6 +56,12 @@ export function useCall(currentUser: string, view: string) {
   const disconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startingRef = useRef(false);
   const callStatusRef = useRef<UiStatus>("idle");
+  // Calls ended locally: ignore stale server echoes of them (prevents UI flicker/resurrection).
+  const endedCallIdsRef = useRef<Set<string>>(new Set());
+  // User hit End while startCall was still in flight (no session yet).
+  const cancelRequestedRef = useRef(false);
+  const endedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastHeartbeatAtRef = useRef(0);
 
   useEffect(() => {
     callStatusRef.current = callStatus;
@@ -98,6 +109,7 @@ export function useCall(currentUser: string, view: string) {
     restartAttemptsRef.current = 0;
     sessionRef.current = null;
     startingRef.current = false;
+    lastHeartbeatAtRef.current = 0;
   }, []);
 
   const teardownMedia = useCallback(() => {
@@ -122,7 +134,9 @@ export function useCall(currentUser: string, view: string) {
   const showEnded = useCallback((reason: EndReason) => {
     setCallStatus("ended");
     setEndReason(reason);
-    setTimeout(() => {
+    if (endedTimerRef.current) clearTimeout(endedTimerRef.current);
+    endedTimerRef.current = setTimeout(() => {
+      endedTimerRef.current = null;
       setCallStatus("idle");
       setEndReason(null);
       setIsIncoming(false);
@@ -179,6 +193,10 @@ export function useCall(currentUser: string, view: string) {
   );
 
   const applySession = useCallback((session: CallSessionDTO) => {
+    // A call we already ended/handled locally must never re-open or re-trigger
+    // the ended screen from a stale poll — that caused flicker.
+    if (endedCallIdsRef.current.has(session.callId)) return;
+
     sessionRef.current = session;
     setPartnerName(session.partner);
     setIsIncoming(session.role === "callee" && session.state === "ringing");
@@ -192,6 +210,7 @@ export function useCall(currentUser: string, view: string) {
     } else if (session.state === "active") {
       setCallStatus("active");
     } else if (session.state === "ended") {
+      endedCallIdsRef.current.add(session.callId);
       const mapped: EndReason =
         session.endReason === "rejected"
           ? "rejected"
@@ -438,6 +457,7 @@ export function useCall(currentUser: string, view: string) {
   const handleStartCall = useCallback(async () => {
     if (startingRef.current || callStatusRef.current !== "idle") return;
     startingRef.current = true;
+    cancelRequestedRef.current = false;
     setBusyMessage(null);
     try {
       resetLocal();
@@ -461,6 +481,15 @@ export function useCall(currentUser: string, view: string) {
         } else {
           showEnded("failed");
         }
+        return;
+      }
+
+      // User hung up while the call was still being created — cancel it server-side.
+      if (cancelRequestedRef.current) {
+        endedCallIdsRef.current.add(result.session.callId);
+        void actions.endCallAction(result.session.callId, "cancelled").catch(() => undefined);
+        teardownMedia();
+        resetLocal();
         return;
       }
 
@@ -530,14 +559,19 @@ export function useCall(currentUser: string, view: string) {
     teardownMedia,
   ]);
 
-  const handleEndCall = useCallback(async () => {
+  const handleEndCall = useCallback(() => {
     const session = sessionRef.current;
+    const wasRinging = callStatusRef.current === "dialing" || callStatusRef.current === "ringing";
+
+    // End instantly in the UI; notify the server in the background.
+    cancelRequestedRef.current = true;
+    if (session) endedCallIdsRef.current.add(session.callId);
     teardownMedia();
+    resetLocal();
+    showEnded(wasRinging ? "cancelled" : "completed");
+
     if (session) {
-      try {
-        await actions.endCallAction(session.callId, "hangup");
-      } catch (e) {
-        console.error(e);
+      void actions.endCallAction(session.callId, "hangup").catch(() => {
         // beacon fallback
         try {
           navigator.sendBeacon?.(
@@ -549,24 +583,20 @@ export function useCall(currentUser: string, view: string) {
         } catch {
           // ignore
         }
-      }
+      });
     }
-    resetLocal();
-    showEnded(callStatusRef.current === "dialing" || callStatusRef.current === "ringing" ? "cancelled" : "completed");
   }, [resetLocal, showEnded, teardownMedia]);
 
-  const handleRejectCall = useCallback(async () => {
+  const handleRejectCall = useCallback(() => {
     const session = sessionRef.current;
-    if (session) {
-      try {
-        await actions.rejectCallAction(session.callId);
-      } catch (e) {
-        console.error(e);
-      }
-    }
+    // Reject instantly in the UI; notify the server in the background.
+    if (session) endedCallIdsRef.current.add(session.callId);
     teardownMedia();
     resetLocal();
     showEnded("rejected");
+    if (session) {
+      void actions.rejectCallAction(session.callId).catch((e) => console.error(e));
+    }
   }, [resetLocal, showEnded, teardownMedia]);
 
   // Poll + SSE wake for call state / signals
@@ -576,8 +606,11 @@ export function useCall(currentUser: string, view: string) {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
     let eventSource: EventSource | null = null;
+    let inFlight = false;
 
     const tick = async () => {
+      if (inFlight) return;
+      inFlight = true;
       try {
         if (!sessionRef.current) {
           const active = await actions.getActiveCallAction();
@@ -591,17 +624,27 @@ export function useCall(currentUser: string, view: string) {
         } else {
           await pullSignals();
           if (sessionRef.current && sessionRef.current.state !== "ended") {
-            void actions.heartbeatCallAction(sessionRef.current.callId);
+            // Throttled heartbeat — one lightweight write every 10s is enough.
+            const nowTs = Date.now();
+            if (nowTs - lastHeartbeatAtRef.current >= HEARTBEAT_MS) {
+              lastHeartbeatAtRef.current = nowTs;
+              void actions.heartbeatCallAction(sessionRef.current.callId);
+            }
           }
         }
       } catch (e) {
         console.error("call poll error", e);
       } finally {
+        inFlight = false;
         if (!cancelled) {
+          if (timer) clearTimeout(timer);
+          const st = callStatusRef.current;
           const delay =
-            callStatusRef.current === "idle" || callStatusRef.current === "ended"
+            st === "idle" || st === "ended"
               ? IDLE_POLL_MS
-              : ACTIVE_POLL_MS;
+              : st === "active"
+                ? ACTIVE_POLL_MS
+                : SIGNALING_POLL_MS;
           timer = setTimeout(tick, delay);
         }
       }

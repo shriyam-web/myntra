@@ -42,8 +42,8 @@ const CallTimer = memo(function CallTimer({ activeAt }: { activeAt: string | nul
   const secs = duration % 60;
 
   return (
-    <div className="px-6 py-2 rounded-2xl bg-zinc-900/70 border border-white/5">
-      <span className="text-2xl font-mono font-medium tracking-widest text-indigo-400">
+    <div className="px-6 py-2 rounded-2xl bg-white/80 border border-zinc-200 shadow-sm">
+      <span className="text-2xl font-mono font-medium tracking-widest text-indigo-600">
         {mins}:{secs.toString().padStart(2, '0')}
       </span>
     </div>
@@ -261,19 +261,19 @@ export const CallOverlay = memo(function CallOverlay({
   };
 
   return (
-    <div className="fixed inset-0 z-[1000] bg-zinc-950 flex flex-col items-center justify-between text-white overflow-hidden font-sans">
+    <div className="fixed inset-0 z-[1000] bg-zinc-50 flex flex-col items-center justify-between text-zinc-900 overflow-hidden font-sans">
       {/* Static, cheap background — no animated mega-blurs */}
-      <div className="absolute inset-0 z-0 pointer-events-none bg-[radial-gradient(circle_at_50%_30%,rgba(99,102,241,0.14)_0%,rgba(168,85,247,0.08)_35%,rgba(9,9,11,1)_75%)]" />
+      <div className="absolute inset-0 z-0 pointer-events-none bg-[radial-gradient(circle_at_50%_30%,rgba(99,102,241,0.12)_0%,rgba(168,85,247,0.07)_35%,rgba(250,250,250,1)_75%)]" />
 
       {/* Top Bar / Status */}
       <div className="relative z-10 w-full px-8 pt-12 flex flex-col items-center">
-        <div className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/10 shadow-2xl">
+        <div className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/80 border border-zinc-200 shadow-sm">
           <div className={`w-2 h-2 rounded-full ${
             endReason ? 'bg-red-500' :
             callStatus === 'on-call' ? 'bg-green-500' :
             'bg-indigo-500 animate-pulse'
           }`} />
-          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white/80">
+          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-700">
             {endReason === 'rejected' ? 'Call Rejected' :
              endReason === 'missed' || endReason === 'timeout' ? 'Call Missed' :
              endReason === 'busy' ? (busyMessage || 'Busy') :
@@ -290,7 +290,7 @@ export const CallOverlay = memo(function CallOverlay({
         </div>
         {callStatus === 'on-call' && statsLabel && (
           <p className={`mt-3 text-[10px] font-bold uppercase tracking-widest ${
-            quality === 'poor' ? 'text-amber-400' : quality === 'reconnecting' ? 'text-zinc-400' : 'text-zinc-500'
+            quality === 'poor' ? 'text-amber-600' : quality === 'reconnecting' ? 'text-zinc-500' : 'text-zinc-400'
           }`}>
             {statsLabel}
           </p>
@@ -307,8 +307,8 @@ export const CallOverlay = memo(function CallOverlay({
 
           {/* Avatar */}
           <div className="relative w-40 h-40 rounded-full p-1 bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 shadow-xl">
-            <div className="w-full h-full rounded-full bg-zinc-900 flex items-center justify-center overflow-hidden border-4 border-zinc-950">
-              <span className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-b from-white to-white/50 tracking-tighter">
+            <div className="w-full h-full rounded-full bg-white flex items-center justify-center overflow-hidden border-4 border-zinc-50">
+              <span className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-b from-zinc-800 to-zinc-400 tracking-tighter">
                 {partnerName[0]?.toUpperCase()}
               </span>
             </div>
@@ -316,7 +316,7 @@ export const CallOverlay = memo(function CallOverlay({
         </div>
 
         <div className="flex flex-col items-center gap-2 text-center">
-          <h2 className="text-5xl font-black tracking-tighter uppercase italic bg-clip-text text-transparent bg-gradient-to-b from-white via-white to-white/20">
+          <h2 className="text-5xl font-black tracking-tighter uppercase italic bg-clip-text text-transparent bg-gradient-to-b from-zinc-900 via-zinc-800 to-zinc-400">
             {partnerName}
           </h2>
           <CallTimer activeAt={activeAt} />
@@ -351,13 +351,13 @@ export const CallOverlay = memo(function CallOverlay({
                 type="button"
                 onClick={onReject}
                 disabled={accepting}
-                className="w-20 h-20 rounded-full bg-zinc-900 border border-white/10 flex items-center justify-center text-red-500 active:scale-90 active:bg-red-500 active:text-white transition-transform duration-100 touch-manipulation select-none disabled:opacity-50"
+                className="w-20 h-20 rounded-full bg-white border border-zinc-200 shadow-md flex items-center justify-center text-red-500 active:scale-90 active:bg-red-500 active:text-white transition-transform duration-100 touch-manipulation select-none disabled:opacity-50"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="rotate-[135deg] pointer-events-none">
                   <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l2.28-2.28a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
                 </svg>
               </button>
-              <span className="text-[10px] font-black uppercase tracking-widest text-white/40">Decline</span>
+              <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Decline</span>
             </div>
 
             <div className="flex flex-col items-center gap-4">
@@ -375,7 +375,7 @@ export const CallOverlay = memo(function CallOverlay({
                   </svg>
                 )}
               </button>
-              <span className="text-[10px] font-black uppercase tracking-widest text-green-500">
+              <span className="text-[10px] font-black uppercase tracking-widest text-green-600">
                 {accepting ? 'Connecting' : 'Accept'}
               </span>
             </div>
@@ -389,8 +389,8 @@ export const CallOverlay = memo(function CallOverlay({
                   onClick={toggleMute}
                   className={`w-16 h-16 rounded-full flex items-center justify-center active:scale-90 transition-transform duration-100 touch-manipulation select-none border ${
                     isMuted
-                      ? 'bg-white text-zinc-900 border-white'
-                      : 'bg-zinc-900 text-white border-white/10'
+                      ? 'bg-zinc-900 text-white border-zinc-900'
+                      : 'bg-white text-zinc-900 border-zinc-200 shadow-md'
                   }`}
                   aria-pressed={isMuted}
                 >
@@ -411,7 +411,7 @@ export const CallOverlay = memo(function CallOverlay({
                     </svg>
                   )}
                 </button>
-                <span className="text-[10px] font-black uppercase tracking-widest text-white/40">
+                <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
                   {isMuted ? 'Unmute' : 'Mute'}
                 </span>
               </div>
@@ -427,7 +427,7 @@ export const CallOverlay = memo(function CallOverlay({
                   <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l2.28-2.28a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
                 </svg>
               </button>
-              <span className="text-[10px] font-black uppercase tracking-widest text-white/30">
+              <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
                 {callStatus === 'on-call' ? 'End' : 'End Session'}
               </span>
             </div>
@@ -439,8 +439,8 @@ export const CallOverlay = memo(function CallOverlay({
                   onClick={toggleSpeaker}
                   className={`w-16 h-16 rounded-full flex items-center justify-center active:scale-90 transition-transform duration-100 touch-manipulation select-none border ${
                     isSpeakerOn
-                      ? 'bg-white text-zinc-900 border-white'
-                      : 'bg-zinc-900 text-white border-white/10'
+                      ? 'bg-zinc-900 text-white border-zinc-900'
+                      : 'bg-white text-zinc-900 border-zinc-200 shadow-md'
                   }`}
                   aria-pressed={isSpeakerOn}
                 >
@@ -456,7 +456,7 @@ export const CallOverlay = memo(function CallOverlay({
                     )}
                   </svg>
                 </button>
-                <span className="text-[10px] font-black uppercase tracking-widest text-white/40">
+                <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
                   Speaker
                 </span>
               </div>
