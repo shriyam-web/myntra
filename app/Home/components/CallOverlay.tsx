@@ -42,11 +42,9 @@ const CallTimer = memo(function CallTimer({ activeAt }: { activeAt: string | nul
   const secs = duration % 60;
 
   return (
-    <div className="px-6 py-2 rounded-2xl bg-white/80 border border-zinc-200 shadow-sm">
-      <span className="text-2xl font-mono font-medium tracking-widest text-indigo-600">
-        {mins}:{secs.toString().padStart(2, '0')}
-      </span>
-    </div>
+    <span className="text-xl font-mono font-medium tracking-[0.2em] text-zinc-400 tabular-nums">
+      {mins}:{secs.toString().padStart(2, '0')}
+    </span>
   );
 });
 
@@ -190,20 +188,22 @@ export const CallOverlay = memo(function CallOverlay({
 
         audioRoutesRef.current = {
           earpiece: earpiece?.deviceId ?? null,
-          speaker: speaker?.deviceId ?? null,
+          // "" = browser default output; on phones that's the loudspeaker.
+          speaker: speaker?.deviceId ?? "",
         };
 
-        if (earpiece && speaker) {
-          setSpeakerSupported(true);
-          // Default to earpiece, like a normal phone call.
+        if (earpiece) {
+          // Always force the earpiece, like a normal phone call — never start
+          // on the loudspeaker even if no distinct speaker device was found.
           try {
             await el.setSinkId(earpiece.deviceId);
             if (!cancelled) setIsSpeakerOn(false);
           } catch (e) {
             console.error("Failed to route audio to earpiece:", e);
           }
+          if (!cancelled) setSpeakerSupported(true);
         } else {
-          // Desktop or browsers without distinct routes — no toggle needed.
+          // Desktop or browsers without an earpiece route — no toggle needed.
           setSpeakerSupported(false);
         }
       } catch (e) {
@@ -250,7 +250,7 @@ export const CallOverlay = memo(function CallOverlay({
     const { earpiece, speaker } = audioRoutesRef.current;
     const next = !isSpeakerOn;
     const targetId = next ? speaker : earpiece;
-    if (!targetId) return;
+    if (targetId == null) return;
 
     try {
       await el.setSinkId(targetId);
@@ -261,19 +261,16 @@ export const CallOverlay = memo(function CallOverlay({
   };
 
   return (
-    <div className="fixed inset-0 z-[1000] bg-zinc-50 flex flex-col items-center justify-between text-zinc-900 overflow-hidden font-sans">
-      {/* Static, cheap background — no animated mega-blurs */}
-      <div className="absolute inset-0 z-0 pointer-events-none bg-[radial-gradient(circle_at_50%_30%,rgba(99,102,241,0.12)_0%,rgba(168,85,247,0.07)_35%,rgba(250,250,250,1)_75%)]" />
-
+    <div className="fixed inset-0 z-[1000] bg-white flex flex-col items-center justify-between text-zinc-900 overflow-hidden font-sans">
       {/* Top Bar / Status */}
-      <div className="relative z-10 w-full px-8 pt-12 flex flex-col items-center">
-        <div className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/80 border border-zinc-200 shadow-sm">
-          <div className={`w-2 h-2 rounded-full ${
+      <div className="relative z-10 w-full px-8 pt-14 flex flex-col items-center">
+        <div className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-zinc-100">
+          <div className={`w-1.5 h-1.5 rounded-full ${
             endReason ? 'bg-red-500' :
             callStatus === 'on-call' ? 'bg-green-500' :
             'bg-indigo-500 animate-pulse'
           }`} />
-          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-700">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-600">
             {endReason === 'rejected' ? 'Call Rejected' :
              endReason === 'missed' || endReason === 'timeout' ? 'Call Missed' :
              endReason === 'busy' ? (busyMessage || 'Busy') :
@@ -284,13 +281,13 @@ export const CallOverlay = memo(function CallOverlay({
              uiStatus === 'reconnecting' ? 'Reconnecting…' :
              uiStatus === 'connecting' ? 'Connecting…' :
              callStatus === 'ringing'
-              ? (isIncoming ? (accepting ? 'Connecting…' : 'Incoming Audio Call') : 'Calling...')
-              : 'Secure Connection Active'}
+              ? (isIncoming ? (accepting ? 'Connecting…' : 'Incoming Call') : 'Calling…')
+              : 'Secure Call'}
           </span>
         </div>
         {callStatus === 'on-call' && statsLabel && (
-          <p className={`mt-3 text-[10px] font-bold uppercase tracking-widest ${
-            quality === 'poor' ? 'text-amber-600' : quality === 'reconnecting' ? 'text-zinc-500' : 'text-zinc-400'
+          <p className={`mt-3 text-[10px] font-medium uppercase tracking-widest ${
+            quality === 'poor' ? 'text-amber-600' : 'text-zinc-400'
           }`}>
             {statsLabel}
           </p>
@@ -298,25 +295,23 @@ export const CallOverlay = memo(function CallOverlay({
       </div>
 
       {/* Center Content: Avatar & Info */}
-      <div className="relative z-10 flex flex-col items-center gap-8 mt-4">
+      <div className="relative z-10 flex flex-col items-center gap-7 mt-4">
         <div className="relative">
           {/* Single lightweight ping while ringing */}
           {callStatus === 'ringing' && !endReason && !accepting && (
-            <div className="absolute -inset-4 rounded-full border-2 border-indigo-500/30 animate-ping" />
+            <div className="absolute -inset-3 rounded-full border border-indigo-300 animate-ping" />
           )}
 
           {/* Avatar */}
-          <div className="relative w-40 h-40 rounded-full p-1 bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 shadow-xl">
-            <div className="w-full h-full rounded-full bg-white flex items-center justify-center overflow-hidden border-4 border-zinc-50">
-              <span className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-b from-zinc-800 to-zinc-400 tracking-tighter">
-                {partnerName[0]?.toUpperCase()}
-              </span>
-            </div>
+          <div className="relative w-36 h-36 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center overflow-hidden">
+            <span className="text-6xl font-semibold text-indigo-500 tracking-tight">
+              {partnerName[0]?.toUpperCase()}
+            </span>
           </div>
         </div>
 
         <div className="flex flex-col items-center gap-2 text-center">
-          <h2 className="text-5xl font-black tracking-tighter uppercase italic bg-clip-text text-transparent bg-gradient-to-b from-zinc-900 via-zinc-800 to-zinc-400">
+          <h2 className="text-3xl font-semibold tracking-tight text-zinc-900 capitalize">
             {partnerName}
           </h2>
           <CallTimer activeAt={activeAt} />
@@ -324,13 +319,13 @@ export const CallOverlay = memo(function CallOverlay({
       </div>
 
       {/* Visualizer — pure CSS animation, fixed heights, GPU-friendly scaleY */}
-      <div className="relative z-10 w-full max-w-lg h-32 flex items-center justify-center px-12">
-        <div className="flex items-end justify-center gap-1.5 w-full h-16">
+      <div className="relative z-10 w-full max-w-lg h-24 flex items-center justify-center px-12">
+        <div className="flex items-end justify-center gap-1.5 w-full h-12">
           {barHeights.map((h, i) => (
             <div
               key={i}
-              className={`w-1 rounded-full bg-gradient-to-t from-indigo-500 via-purple-500 to-pink-500 origin-bottom ${
-                callStatus === 'on-call' ? 'opacity-100 call-wave-bar' : 'opacity-20'
+              className={`w-1 rounded-full bg-indigo-400 origin-bottom ${
+                callStatus === 'on-call' ? 'opacity-100 call-wave-bar' : 'opacity-15'
               }`}
               style={{
                 height: `${h}%`,
@@ -351,13 +346,13 @@ export const CallOverlay = memo(function CallOverlay({
                 type="button"
                 onClick={onReject}
                 disabled={accepting}
-                className="w-20 h-20 rounded-full bg-white border border-zinc-200 shadow-md flex items-center justify-center text-red-500 active:scale-90 active:bg-red-500 active:text-white transition-transform duration-100 touch-manipulation select-none disabled:opacity-50"
+                className="w-[72px] h-[72px] rounded-full bg-red-500 flex items-center justify-center text-white active:scale-90 active:bg-red-600 transition-transform duration-100 touch-manipulation select-none disabled:opacity-50"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="rotate-[135deg] pointer-events-none">
                   <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l2.28-2.28a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
                 </svg>
               </button>
-              <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Decline</span>
+              <span className="text-[11px] font-medium tracking-wide text-zinc-500">Decline</span>
             </div>
 
             <div className="flex flex-col items-center gap-4">
@@ -365,7 +360,7 @@ export const CallOverlay = memo(function CallOverlay({
                 type="button"
                 onClick={handleAcceptTap}
                 disabled={accepting}
-                className="w-20 h-20 rounded-full bg-green-500 flex items-center justify-center text-white shadow-lg shadow-green-500/40 active:scale-90 transition-transform duration-100 touch-manipulation select-none disabled:opacity-70"
+                className="w-[72px] h-[72px] rounded-full bg-green-500 flex items-center justify-center text-white active:scale-90 active:bg-green-600 transition-transform duration-100 touch-manipulation select-none disabled:opacity-70"
               >
                 {accepting ? (
                   <span className="w-7 h-7 border-[3px] border-white/40 border-t-white rounded-full animate-spin pointer-events-none" />
@@ -375,7 +370,7 @@ export const CallOverlay = memo(function CallOverlay({
                   </svg>
                 )}
               </button>
-              <span className="text-[10px] font-black uppercase tracking-widest text-green-600">
+              <span className="text-[11px] font-medium tracking-wide text-zinc-500">
                 {accepting ? 'Connecting' : 'Accept'}
               </span>
             </div>
@@ -387,10 +382,10 @@ export const CallOverlay = memo(function CallOverlay({
                 <button
                   type="button"
                   onClick={toggleMute}
-                  className={`w-16 h-16 rounded-full flex items-center justify-center active:scale-90 transition-transform duration-100 touch-manipulation select-none border ${
+                  className={`w-16 h-16 rounded-full flex items-center justify-center active:scale-90 transition-transform duration-100 touch-manipulation select-none ${
                     isMuted
-                      ? 'bg-zinc-900 text-white border-zinc-900'
-                      : 'bg-white text-zinc-900 border-zinc-200 shadow-md'
+                      ? 'bg-zinc-900 text-white'
+                      : 'bg-zinc-100 text-zinc-700 active:bg-zinc-200'
                   }`}
                   aria-pressed={isMuted}
                 >
@@ -411,7 +406,7 @@ export const CallOverlay = memo(function CallOverlay({
                     </svg>
                   )}
                 </button>
-                <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
+                <span className="text-[11px] font-medium tracking-wide text-zinc-500">
                   {isMuted ? 'Unmute' : 'Mute'}
                 </span>
               </div>
@@ -421,14 +416,14 @@ export const CallOverlay = memo(function CallOverlay({
               <button
                 type="button"
                 onClick={onEnd}
-                className="w-20 h-20 rounded-full bg-red-600 flex items-center justify-center text-white shadow-lg shadow-red-600/40 active:scale-90 transition-transform duration-100 touch-manipulation select-none"
+                className="w-[72px] h-[72px] rounded-full bg-red-500 flex items-center justify-center text-white active:scale-90 active:bg-red-600 transition-transform duration-100 touch-manipulation select-none"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="rotate-[135deg] pointer-events-none">
                   <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l2.28-2.28a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
                 </svg>
               </button>
-              <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
-                {callStatus === 'on-call' ? 'End' : 'End Session'}
+              <span className="text-[11px] font-medium tracking-wide text-zinc-500">
+                {callStatus === 'on-call' ? 'End' : 'Cancel'}
               </span>
             </div>
 
@@ -437,10 +432,10 @@ export const CallOverlay = memo(function CallOverlay({
                 <button
                   type="button"
                   onClick={toggleSpeaker}
-                  className={`w-16 h-16 rounded-full flex items-center justify-center active:scale-90 transition-transform duration-100 touch-manipulation select-none border ${
+                  className={`w-16 h-16 rounded-full flex items-center justify-center active:scale-90 transition-transform duration-100 touch-manipulation select-none ${
                     isSpeakerOn
-                      ? 'bg-zinc-900 text-white border-zinc-900'
-                      : 'bg-white text-zinc-900 border-zinc-200 shadow-md'
+                      ? 'bg-zinc-900 text-white'
+                      : 'bg-zinc-100 text-zinc-700 active:bg-zinc-200'
                   }`}
                   aria-pressed={isSpeakerOn}
                 >
@@ -456,7 +451,7 @@ export const CallOverlay = memo(function CallOverlay({
                     )}
                   </svg>
                 </button>
-                <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
+                <span className="text-[11px] font-medium tracking-wide text-zinc-500">
                   Speaker
                 </span>
               </div>

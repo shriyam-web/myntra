@@ -80,8 +80,7 @@ export function LoginView({
           data-lpignore="true"
           data-1p-ignore="true"
           data-form-type="other"
-          disabled={isLoggingIn}
-          className="w-full px-6 py-4 bg-zinc-900 border border-zinc-800 rounded-2xl text-white focus:border-white focus:ring-1 focus:ring-white/20 outline-none transition-all font-mono text-center text-sm disabled:opacity-60"
+          className="w-full px-6 py-4 bg-zinc-900 border border-zinc-800 rounded-2xl text-white focus:border-white focus:ring-1 focus:ring-white/20 outline-none transition-all font-mono text-center text-sm"
         />
         {loginError && showError && (
           <p className="text-[10px] font-bold uppercase tracking-widest text-red-400">{loginError}</p>
