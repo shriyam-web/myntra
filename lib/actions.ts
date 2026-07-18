@@ -609,6 +609,7 @@ export async function createPlan(content: string, createdBy: string, dueAt?: str
         kind: "task",
         sharedItemMeta: {
           itemId: plan._id.toString(),
+          itemIds: [plan._id.toString()],
           itemType: "task",
         },
         ...disappearing,
@@ -624,6 +625,61 @@ export async function createPlan(content: string, createdBy: string, dueAt?: str
     console.error('Failed to create plan:', error);
     if (error instanceof Error && /Unauthorized|empty/i.test(error.message)) throw error;
     throw new Error('Failed to add task. Database connection error.');
+  }
+}
+
+/** Create a shared todo list (multiple checklist items) and post one chat card. */
+export async function createTodoList(title: string, items: string[]) {
+  try {
+    const me = await requireUser();
+    const listTitle = String(title || "").trim().slice(0, 120);
+    const cleaned = (Array.isArray(items) ? items : [])
+      .map((item) => String(item || "").trim().slice(0, 200))
+      .filter(Boolean)
+      .slice(0, 20);
+    if (!listTitle) throw new Error("Add a list title.");
+    if (cleaned.length === 0) throw new Error("Add at least one checklist item.");
+
+    await dbConnect();
+    const disappearing = await disappearingCreateFields();
+    const listId = `list_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+
+    const plans = await Plan.insertMany(
+      cleaned.map((content) => ({
+        content,
+        createdBy: me,
+        listId,
+        listTitle,
+      }))
+    );
+    const itemIds = plans.map((plan) => plan._id.toString());
+
+    try {
+      await Message.create({
+        text: listTitle,
+        createdBy: me,
+        kind: "task",
+        sharedItemMeta: {
+          itemId: itemIds[0],
+          itemIds,
+          listId,
+          listTitle,
+          itemType: "todo-list",
+        },
+        ...disappearing,
+      });
+    } catch (error) {
+      await Plan.deleteMany({ listId });
+      throw error;
+    }
+
+    revalidatePath('/');
+    notifyRealtime();
+    return JSON.parse(JSON.stringify({ listId, listTitle, items: plans }));
+  } catch (error) {
+    console.error("Failed to create todo list:", error);
+    if (error instanceof Error && /Unauthorized|title|checklist/i.test(error.message)) throw error;
+    throw new Error("Failed to create todo list.");
   }
 }
 

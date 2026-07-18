@@ -861,11 +861,27 @@ export const MessageList: React.FC<MessageListProps> = ({
                             />
                           )}
 
-                          {m.kind === "task" && m.sharedItemMeta?.itemId && (
+                          {m.kind === "task" && m.sharedItemMeta && (
                             <SharedItemCard
                               kind="task"
-                              item={plans.find((plan) => plan._id === m.sharedItemMeta?.itemId)}
-                              fallbackTitle={m.text || "Shared task"}
+                              item={
+                                m.sharedItemMeta.itemId
+                                  ? plans.find((plan) => plan._id === m.sharedItemMeta?.itemId)
+                                  : undefined
+                              }
+                              items={
+                                m.sharedItemMeta.itemType === "todo-list" ||
+                                (m.sharedItemMeta.itemIds && m.sharedItemMeta.itemIds.length > 1)
+                                  ? plans.filter((plan) => {
+                                      if (m.sharedItemMeta?.listId && plan.listId === m.sharedItemMeta.listId) {
+                                        return true;
+                                      }
+                                      return Boolean(m.sharedItemMeta?.itemIds?.includes(plan._id));
+                                    })
+                                  : undefined
+                              }
+                              listTitle={m.sharedItemMeta.listTitle || (m.sharedItemMeta.itemType === "todo-list" ? m.text : undefined)}
+                              fallbackTitle={m.text || "Shared todo list"}
                               onToggle={handleTogglePlan}
                               onOpen={() => onOpenSharedItem("task")}
                             />

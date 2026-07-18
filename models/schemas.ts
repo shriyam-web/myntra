@@ -19,6 +19,9 @@ const PlanSchema = new Schema({
   doneAt: { type: Date, default: null },
   doneBy: { type: String, default: null },
   dueAt: { type: Date, default: null },
+  // Groups checklist items that were shared together as one todo list
+  listId: { type: String, default: null },
+  listTitle: { type: String, default: null },
   createdAt: { type: Date, default: Date.now },
   // Mirrored from the linked disappearing chat card (null = permanent)
   expiresAt: { type: Date, default: null },
@@ -124,7 +127,10 @@ const MessageSchema = new Schema({
   },
   sharedItemMeta: {
     itemId: { type: String },
-    itemType: { type: String, enum: ['task', 'reminder'] },
+    itemIds: [{ type: String }],
+    listId: { type: String },
+    listTitle: { type: String },
+    itemType: { type: String, enum: ['task', 'reminder', 'todo-list'] },
   },
   // Disappearing-mode snapshot (set at creation; cleared permanently if saved)
   disappearing: { type: Boolean, default: false },

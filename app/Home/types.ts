@@ -61,8 +61,11 @@ export interface PollMeta {
 }
 
 export interface SharedItemMeta {
-  itemId: string;
-  itemType: "task" | "reminder";
+  itemId?: string;
+  itemIds?: string[];
+  listId?: string;
+  listTitle?: string;
+  itemType: "task" | "reminder" | "todo-list";
 }
 
 export interface Message {
@@ -133,6 +136,8 @@ export interface PlanItem {
   doneAt?: string | null;
   doneBy?: string | null;
   dueAt?: string | null;
+  listId?: string | null;
+  listTitle?: string | null;
   createdAt?: string;
   expiresAt?: string | null;
 }

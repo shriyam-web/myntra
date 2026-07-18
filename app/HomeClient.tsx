@@ -7,7 +7,7 @@ import { useMessageSendQueue } from "./Home/hooks/useMessageSendQueue";
 import { useAudio } from "./Home/hooks/useAudio";
 import { usePresence } from "./Home/hooks/usePresence";
 import { themes, wallpapers } from "./Home/constants";
-import { ViewType, Message, UserType, TabType, ReactionType, MessageReaction, DocumentAttachment, LocationAttachment, MoodType } from "./Home/types";
+import { ViewType, Message, UserType, TabType, ReactionType, MessageReaction, DocumentAttachment, LocationAttachment, MoodType, ReminderItem } from "./Home/types";
 
 // Components
 import { LoginView } from "./Home/components/LoginView";
@@ -29,6 +29,7 @@ import { CheckInTab } from "./Home/components/CheckInTab";
 import { MediaTab } from "./Home/components/MediaTab";
 import { CallOverlay } from "./Home/components/CallOverlay";
 import { DisappearingModeModal } from "./Home/components/DisappearingModeModal";
+import { DueReminderModal } from "./Home/components/DueReminderModal";
 import { useCall } from "./Home/hooks/useCall";
 import { useRealtimeSync } from "./Home/hooks/useRealtimeSync";
 import { useTypingSignal, usePartnerTypingState } from "./Home/hooks/useTypingIndicator";
@@ -39,6 +40,11 @@ import { detectIncognitoMode } from "./Home/utils/detectIncognito";
 import { loginAction, logoutAction } from "../lib/auth/actions";
 
 const DISAPPEARING_ACK_KEY = "disappearing_mode_ack_at";
+const DUE_REMINDER_ACK_PREFIX = "due_reminder_ack";
+
+function localDateKey(value: Date) {
+  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+}
 
 export default function HomeClient({ initialUser = null }: { initialUser?: string | null }) {
   const [isIncognito, setIsIncognito] = useState<boolean | null>(null);
@@ -51,6 +57,7 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
   const [activeTab, setActiveTab] = useState<TabType>("complaints");
   const [showMessageSearch, setShowMessageSearch] = useState(false);
   const [showDisappearingModal, setShowDisappearingModal] = useState(false);
+  const [dueReminderModal, setDueReminderModal] = useState<ReminderItem | null>(null);
   const [togglingDisappearing, setTogglingDisappearing] = useState(false);
   
   const [messageLimit, setMessageLimit] = useState(50);
@@ -180,6 +187,49 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
   }, []);
 
   const currentUser = view;
+
+  const acknowledgeDueReminder = useCallback((reminder: ReminderItem) => {
+    try {
+      const key = `${DUE_REMINDER_ACK_PREFIX}:${currentUser}:${reminder._id}:${reminder.dueAt}`;
+      localStorage.setItem(key, localDateKey(new Date()));
+    } catch {
+      // The modal still closes if private storage is unavailable.
+    }
+    setDueReminderModal(null);
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (currentUser === "login") {
+      setDueReminderModal(null);
+      return;
+    }
+
+    const checkDueToday = () => {
+      const today = localDateKey(new Date());
+      const dueToday = reminders.find((reminder) => {
+        if (reminder.done) return false;
+        const due = new Date(reminder.dueAt);
+        if (Number.isNaN(due.getTime()) || localDateKey(due) !== today) return false;
+        try {
+          const key = `${DUE_REMINDER_ACK_PREFIX}:${currentUser}:${reminder._id}:${reminder.dueAt}`;
+          return localStorage.getItem(key) !== today;
+        } catch {
+          return true;
+        }
+      });
+
+      setDueReminderModal((current) => {
+        if (current && reminders.some((reminder) => reminder._id === current._id && !reminder.done)) {
+          return current;
+        }
+        return dueToday || null;
+      });
+    };
+
+    checkDueToday();
+    const timer = window.setInterval(checkDueToday, 30_000);
+    return () => window.clearInterval(timer);
+  }, [currentUser, reminders]);
 
   const {
     callStatus,
@@ -519,12 +569,12 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
     }
   };
 
-  const handleCreateTaskFromChat = async (title: string, dueAt?: string | null) => {
+  const handleCreateTodoListFromChat = async (title: string, items: string[]) => {
     try {
-      await actions.createPlan(title, currentUser, dueAt || null);
+      await actions.createTodoList(title, items);
       await Promise.all([fetchSharedData(), fetchMessagesOnly(true)]);
     } catch (error) {
-      console.error("Failed to create task from chat:", error);
+      console.error("Failed to create todo list from chat:", error);
     }
   };
 
@@ -1655,7 +1705,7 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
                     lastFailedText={lastFailedText}
                     onDismissSendError={dismissSendError}
                     onCreatePoll={handleCreatePoll}
-                    onCreateTask={handleCreateTaskFromChat}
+                    onCreateTodoList={handleCreateTodoListFromChat}
                     onCreateReminder={handleCreateReminderFromChat}
                     disappearingMode={disappearingMode}
                 />
@@ -1724,6 +1774,17 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
             }
           } catch { /* ignore */ }
         }}
+      />
+
+      <DueReminderModal
+        reminder={dueReminderModal}
+        onClose={() => {
+          if (dueReminderModal) acknowledgeDueReminder(dueReminderModal);
+        }}
+        onDone={(id) => {
+          void handleToggleReminder(id);
+        }}
+        onOpenDates={() => setActiveTab("dates")}
       />
 
       <CallOverlay 

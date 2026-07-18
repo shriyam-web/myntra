@@ -119,6 +119,11 @@ export type PreviewableMessage = {
   location?: { latitude: number; longitude: number };
   pollMeta?: { question?: string };
   kind?: string;
+  sharedItemMeta?: {
+    itemType?: string;
+    itemIds?: string[];
+    listTitle?: string;
+  };
 };
 
 export type ReplyPreviewKind =
@@ -151,7 +156,13 @@ export const getMessagePreviewText = (
   if (msg?.kind === "poll" || msg?.pollMeta?.question) {
     return `Poll · ${msg.pollMeta?.question || "Vote"}`;
   }
-  if (msg?.kind === "task") return `Task · ${text || "Shared task"}`;
+  if (msg?.kind === "task") {
+    if (msg.sharedItemMeta?.itemType === "todo-list" || (msg.sharedItemMeta?.itemIds?.length ?? 0) > 1) {
+      const count = msg.sharedItemMeta?.itemIds?.length;
+      return `Todo list · ${text || msg.sharedItemMeta?.listTitle || "Shared list"}${count ? ` (${count})` : ""}`;
+    }
+    return `Task · ${text || "Shared task"}`;
+  }
   if (msg?.kind === "reminder") return `Reminder · ${text || "Shared reminder"}`;
   if (msg?.documents?.length) {
     const name = msg.documents[0]?.name;

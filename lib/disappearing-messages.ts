@@ -166,8 +166,16 @@ export async function markDisappearingMessagesViewed(
     updated += 1;
 
     const itemId = result.sharedItemMeta?.itemId;
+    const itemIds = result.sharedItemMeta?.itemIds as string[] | undefined;
+    const listId = result.sharedItemMeta?.listId as string | undefined;
     const itemType = result.sharedItemMeta?.itemType;
-    if (itemId && itemType === "task") {
+    if (itemType === "todo-list") {
+      if (listId) {
+        await Plan.updateMany({ listId }, { expiresAt });
+      } else if (itemIds?.length) {
+        await Plan.updateMany({ _id: { $in: itemIds } }, { expiresAt });
+      }
+    } else if (itemId && itemType === "task") {
       await Plan.updateOne({ _id: itemId }, { expiresAt });
     } else if (itemId && itemType === "reminder") {
       await Reminder.updateOne({ _id: itemId }, { expiresAt });
@@ -202,8 +210,16 @@ export async function permanentlyKeepMessage(messageId: string) {
   if (!result) return null;
 
   const itemId = result.sharedItemMeta?.itemId;
+  const itemIds = result.sharedItemMeta?.itemIds as string[] | undefined;
+  const listId = result.sharedItemMeta?.listId as string | undefined;
   const itemType = result.sharedItemMeta?.itemType;
-  if (itemId && itemType === "task") {
+  if (itemType === "todo-list") {
+    if (listId) {
+      await Plan.updateMany({ listId }, { expiresAt: null });
+    } else if (itemIds?.length) {
+      await Plan.updateMany({ _id: { $in: itemIds } }, { expiresAt: null });
+    }
+  } else if (itemId && itemType === "task") {
     await Plan.updateOne({ _id: itemId }, { expiresAt: null });
   } else if (itemId && itemType === "reminder") {
     await Reminder.updateOne({ _id: itemId }, { expiresAt: null });
@@ -285,10 +301,19 @@ export async function purgeExpiredDisappearingMessages(): Promise<number> {
   let count = 0;
   for (const msg of expired) {
     await scheduleMediaCleanup(String(msg._id), msg as Record<string, unknown>, now);
-    const itemId = (msg as { sharedItemMeta?: { itemId?: string; itemType?: string } }).sharedItemMeta?.itemId;
-    const itemType = (msg as { sharedItemMeta?: { itemId?: string; itemType?: string } }).sharedItemMeta?.itemType;
-    if (itemId && itemType === "task") await Plan.deleteOne({ _id: itemId });
-    if (itemId && itemType === "reminder") await Reminder.deleteOne({ _id: itemId });
+    const meta = (msg as { sharedItemMeta?: { itemId?: string; itemIds?: string[]; listId?: string; itemType?: string } }).sharedItemMeta;
+    const itemId = meta?.itemId;
+    const itemIds = meta?.itemIds;
+    const listId = meta?.listId;
+    const itemType = meta?.itemType;
+    if (itemType === "todo-list") {
+      if (listId) await Plan.deleteMany({ listId });
+      else if (itemIds?.length) await Plan.deleteMany({ _id: { $in: itemIds } });
+    } else if (itemId && itemType === "task") {
+      await Plan.deleteOne({ _id: itemId });
+    } else if (itemId && itemType === "reminder") {
+      await Reminder.deleteOne({ _id: itemId });
+    }
     if ((msg as { kind?: string; relatedCallId?: string }).kind === "call-log" && (msg as { relatedCallId?: string }).relatedCallId) {
       await CallLog.deleteOne({ callId: (msg as { relatedCallId?: string }).relatedCallId });
     }

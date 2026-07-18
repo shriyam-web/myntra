@@ -42,7 +42,7 @@ interface ChatInputProps {
   onTypingActivity?: (hasContent: boolean) => void;
   onStopTyping?: () => void;
   onCreatePoll?: (question: string, options: string[]) => void;
-  onCreateTask?: (title: string, dueAt?: string | null) => void;
+  onCreateTodoList?: (title: string, items: string[]) => void;
   onCreateReminder?: (title: string, dueAt: string) => void;
   disappearingMode?: boolean;
 }
@@ -76,7 +76,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   onTypingActivity,
   onStopTyping,
   onCreatePoll,
-  onCreateTask,
+  onCreateTodoList,
   onCreateReminder,
   disappearingMode = false,
 }) => {
@@ -92,6 +92,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [pollError, setPollError] = useState<string | null>(null);
   const [sharedComposer, setSharedComposer] = useState<"task" | "reminder" | null>(null);
   const [sharedTitle, setSharedTitle] = useState("");
+  const [todoItems, setTodoItems] = useState<string[]>(["", ""]);
   const [sharedDue, setSharedDue] = useState("");
   const [sharedError, setSharedError] = useState<string | null>(null);
   const [locationStatus, setLocationStatus] = useState<"idle" | "acquiring" | "ready" | "error">("idle");
@@ -421,29 +422,30 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         <>
           {/* Click-outside layer */}
           <div className="fixed inset-0 z-30" onClick={() => setAttachMenuOpen(false)} />
-          {/* Menu sits above the input row, outside its overflow-hidden box */}
-          <div className="absolute bottom-full left-4 mb-2 z-40 w-52 rounded-2xl border border-zinc-800 bg-zinc-950 p-1.5 animate-in slide-in-from-bottom-2 fade-in duration-150">
-            <button type="button" onClick={() => { setAttachMenuOpen(false); mediaInputRef.current?.click(); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm text-zinc-200 hover:bg-white/5 active:bg-white/10">
-              <span className="w-8 h-8 rounded-full bg-pink-500/15 text-pink-400 flex items-center justify-center">
-                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+          {/* Menu sits above the input row, outside its overflow-hidden box.
+              Compact rows + capped height so all options fit in a minimised chat window. */}
+          <div className="absolute bottom-full left-4 mb-2 z-40 w-48 rounded-2xl border border-zinc-800 bg-zinc-950 p-1 max-h-[min(60vh,300px)] overflow-y-auto no-scrollbar animate-in slide-in-from-bottom-2 fade-in duration-150">
+            <button type="button" onClick={() => { setAttachMenuOpen(false); mediaInputRef.current?.click(); }} className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-left text-[13px] text-zinc-200 hover:bg-white/5 active:bg-white/10">
+              <span className="w-6 h-6 rounded-full bg-pink-500/15 text-pink-400 flex items-center justify-center shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
               </span>
               Photo &amp; Video
             </button>
-            <button type="button" onClick={() => { setAttachMenuOpen(false); audioInputRef.current?.click(); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm text-zinc-200 hover:bg-white/5 active:bg-white/10">
-              <span className="w-8 h-8 rounded-full bg-violet-500/15 text-violet-400 flex items-center justify-center">
-                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+            <button type="button" onClick={() => { setAttachMenuOpen(false); audioInputRef.current?.click(); }} className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-left text-[13px] text-zinc-200 hover:bg-white/5 active:bg-white/10">
+              <span className="w-6 h-6 rounded-full bg-violet-500/15 text-violet-400 flex items-center justify-center shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
               </span>
               Audio file
             </button>
-            <button type="button" onClick={() => { setAttachMenuOpen(false); docInputRef.current?.click(); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm text-zinc-200 hover:bg-white/5 active:bg-white/10">
-              <span className="w-8 h-8 rounded-full bg-sky-500/15 text-sky-400 flex items-center justify-center">
-                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+            <button type="button" onClick={() => { setAttachMenuOpen(false); docInputRef.current?.click(); }} className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-left text-[13px] text-zinc-200 hover:bg-white/5 active:bg-white/10">
+              <span className="w-6 h-6 rounded-full bg-sky-500/15 text-sky-400 flex items-center justify-center shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
               </span>
               Document
             </button>
-            <button type="button" onClick={shareLocation} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm text-zinc-200 hover:bg-white/5 active:bg-white/10">
-              <span className="w-8 h-8 rounded-full bg-emerald-500/15 text-emerald-400 flex items-center justify-center">
-                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+            <button type="button" onClick={shareLocation} className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-left text-[13px] text-zinc-200 hover:bg-white/5 active:bg-white/10">
+              <span className="w-6 h-6 rounded-full bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
               </span>
               Location
             </button>
@@ -454,10 +456,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 setPollComposerOpen(true);
                 setPollError(null);
               }}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm text-zinc-200 hover:bg-white/5 active:bg-white/10"
+              className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-left text-[13px] text-zinc-200 hover:bg-white/5 active:bg-white/10"
             >
-              <span className="w-8 h-8 rounded-full bg-amber-500/15 text-amber-400 flex items-center justify-center">
-                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M7 16V8"/><path d="M12 16v-5"/><path d="M17 16V4"/></svg>
+              <span className="w-6 h-6 rounded-full bg-amber-500/15 text-amber-400 flex items-center justify-center shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M7 16V8"/><path d="M12 16v-5"/><path d="M17 16V4"/></svg>
               </span>
               Create poll
             </button>
@@ -468,10 +470,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 setSharedComposer("task");
                 setSharedError(null);
               }}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm text-zinc-200 hover:bg-white/5 active:bg-white/10"
+              className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-left text-[13px] text-zinc-200 hover:bg-white/5 active:bg-white/10"
             >
-              <span className="w-8 h-8 rounded-full bg-blue-500/15 text-blue-300 flex items-center justify-center font-bold">✓</span>
-              Create task
+              <span className="w-6 h-6 rounded-full bg-blue-500/15 text-blue-300 flex items-center justify-center font-bold text-[11px] shrink-0">✓</span>
+              Create todo list
             </button>
             <button
               type="button"
@@ -480,9 +482,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 setSharedComposer("reminder");
                 setSharedError(null);
               }}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm text-zinc-200 hover:bg-white/5 active:bg-white/10"
+              className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-left text-[13px] text-zinc-200 hover:bg-white/5 active:bg-white/10"
             >
-              <span className="w-8 h-8 rounded-full bg-amber-500/15 text-amber-300 flex items-center justify-center">⏰</span>
+              <span className="w-6 h-6 rounded-full bg-amber-500/15 text-amber-300 flex items-center justify-center text-[11px] shrink-0">⏰</span>
               Create reminder
             </button>
           </div>
@@ -493,13 +495,14 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         <div className="mb-3 space-y-3 rounded-2xl border border-zinc-700/60 bg-zinc-950 p-4 animate-in slide-in-from-bottom-2 duration-200">
           <div className="flex items-center justify-between">
             <p className="text-xs font-bold uppercase tracking-widest text-zinc-400">
-              New shared {sharedComposer}
+              {sharedComposer === "task" ? "New todo list" : "New shared reminder"}
             </p>
             <button
               type="button"
               onClick={() => {
                 setSharedComposer(null);
                 setSharedTitle("");
+                setTodoItems(["", ""]);
                 setSharedDue("");
                 setSharedError(null);
               }}
@@ -511,40 +514,93 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           <input
             value={sharedTitle}
             onChange={(event) => setSharedTitle(event.target.value)}
-            placeholder={sharedComposer === "task" ? "What needs to be done?" : "Remind us to…"}
-            maxLength={200}
+            placeholder={sharedComposer === "task" ? "List title (e.g. Weekend plans)" : "Remind us to…"}
+            maxLength={sharedComposer === "task" ? 120 : 200}
             className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2.5 text-sm text-white outline-none focus:border-zinc-600"
             autoFocus
           />
-          <input
-            type="datetime-local"
-            value={sharedDue}
-            onChange={(event) => setSharedDue(event.target.value)}
-            className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2.5 text-sm text-zinc-300 outline-none focus:border-zinc-600 [color-scheme:dark]"
-          />
-          <p className="text-[10px] text-zinc-600">
-            {sharedComposer === "task" ? "Due time is optional." : "Choose when this reminder is due."}
-          </p>
+          {sharedComposer === "task" ? (
+            <div className="space-y-2">
+              {todoItems.map((item, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <span className="w-4 h-4 rounded border border-zinc-600 shrink-0" />
+                  <input
+                    value={item}
+                    onChange={(event) => {
+                      const next = [...todoItems];
+                      next[index] = event.target.value;
+                      setTodoItems(next);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        if (todoItems.length < 20) setTodoItems([...todoItems, ""]);
+                      }
+                    }}
+                    placeholder={`Item ${index + 1}`}
+                    maxLength={200}
+                    className="flex-1 rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-white outline-none focus:border-zinc-600"
+                  />
+                  {todoItems.length > 2 && (
+                    <button
+                      type="button"
+                      onClick={() => setTodoItems(todoItems.filter((_, i) => i !== index))}
+                      className="text-zinc-600 hover:text-red-400 text-xs px-1"
+                      aria-label="Remove item"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              ))}
+              {todoItems.length < 20 && (
+                <button
+                  type="button"
+                  onClick={() => setTodoItems([...todoItems, ""])}
+                  className="text-[11px] font-semibold text-blue-400 hover:text-blue-300"
+                >
+                  + Add item
+                </button>
+              )}
+              <p className="text-[10px] text-zinc-600">Add checklist items. Both of you can tick them off in chat and in Tasks.</p>
+            </div>
+          ) : (
+            <>
+              <input
+                type="datetime-local"
+                value={sharedDue}
+                onChange={(event) => setSharedDue(event.target.value)}
+                className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2.5 text-sm text-zinc-300 outline-none focus:border-zinc-600 [color-scheme:dark]"
+              />
+              <p className="text-[10px] text-zinc-600">Choose when this reminder is due.</p>
+            </>
+          )}
           {sharedError && <p className="text-[11px] text-red-400">{sharedError}</p>}
           <button
             type="button"
             onClick={() => {
               const title = sharedTitle.trim();
               if (!title) {
-                setSharedError(`Add a ${sharedComposer} title.`);
-                return;
-              }
-              if (sharedComposer === "reminder" && !sharedDue) {
-                setSharedError("Choose a reminder time.");
+                setSharedError(sharedComposer === "task" ? "Add a list title." : "Add a reminder title.");
                 return;
               }
               if (sharedComposer === "task") {
-                onCreateTask?.(title, sharedDue ? new Date(sharedDue).toISOString() : null);
+                const items = todoItems.map((item) => item.trim()).filter(Boolean);
+                if (items.length === 0) {
+                  setSharedError("Add at least one checklist item.");
+                  return;
+                }
+                onCreateTodoList?.(title, items);
               } else {
+                if (!sharedDue) {
+                  setSharedError("Choose a reminder time.");
+                  return;
+                }
                 onCreateReminder?.(title, new Date(sharedDue).toISOString());
               }
               setSharedComposer(null);
               setSharedTitle("");
+              setTodoItems(["", ""]);
               setSharedDue("");
               setSharedError(null);
             }}
