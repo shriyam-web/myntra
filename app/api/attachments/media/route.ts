@@ -12,6 +12,31 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
+function signedMediaUrl(
+  publicId: string,
+  resourceType: CloudinaryResourceType,
+  deliveryType: CloudinaryDeliveryType,
+  opts?: { format?: string }
+) {
+  return cloudinary.url(publicId, {
+    resource_type: resourceType,
+    type: deliveryType,
+    secure: true,
+    sign_url: true,
+    ...(opts?.format ? { format: opts.format } : {}),
+  });
+}
+
+async function fetchSigned(
+  publicId: string,
+  resourceType: CloudinaryResourceType,
+  deliveryType: CloudinaryDeliveryType,
+  opts?: { format?: string }
+) {
+  const url = signedMediaUrl(publicId, resourceType, deliveryType, opts);
+  return fetch(url);
+}
+
 /**
  * Login-gated media delivery for photos / videos / audio.
  * Cloudinary assets are stored as `authenticated` so unsigned CDN URLs return 401.
@@ -44,21 +69,29 @@ export async function GET(request: Request) {
       ? deliveryTypeParam
       : "authenticated";
 
+  // Prefer the requested delivery type, then fall back for older/migrated assets.
+  const deliveryFallbacks: CloudinaryDeliveryType[] =
+    deliveryType === "authenticated"
+      ? ["authenticated", "upload", "private"]
+      : deliveryType === "upload"
+        ? ["upload", "authenticated", "private"]
+        : ["private", "authenticated", "upload"];
+
   try {
     // Video poster = jpg frame via signed authenticated/public delivery URL.
     if (asPoster && resourceType === "video") {
-      const posterUrl = cloudinary.url(publicId, {
-        resource_type: "video",
-        type: deliveryType,
-        format: "jpg",
-        secure: true,
-        sign_url: true,
-      });
-      const upstream = await fetch(posterUrl);
-      if (!upstream.ok || !upstream.body) {
+      let posterUpstream: Response | null = null;
+      for (const type of deliveryFallbacks) {
+        const attempt = await fetchSigned(publicId, "video", type, { format: "jpg" });
+        if (attempt.ok && attempt.body) {
+          posterUpstream = attempt;
+          break;
+        }
+      }
+      if (!posterUpstream?.body) {
         return new Response("Poster unavailable", { status: 502 });
       }
-      return new Response(upstream.body, {
+      return new Response(posterUpstream.body, {
         status: 200,
         headers: {
           "Content-Type": "image/jpeg",
@@ -67,20 +100,17 @@ export async function GET(request: Request) {
       });
     }
 
-    const downloadUrl = cloudinary.utils.private_download_url(
-      publicId,
-      null as unknown as string,
-      {
-        resource_type: resourceType,
-        type: deliveryType,
-        attachment: asDownload,
-        expires_at: Math.floor(Date.now() / 1000) + 60 * 10,
+    let upstream: Response | null = null;
+    for (const type of deliveryFallbacks) {
+      const attempt = await fetchSigned(publicId, resourceType, type);
+      if (attempt.ok && attempt.body) {
+        upstream = attempt;
+        break;
       }
-    );
+      console.warn("Media proxy signed fetch failed:", attempt.status, publicId, type);
+    }
 
-    const upstream = await fetch(downloadUrl);
-    if (!upstream.ok || !upstream.body) {
-      console.error("Media proxy upstream failed:", upstream.status, publicId, deliveryType);
+    if (!upstream?.body) {
       return new Response("Media unavailable", { status: 502 });
     }
 
