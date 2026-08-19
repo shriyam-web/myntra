@@ -133,21 +133,6 @@ export function useMessageSendQueue({
     };
   }, []);
 
-  const updateQueueStatus = useCallback((job: QueuedSendJob | null, waitingCount: number) => {
-    if (!job) {
-      setSendQueueStatus(IDLE_STATUS);
-      return;
-    }
-
-    setSendQueueStatus({
-      isActive: true,
-      waitingCount,
-      activeText: job.text,
-      isMediaUploading: job.files.length > 0,
-      uploadProgress: 0,
-    });
-  }, []);
-
   const processJob = useCallback(
     async (job: QueuedSendJob) => {
       const uploadedImageUrls: string[] = [];
@@ -177,9 +162,16 @@ export function useMessageSendQueue({
                         ),
                 }));
               }),
-              300000,
+              180000,
               "Media upload timed out. Your files were not sent."
             );
+
+            if (!result?.url) {
+              throw new Error("Upload finished without a file URL. Please try again.");
+            }
+            if (result.bytes !== undefined && result.bytes <= 0) {
+              throw new Error("Upload stored an empty file. Please try again.");
+            }
 
             if (kind === "video") uploadedVideoUrls.push(result.url);
             else if (kind === "audio") uploadedAudioUrls.push(result.url);
@@ -214,8 +206,8 @@ export function useMessageSendQueue({
               clientMessageId: job.id,
             }
           ),
-          35000,
-          "Sending timed out after 35 seconds. Your message may not have been delivered."
+          job.files.length > 0 ? 25000 : 18000,
+          "Sending timed out. Checking whether it was delivered…"
         );
 
         if (!mountedRef.current) return;
@@ -235,8 +227,22 @@ export function useMessageSendQueue({
         if (!mountedRef.current) return;
 
         console.error("Failed to send queued message:", error);
-        setMessages((prev) => prev.filter((m) => m._id !== job.id));
+
+        // Timeout/network errors can fire after the server already saved the message.
+        try {
+          await fetchMessagesOnly(true);
+        } catch {
+          // ignore — we'll still inspect local state
+        }
+
+        let stillPending = false;
+        setMessages((prev) => {
+          stillPending = prev.some((m) => m._id === job.id);
+          if (!stillPending) return prev;
+          return prev.filter((m) => m._id !== job.id);
+        });
         revokePreviewUrls(job);
+        if (!stillPending) return;
 
         const message =
           error instanceof Error ? error.message : "Failed to send message. Please try again.";
@@ -252,6 +258,31 @@ export function useMessageSendQueue({
     [currentUser, fetchMessagesOnly, setMessages, uploadToCloudinary]
   );
 
+  const textInflightRef = useRef(0);
+
+  const pumpStatus = useCallback((job?: QueuedSendJob | null) => {
+    const mediaJob = processingRef.current ? queueRef.current[0] || null : null;
+    const active = job || mediaJob;
+    const waiting =
+      queueRef.current.length +
+      textInflightRef.current -
+      (mediaJob ? 1 : 0) -
+      (job && job.files.length === 0 ? 1 : 0);
+
+    if (!active && textInflightRef.current === 0 && queueRef.current.length === 0) {
+      setSendQueueStatus(IDLE_STATUS);
+      return;
+    }
+
+    setSendQueueStatus((prev) => ({
+      isActive: true,
+      waitingCount: Math.max(0, waiting),
+      activeText: active?.text || prev.activeText,
+      isMediaUploading: Boolean(mediaJob && mediaJob.files.length > 0),
+      uploadProgress: mediaJob ? prev.uploadProgress : 0,
+    }));
+  }, []);
+
   const drainQueue = useCallback(async () => {
     if (processingRef.current) return;
     processingRef.current = true;
@@ -259,18 +290,19 @@ export function useMessageSendQueue({
     try {
       while (queueRef.current.length > 0) {
         const job = queueRef.current[0];
-        const waitingCount = queueRef.current.length - 1;
-        updateQueueStatus(job, waitingCount);
+        pumpStatus(job);
         await processJob(job);
         queueRef.current.shift();
       }
     } finally {
       processingRef.current = false;
-      if (mountedRef.current) {
-        setSendQueueStatus(IDLE_STATUS);
+      if (queueRef.current.length > 0) {
+        void drainQueue();
+      } else {
+        pumpStatus();
       }
     }
-  }, [processJob, updateQueueStatus]);
+  }, [processJob, pumpStatus]);
 
   const enqueueMessage = useCallback(
     (payload: EnqueueMessagePayload) => {
@@ -296,10 +328,20 @@ export function useMessageSendQueue({
       setLastFailedText("");
       setMessages((prev) => [...prev, buildOptimisticMessage(job, currentUser)]);
 
+      if (job.files.length === 0) {
+        textInflightRef.current += 1;
+        pumpStatus(job);
+        void processJob(job).finally(() => {
+          textInflightRef.current = Math.max(0, textInflightRef.current - 1);
+          pumpStatus();
+        });
+        return;
+      }
+
       queueRef.current.push(job);
       void drainQueue();
     },
-    [currentUser, drainQueue, setMessages]
+    [currentUser, drainQueue, processJob, pumpStatus, setMessages]
   );
 
   const dismissSendError = useCallback(() => setSendError(null), []);

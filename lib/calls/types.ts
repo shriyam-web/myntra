@@ -59,6 +59,6 @@ export interface CallSignalDTO {
   createdAt: string;
 }
 
-export const RING_TIMEOUT_MS = 40_000;
-export const HEARTBEAT_STALE_MS = 45_000;
+export const RING_TIMEOUT_MS = 45_000;
+export const HEARTBEAT_STALE_MS = 75_000;
 export const SIGNAL_TTL_MS = 2 * 60 * 60 * 1000;

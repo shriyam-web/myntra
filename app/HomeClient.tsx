@@ -758,92 +758,13 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
     }
   };
 
-  const fileToBase64 = useCallback((file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = error => reject(error);
+  const uploadToCloudinary = useCallback(async (file: File, onProgress: (percent: number) => void) => {
+    const { uploadFileToCloudinary } = await import("../lib/cloudinary-upload-client");
+    return uploadFileToCloudinary(file, {
+      getSignature: (opts) => actions.getCloudinarySignature(opts),
+      onProgress,
     });
   }, []);
-
-  const uploadToCloudinary = useCallback(async (file: File, onProgress: (percent: number) => void) => {
-    const { classifyFile, cloudinaryResourceForKind } = await import("../lib/attachments");
-    const { buildProtectedMediaUrl } = await import("../lib/media-url");
-    const kind = classifyFile(file);
-    if (!kind) throw new Error(`Unsupported file: ${file.name}`);
-    const endpointResource = cloudinaryResourceForKind(kind);
-    // Photos/videos/audio → authenticated Cloudinary assets (unsigned CDN URLs = 401).
-    // Documents stay as public raw upload; PDF policy is handled by the download route.
-    const useAuthenticated = kind !== "document";
-
-    try {
-      const { timestamp, signature, apiKey, cloudName, folder, type } = await actions.getCloudinarySignature({
-        authenticated: useAuthenticated,
-      });
-
-      return await new Promise<{
-        url: string;
-        publicId?: string;
-        resourceType?: string;
-        bytes?: number;
-        originalFilename?: string;
-      }>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open('POST', `https://api.cloudinary.com/v1_1/${cloudName}/${endpointResource}/upload`, true);
-
-        xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable) {
-            const percent = Math.round((e.loaded / e.total) * 100);
-            onProgress(percent);
-          }
-        };
-
-        xhr.onload = () => {
-          if (xhr.status === 200) {
-            const response = JSON.parse(xhr.responseText);
-            const publicId = response.public_id as string | undefined;
-            const resourceType = (response.resource_type || endpointResource) as "image" | "video" | "raw";
-            const deliveryType = (response.type || type || "upload") as "upload" | "authenticated";
-            // Never keep raw Cloudinary CDN URLs for photos/videos/audio — only our login proxy.
-            const url =
-              useAuthenticated && publicId
-                ? buildProtectedMediaUrl({ publicId, resourceType, deliveryType })
-                : (response.secure_url as string);
-            resolve({
-              url,
-              publicId,
-              resourceType,
-              bytes: response.bytes,
-              originalFilename: response.original_filename,
-            });
-          } else {
-            console.error('Cloudinary upload error:', xhr.responseText);
-            reject(new Error('Upload failed with status ' + xhr.status));
-          }
-        };
-
-        xhr.onerror = () => reject(new Error('Network error during upload'));
-
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('api_key', apiKey!);
-        formData.append('timestamp', timestamp.toString());
-        formData.append('signature', signature);
-        formData.append('folder', folder);
-        if (useAuthenticated) {
-          formData.append('type', 'authenticated');
-        }
-
-        xhr.send(formData);
-      });
-    } catch (err) {
-      console.error('Failed to get upload signature:', err);
-      const base64 = await fileToBase64(file);
-      const url = await actions.uploadImage(base64, endpointResource === "raw" ? "raw" : endpointResource);
-      return { url, resourceType: endpointResource };
-    }
-  }, [fileToBase64]);
 
   const {
     enqueueMessage,
@@ -1101,7 +1022,9 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
   const handleDownloadMedia = async (url: string) => {
     try {
       const response = await fetch(url);
+      if (!response.ok) throw new Error("Download failed");
       const blob = await response.blob();
+      if (!blob.size) throw new Error("Downloaded file was empty");
       const mimeType = blob.type;
       const extension = mimeType.split('/')[1] || 'bin';
       const blobUrl = window.URL.createObjectURL(blob);
@@ -1249,7 +1172,6 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
 
   const activeTheme = themes.find(t => t.name === themeName) || themes[0];
   const partnerUsername = currentUser.trim().toLowerCase() === "alpha 1" ? "delta 1" : "alpha 1";
-  const partnerAvatar = partnerUsername === "alpha 1" ? "/female.png" : "/male.png";
   const dueReminders = reminders.filter(
     (r) =>
       !r.done &&
@@ -1262,7 +1184,12 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
   if (view === "login") return <LoginView password={password} setPassword={setPassword} handleLogin={handleLogin} loginError={loginError} isLoggingIn={isLoggingIn} failedAttempts={loginAttempts} />;
 
   return (
-    <div className="flex flex-col min-h-[100svh] bg-zinc-950 text-zinc-100 font-sans pb-2 selection:bg-white selection:text-black">
+    <div className="relative flex flex-col min-h-[100svh] bg-zinc-950 text-zinc-100 font-sans pb-2 selection:bg-white selection:text-black overflow-x-hidden">
+      <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
+        <div className="absolute -top-24 -left-16 w-72 h-72 rounded-full bg-fuchsia-600/25 blur-3xl" />
+        <div className="absolute top-1/3 -right-20 w-80 h-80 rounded-full bg-cyan-500/20 blur-3xl" />
+        <div className="absolute -bottom-24 left-1/4 w-96 h-96 rounded-full bg-violet-600/20 blur-3xl" />
+      </div>
       {currentUser.trim().toLowerCase() === "alpha 1" && <EmeButton />}
 
       {showCopyToast && (
@@ -1424,37 +1351,25 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
               : "gap-4 animate-in fade-in slide-in-from-bottom-4 duration-700"
           }`}>
              <div className={`flex items-center justify-between shrink-0 ${
-               isMessageExpanded ? "relative z-[170] px-4 py-3 border-b border-zinc-800/60 bg-zinc-950/90 backdrop-blur-xl" : "px-1"
+               isMessageExpanded ? "relative z-[170] px-4 py-2.5 border-b border-white/5 bg-zinc-950/90 backdrop-blur-xl" : "px-0.5"
              }`}>
-                <div className="flex items-center gap-3 min-w-0">
-                  {isMessageExpanded && (
-                    <div className="w-9 h-9 rounded-full border border-zinc-700 overflow-hidden shrink-0 shadow-lg">
-                      <img src={partnerAvatar} alt="" className="w-full h-full object-cover" />
-                    </div>
-                  )}
-                  <div className="flex flex-col items-start gap-0.5 min-w-0">
-                    {isMessageExpanded && (
-                      <span className="text-sm font-medium text-white truncate capitalize">{partnerUsername}</span>
-                    )}
-                    <div className="flex items-center gap-2 flex-nowrap min-w-0">
-                      <span className={`inline-flex items-center gap-1 text-[8.5px] font-medium uppercase tracking-wide whitespace-nowrap ${getPartnerStatus() === "Online" ? "text-green-500" : "text-zinc-500"}`}>
-                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${getPartnerStatus() === "Online" ? "bg-green-500 animate-pulse" : "bg-zinc-600"}`} />
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="flex flex-col items-start min-w-0">
+                      <span className="text-[13px] font-semibold text-white truncate capitalize leading-tight">{partnerUsername}</span>
+                    <div className="flex items-center gap-1.5 flex-nowrap min-w-0 mt-0.5">
+                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${getPartnerStatus() === "Online" ? "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" : "bg-zinc-600"}`} />
+                      <span className={`text-[11px] truncate ${getPartnerStatus() === "Online" ? "text-emerald-400" : "text-zinc-500"}`}>
                         {getPartnerStatus() || "Offline"}
                       </span>
                       {disappearingMode && (
-                        <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md text-violet-200 bg-violet-500/20 border border-violet-400/30 animate-pulse">
-                          ⏱ Disappearing
-                        </span>
-                      )}
-                      {!isMessageExpanded && lastRefreshedAt && (
-                        <span className="text-[9px] font-medium text-zinc-600 italic">
-                          • {lastRefreshedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true })}
+                        <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-px rounded-full text-violet-200 bg-violet-500/20 border border-violet-400/25">
+                          Disappearing
                         </span>
                       )}
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-0.5 p-0.5 rounded-2xl bg-zinc-900/70 border border-white/5">
                     {hasUnreadMessages() && (
                         <button onClick={handleMarkAsRead} className={`p-2 rounded-xl ${activeTheme.bubbleMe} text-white shadow-lg active:scale-90 transition-all`}>
                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 7 17l-5-5"/><path d="m22 10-7.5 7.5L13 16"/></svg>
@@ -1462,14 +1377,14 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
                     )}
                     <button 
                         onClick={handleStartCall}
-                        className="p-2 bg-green-600/20 border border-green-500/30 rounded-xl text-green-500 hover:bg-green-600 hover:text-white transition-all active:scale-90"
+                        className="p-2 rounded-xl text-emerald-400 hover:bg-emerald-500 hover:text-white transition-all active:scale-90"
                         title="Start Call"
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l2.28-2.28a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
                     </button>
                     <button 
                         onClick={() => setIsMessageExpanded(!isMessageExpanded)}
-                        className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl text-zinc-500 hover:text-white transition-all active:scale-90"
+                        className="p-2 rounded-xl text-zinc-500 hover:text-white hover:bg-white/5 transition-all active:scale-90"
                     >
                         {isMessageExpanded ? (
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3v5H3M21 8h-5V3M3 16h5v5M16 21v-5h5"/></svg>
@@ -1512,8 +1427,8 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
                     <div className="relative z-[170]" ref={menuRef}>
                       <button 
                         onClick={() => setIsMenuOpen(!isMenuOpen)}
-                        className={`p-2 rounded-xl transition-all active:scale-90 border ${
-                          isMenuOpen ? "bg-zinc-700 text-white border-zinc-600" : "bg-zinc-800/50 text-zinc-500 border-zinc-700/50 hover:text-white hover:bg-zinc-800"
+                        className={`p-2 rounded-xl transition-all active:scale-90 ${
+                          isMenuOpen ? "bg-white/10 text-white" : "text-zinc-500 hover:text-white hover:bg-white/5"
                         }`}
                         title="Menu"
                       >
@@ -1616,7 +1531,7 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
              } ${chatBgColor} ${
                isMessageExpanded
                  ? "border-none shadow-none rounded-none"
-                 : "rounded-[2rem] sm:rounded-[2.5rem] border border-zinc-800/50 shadow-2xl"
+                 : `rounded-[2rem] sm:rounded-[2.5rem] border border-white/15 shadow-[0_24px_80px_rgba(0,0,0,0.45)] ${activeTheme.shadow}`
              } overflow-hidden backdrop-blur-xl ${
                disappearingMode ? "ring-1 ring-violet-500/30" : ""
              }`}>
@@ -1852,6 +1767,14 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
                                         key={currentMedia.url}
                                         src={currentMedia.url} 
                                         className="max-w-full max-h-[75vh] object-contain rounded-2xl shadow-2xl"
+                                        onError={(event) => {
+                                            const img = event.currentTarget;
+                                            const tries = Number(img.dataset.retry || "0");
+                                            if (tries >= 2) return;
+                                            img.dataset.retry = String(tries + 1);
+                                            const joiner = currentMedia.url.includes("?") ? "&" : "?";
+                                            img.src = `${currentMedia.url}${joiner}retry=${tries + 1}`;
+                                        }}
                                     />
                                 )}
 

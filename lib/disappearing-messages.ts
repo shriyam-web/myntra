@@ -39,8 +39,19 @@ export async function isDisappearingModeEnabled(): Promise<boolean> {
 }
 
 /** Snapshot fields to attach when creating a message while mode is on. */
+let disappearingCache: { enabled: boolean; at: number } | null = null;
+const DISAPPEARING_CACHE_MS = 4000;
+
+export function invalidateDisappearingCache() {
+  disappearingCache = null;
+}
+
 export async function disappearingCreateFields(): Promise<{ disappearing: boolean }> {
+  if (disappearingCache && Date.now() - disappearingCache.at < DISAPPEARING_CACHE_MS) {
+    return { disappearing: disappearingCache.enabled };
+  }
   const enabled = await isDisappearingModeEnabled();
+  disappearingCache = { enabled, at: Date.now() };
   return { disappearing: enabled };
 }
 

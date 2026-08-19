@@ -115,14 +115,16 @@ export function TabNavigation({
   };
 
   return (
-    <nav className="max-w-md mx-auto flex items-center gap-2 overflow-x-auto no-scrollbar pt-3 px-4 pb-3 z-40 bg-zinc-950/80 backdrop-blur-xl border-b border-zinc-900/50">
+    <nav className="max-w-md mx-auto flex items-center gap-2 overflow-x-auto no-scrollbar pt-3 px-4 pb-3 z-40 bg-zinc-950/70 backdrop-blur-xl border-b border-white/5">
       {TABS.map((tab) => (
         <button
           key={tab.id}
           onClick={() => setActiveTab(tab.id as TabType)}
           className={`flex items-center gap-2.5 px-5 py-3.5 rounded-2xl text-[11px] font-bold uppercase tracking-wider transition-all whitespace-nowrap border ${
             activeTab === tab.id 
-              ? "bg-white text-black shadow-xl shadow-white/10 border-white scale-105" 
+              ? tab.id === "messages"
+                ? "bg-gradient-to-r from-fuchsia-500 via-violet-500 to-cyan-400 text-white shadow-lg shadow-fuchsia-500/25 border-transparent scale-105"
+                : "bg-white text-black shadow-xl shadow-white/10 border-white scale-105" 
               : "bg-zinc-900/50 text-zinc-500 border-zinc-800/50 hover:bg-zinc-800 hover:text-zinc-300"
           }`}
         >

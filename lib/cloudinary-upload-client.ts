@@ -1,0 +1,254 @@
+import { classifyFile, cloudinaryResourceForKind } from "./attachments";
+import { materializeFile } from "./media-file";
+import { buildProtectedMediaUrl } from "./media-url";
+
+export type CloudinaryUploadResult = {
+  url: string;
+  publicId?: string;
+  resourceType?: string;
+  bytes?: number;
+  originalFilename?: string;
+};
+
+export type CloudinarySignature = {
+  timestamp: number;
+  signature: string;
+  apiKey?: string | null;
+  cloudName?: string | null;
+  folder: string;
+  type?: string;
+};
+
+type CloudinaryUploadJson = {
+  public_id?: string;
+  resource_type?: string;
+  type?: string;
+  bytes?: number;
+  original_filename?: string;
+  secure_url?: string;
+  error?: { message?: string };
+};
+
+const MIN_CHUNK_BYTES = 20 * 1024 * 1024;
+const CHUNK_BYTES = 8 * 1024 * 1024;
+const CHUNK_TIMEOUT_MS = 120_000;
+const MAX_CHUNK_RETRIES = 1;
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function buildFormData(
+  filePart: Blob,
+  fileName: string,
+  signature: CloudinarySignature,
+  useAuthenticated: boolean
+) {
+  const formData = new FormData();
+  formData.append("file", filePart, fileName);
+  formData.append("api_key", signature.apiKey!);
+  formData.append("timestamp", String(signature.timestamp));
+  formData.append("signature", signature.signature);
+  formData.append("folder", signature.folder);
+  if (useAuthenticated) formData.append("type", "authenticated");
+  return formData;
+}
+
+function xhrPost(opts: {
+  url: string;
+  formData: FormData;
+  headers?: Record<string, string>;
+  timeoutMs: number;
+  onProgress?: (loaded: number, total: number) => void;
+}): Promise<CloudinaryUploadJson> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", opts.url, true);
+    xhr.timeout = opts.timeoutMs;
+    if (opts.headers) {
+      for (const [key, value] of Object.entries(opts.headers)) {
+        xhr.setRequestHeader(key, value);
+      }
+    }
+
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) opts.onProgress?.(event.loaded, event.total);
+    };
+
+    xhr.onload = () => {
+      let json: CloudinaryUploadJson = {};
+      try {
+        json = JSON.parse(xhr.responseText || "{}") as CloudinaryUploadJson;
+      } catch {
+        reject(new Error("Upload returned an invalid response."));
+        return;
+      }
+      if (xhr.status >= 200 && xhr.status < 300 && !json.error) {
+        resolve(json);
+        return;
+      }
+      reject(
+        new Error(json.error?.message || `Upload failed (${xhr.status || "network"}).`)
+      );
+    };
+    xhr.onerror = () => reject(new Error("Network error during upload. Try again."));
+    xhr.ontimeout = () =>
+      reject(new Error("Upload timed out. Try a smaller file or a stronger connection."));
+    xhr.onabort = () => reject(new Error("Upload was interrupted."));
+    xhr.send(opts.formData);
+  });
+}
+
+async function withRetries<T>(work: () => Promise<T>, retries: number): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await work();
+    } catch (error) {
+      lastError = error;
+      if (attempt === retries) break;
+      await sleep(600 * (attempt + 1));
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("Upload failed.");
+}
+
+async function uploadSingle(
+  file: File,
+  url: string,
+  signature: CloudinarySignature,
+  useAuthenticated: boolean,
+  onProgress: (percent: number) => void
+) {
+  return withRetries(
+    () =>
+      xhrPost({
+        url,
+        formData: buildFormData(file, file.name, signature, useAuthenticated),
+        timeoutMs: CHUNK_TIMEOUT_MS,
+        onProgress: (loaded, total) => {
+          onProgress(Math.min(99, Math.round((loaded / Math.max(total, 1)) * 100)));
+        },
+      }),
+    MAX_CHUNK_RETRIES
+  );
+}
+
+async function uploadChunked(
+  file: File,
+  url: string,
+  signature: CloudinarySignature,
+  useAuthenticated: boolean,
+  uniqueUploadId: string,
+  onProgress: (percent: number) => void
+) {
+  let lastResponse: CloudinaryUploadJson = {};
+  for (let start = 0; start < file.size; start += CHUNK_BYTES) {
+    const end = Math.min(start + CHUNK_BYTES, file.size);
+    const chunk = file.slice(start, end);
+    lastResponse = await withRetries(
+      () =>
+        xhrPost({
+          url,
+          formData: buildFormData(chunk, file.name, signature, useAuthenticated),
+          headers: {
+            "X-Unique-Upload-Id": uniqueUploadId,
+            "Content-Range": `bytes ${start}-${end - 1}/${file.size}`,
+          },
+          timeoutMs: CHUNK_TIMEOUT_MS,
+          onProgress: (loaded) => {
+            const sent = start + loaded;
+            onProgress(Math.min(99, Math.round((sent / file.size) * 100)));
+          },
+        }),
+      MAX_CHUNK_RETRIES
+    );
+  }
+  return lastResponse;
+}
+
+export async function uploadFileToCloudinary(
+  file: File,
+  opts: {
+    getSignature: (args: { authenticated: boolean }) => Promise<CloudinarySignature>;
+    waitUntilReady?: (args: {
+      publicId: string;
+      resourceType: string;
+      deliveryType: string;
+    }) => Promise<{ bytes: number }>;
+    onProgress: (percent: number) => void;
+  }
+): Promise<CloudinaryUploadResult> {
+  const kind = classifyFile(file);
+  if (!kind) throw new Error(`Unsupported file: ${file.name}`);
+  const endpointResource = cloudinaryResourceForKind(kind);
+  const useAuthenticated = kind !== "document";
+
+  opts.onProgress(0);
+  const readyFile = await materializeFile(file);
+
+  let signature: CloudinarySignature | null = null;
+  let signatureError: unknown;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      signature = await opts.getSignature({ authenticated: useAuthenticated });
+      break;
+    } catch (error) {
+      signatureError = error;
+      await sleep(400 * (attempt + 1));
+    }
+  }
+  if (!signature?.apiKey || !signature.cloudName) {
+    throw new Error(
+      signatureError instanceof Error
+        ? signatureError.message
+        : "Could not start upload. Check your connection and try again."
+    );
+  }
+
+  const uploadUrl = `https://api.cloudinary.com/v1_1/${signature.cloudName}/${endpointResource}/upload`;
+  const uniqueUploadId = `${Date.now()}${Math.floor(Math.random() * 1e9)}`;
+
+  const response =
+    readyFile.size > MIN_CHUNK_BYTES
+      ? await uploadChunked(
+          readyFile,
+          uploadUrl,
+          signature,
+          useAuthenticated,
+          uniqueUploadId,
+          opts.onProgress
+        )
+      : await uploadSingle(readyFile, uploadUrl, signature, useAuthenticated, opts.onProgress);
+
+  const publicId = response.public_id;
+  const resourceType = (response.resource_type || endpointResource) as "image" | "video" | "raw";
+  const deliveryType = (response.type ||
+    signature.type ||
+    (useAuthenticated ? "authenticated" : "upload")) as "upload" | "authenticated";
+  const bytes = Number(response.bytes) || 0;
+
+  if (!publicId) throw new Error("Upload finished but Cloudinary did not store the file.");
+  if (bytes <= 0) throw new Error("Upload finished but the stored file was empty.");
+
+  if (opts.waitUntilReady && (kind === "video" || kind === "audio")) {
+    void opts.waitUntilReady({ publicId, resourceType, deliveryType }).catch((error) => {
+      console.warn("Cloudinary ready-check timed out; original upload already stored.", error);
+    });
+  }
+
+  const url =
+    useAuthenticated && publicId
+      ? buildProtectedMediaUrl({ publicId, resourceType, deliveryType })
+      : String(response.secure_url || "");
+  if (!url) throw new Error("Upload finished but no media URL was returned.");
+
+  opts.onProgress(100);
+  return {
+    url,
+    publicId,
+    resourceType,
+    bytes,
+    originalFilename: response.original_filename,
+  };
+}

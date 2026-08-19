@@ -18,14 +18,29 @@ type EndReason =
   | null;
 
 type IceServer = { urls: string | string[]; username?: string; credential?: string };
+type OutboxItem = { payload: string; signalId: string; gen: number; type: "ice-candidate" | "ice-complete" };
 
-const IDLE_POLL_MS = 3000;
-// Fast polling only while signaling matters (dialing/ringing/connecting/reconnecting).
-const SIGNALING_POLL_MS = 800;
-// Once media flows peer-to-peer the server is only needed for hangup/ICE-restart
-// signals, so poll gently — hammering server actions queues them up and lags the UI.
-const ACTIVE_POLL_MS = 3000;
-const HEARTBEAT_MS = 10_000; // server marks stale at 45s
+const IDLE_POLL_MS = 1500;
+const SIGNALING_POLL_MS = 400;
+const ACTIVE_POLL_MS = 2500;
+const HEARTBEAT_MS = 8_000;
+const ICE_GATHER_WAIT_MS = 1800;
+const CANDIDATE_FLUSH_MS = 120;
+
+function waitForIceGathering(pc: RTCPeerConnection, timeoutMs: number) {
+  if (pc.iceGatheringState === "complete") return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    const finish = () => {
+      pc.removeEventListener("icegatheringstatechange", onChange);
+      resolve();
+    };
+    const onChange = () => {
+      if (pc.iceGatheringState === "complete") finish();
+    };
+    pc.addEventListener("icegatheringstatechange", onChange);
+    window.setTimeout(finish, timeoutMs);
+  });
+}
 
 export function useCall(currentUser: string, view: string) {
   const [callStatus, setCallStatus] = useState<UiStatus>("idle");
@@ -47,21 +62,20 @@ export function useCall(currentUser: string, view: string) {
   const pendingRemoteCandidatesRef = useRef<Array<{ cand: RTCIceCandidateInit; gen: number }>>([]);
   const remoteDescSetRef = useRef(false);
   const signalingOpenRef = useRef(false);
-  const candidateOutboxRef = useRef<Array<{ payload: string; signalId: string; gen: number }>>([]);
+  const candidateOutboxRef = useRef<OutboxItem[]>([]);
+  const flushingCandidatesRef = useRef(false);
   const iceGenerationRef = useRef(0);
   const makingOfferRef = useRef(false);
-  const ignoreOfferRef = useRef(false);
   const politeRef = useRef(false);
   const restartAttemptsRef = useRef(0);
   const disconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startingRef = useRef(false);
   const callStatusRef = useRef<UiStatus>("idle");
-  // Calls ended locally: ignore stale server echoes of them (prevents UI flicker/resurrection).
   const endedCallIdsRef = useRef<Set<string>>(new Set());
-  // User hit End while startCall was still in flight (no session yet).
   const cancelRequestedRef = useRef(false);
   const endedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastHeartbeatAtRef = useRef(0);
+  const initialOfferSentRef = useRef(false);
 
   useEffect(() => {
     callStatusRef.current = callStatus;
@@ -74,7 +88,6 @@ export function useCall(currentUser: string, view: string) {
     reconnecting
   );
 
-  // Force stats hook to see pc changes
   void pcVersion;
 
   const otherUser = currentUser.trim().toLowerCase() === "alpha 1" ? "delta 1" : "alpha 1";
@@ -103,13 +116,14 @@ export function useCall(currentUser: string, view: string) {
     remoteDescSetRef.current = false;
     signalingOpenRef.current = false;
     candidateOutboxRef.current = [];
+    flushingCandidatesRef.current = false;
     iceGenerationRef.current = 0;
     makingOfferRef.current = false;
-    ignoreOfferRef.current = false;
     restartAttemptsRef.current = 0;
     sessionRef.current = null;
     startingRef.current = false;
     lastHeartbeatAtRef.current = 0;
+    initialOfferSentRef.current = false;
   }, []);
 
   const teardownMedia = useCallback(() => {
@@ -150,51 +164,69 @@ export function useCall(currentUser: string, view: string) {
     if (!pc || !remoteDescSetRef.current) return;
     const pending = pendingRemoteCandidatesRef.current.splice(0);
     for (const item of pending) {
-      if (item.gen !== iceGenerationRef.current) continue;
+      if (item.gen !== iceGenerationRef.current && item.gen !== 0) continue;
       try {
-        await pc.addIceCandidate(new RTCIceCandidate(item.cand));
+        if (item.cand.candidate) {
+          await pc.addIceCandidate(new RTCIceCandidate(item.cand));
+        } else {
+          await pc.addIceCandidate(null);
+        }
       } catch (e) {
         console.error("flush candidate failed", e);
       }
     }
   }, []);
 
-  const openSignaling = useCallback(() => {
-    signalingOpenRef.current = true;
-    const outbox = candidateOutboxRef.current.splice(0);
-    for (const item of outbox) {
-      void actions.pushCallSignalAction({
-        callId: sessionRef.current!.callId,
-        signalId: item.signalId,
-        type: "ice-candidate",
-        payload: item.payload,
-        iceGeneration: item.gen,
+  const flushCandidateOutbox = useCallback(async () => {
+    if (!signalingOpenRef.current || !sessionRef.current) return;
+    if (flushingCandidatesRef.current) return;
+    const batch = candidateOutboxRef.current.splice(0);
+    if (batch.length === 0) return;
+
+    flushingCandidatesRef.current = true;
+    const callId = sessionRef.current.callId;
+    let ok = false;
+    try {
+      const res = await actions.pushCallSignalsBatchAction({
+        callId,
+        items: batch.map((item) => ({
+          signalId: item.signalId,
+          type: item.type,
+          payload: item.payload,
+          iceGeneration: item.gen,
+        })),
       });
+      ok = res.ok;
+      if (!res.ok) {
+        candidateOutboxRef.current.unshift(...batch);
+      }
+    } catch {
+      candidateOutboxRef.current.unshift(...batch);
+    } finally {
+      flushingCandidatesRef.current = false;
+    }
+    if (candidateOutboxRef.current.length > 0 && signalingOpenRef.current) {
+      window.setTimeout(() => {
+        void flushCandidateOutbox();
+      }, ok ? 0 : 400);
     }
   }, []);
 
-  const sendLocalCandidate = useCallback(
-    (payload: string) => {
-      const signalId = crypto.randomUUID();
-      const gen = iceGenerationRef.current;
-      if (!signalingOpenRef.current || !sessionRef.current) {
-        candidateOutboxRef.current.push({ payload, signalId, gen });
-        return;
-      }
-      void actions.pushCallSignalAction({
-        callId: sessionRef.current.callId,
-        signalId,
-        type: "ice-candidate",
-        payload,
-        iceGeneration: gen,
-      });
-    },
-    []
-  );
+  const openSignaling = useCallback(() => {
+    signalingOpenRef.current = true;
+    void flushCandidateOutbox();
+  }, [flushCandidateOutbox]);
+
+  const queueLocalCandidate = useCallback((item: OutboxItem) => {
+    candidateOutboxRef.current.push(item);
+    if (signalingOpenRef.current) {
+      window.setTimeout(() => {
+        void flushCandidateOutbox();
+      }, CANDIDATE_FLUSH_MS);
+    }
+  }, [flushCandidateOutbox]);
 
   const applySession = useCallback((session: CallSessionDTO) => {
-    // A call we already ended/handled locally must never re-open or re-trigger
-    // the ended screen from a stale poll — that caused flicker.
     if (endedCallIdsRef.current.has(session.callId)) return;
 
     sessionRef.current = session;
@@ -206,9 +238,9 @@ export function useCall(currentUser: string, view: string) {
     if (session.state === "ringing") {
       setCallStatus(session.role === "caller" ? "dialing" : "ringing");
     } else if (session.state === "connecting") {
-      setCallStatus("connecting");
+      setCallStatus((prev) => (prev === "active" || prev === "reconnecting" ? prev : "connecting"));
     } else if (session.state === "active") {
-      setCallStatus("active");
+      setCallStatus((prev) => (prev === "reconnecting" ? prev : "active"));
     } else if (session.state === "ended") {
       endedCallIdsRef.current.add(session.callId);
       const mapped: EndReason =
@@ -242,24 +274,41 @@ export function useCall(currentUser: string, view: string) {
 
     const pc = new RTCPeerConnection({
       iceServers: iceServers as RTCIceServer[],
-      iceCandidatePoolSize: 4,
+      iceCandidatePoolSize: 2,
+      bundlePolicy: "max-bundle",
+      rtcpMuxPolicy: "require",
     });
 
     pc.onicecandidate = (event) => {
       if (event.candidate) {
-        sendLocalCandidate(JSON.stringify(event.candidate));
+        queueLocalCandidate({
+          payload: JSON.stringify(event.candidate),
+          signalId: crypto.randomUUID(),
+          gen: iceGenerationRef.current,
+          type: "ice-candidate",
+        });
+      } else {
+        queueLocalCandidate({
+          payload: "",
+          signalId: crypto.randomUUID(),
+          gen: iceGenerationRef.current,
+          type: "ice-complete",
+        });
       }
     };
 
-    pc.ontrack = (event) => {
+    const attachRemoteTrack = (track: MediaStreamTrack, streams?: readonly MediaStream[]) => {
       setRemoteStream((prev) => {
-        if (event.streams?.[0]) return event.streams[0];
-        if (prev) {
-          prev.addTrack(event.track);
-          return new MediaStream(prev.getTracks());
-        }
-        return new MediaStream([event.track]);
+        if (streams?.[0]) return streams[0];
+        const next = prev ? new MediaStream(prev.getTracks()) : new MediaStream();
+        if (!next.getTracks().some((t) => t.id === track.id)) next.addTrack(track);
+        return next;
       });
+    };
+
+    pc.ontrack = (event) => {
+      attachRemoteTrack(event.track, event.streams);
+      event.track.onunmute = () => attachRemoteTrack(event.track, event.streams);
     };
 
     const onConnected = () => {
@@ -268,6 +317,9 @@ export function useCall(currentUser: string, view: string) {
         disconnectTimerRef.current = null;
       }
       restartAttemptsRef.current = 0;
+      pc.getReceivers().forEach((receiver) => {
+        if (receiver.track) receiver.track.enabled = true;
+      });
       setCallStatus("active");
       if (sessionRef.current) {
         void actions.reportCallConnectedAction(sessionRef.current.callId);
@@ -275,8 +327,13 @@ export function useCall(currentUser: string, view: string) {
     };
 
     const onFailed = async () => {
-      if (!sessionRef.current) return;
-      if (restartAttemptsRef.current >= 2) {
+      if (!sessionRef.current || !pcRef.current) return;
+      // Callee waits for the caller's restart offer (avoids SDP glare).
+      if (politeRef.current) {
+        setCallStatus("reconnecting");
+        return;
+      }
+      if (restartAttemptsRef.current >= 3) {
         await actions.endCallAction(sessionRef.current.callId, "failed");
         teardownMedia();
         resetLocal();
@@ -290,6 +347,7 @@ export function useCall(currentUser: string, view: string) {
         makingOfferRef.current = true;
         const offer = await pc.createOffer({ iceRestart: true });
         await pc.setLocalDescription(offer);
+        await waitForIceGathering(pc, 1200);
         await actions.pushCallSignalAction({
           callId: sessionRef.current.callId,
           signalId: crypto.randomUUID(),
@@ -314,7 +372,7 @@ export function useCall(currentUser: string, view: string) {
         if (!disconnectTimerRef.current) {
           disconnectTimerRef.current = setTimeout(() => {
             void onFailed();
-          }, 4000);
+          }, 5000);
         }
       }
     };
@@ -326,9 +384,11 @@ export function useCall(currentUser: string, view: string) {
     };
 
     pc.onnegotiationneeded = async () => {
-      // Initial offer is created explicitly; only handle later renegotiation for caller (impolite).
+      // Initial offer is created explicitly. Ignore until the first handshake is done
+      // so Chrome doesn't replace the stored offer and break the callee's answer.
       if (!sessionRef.current || sessionRef.current.role !== "caller") return;
-      if (makingOfferRef.current) return;
+      if (!initialOfferSentRef.current || !remoteDescSetRef.current) return;
+      if (makingOfferRef.current || pc.signalingState !== "stable") return;
       try {
         makingOfferRef.current = true;
         const offer = await pc.createOffer();
@@ -351,7 +411,12 @@ export function useCall(currentUser: string, view: string) {
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1,
+        },
         video: false,
       });
     } catch {
@@ -359,22 +424,31 @@ export function useCall(currentUser: string, view: string) {
     }
     localStreamRef.current = stream;
     setLocalStream(stream);
-    stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+    stream.getAudioTracks().forEach((track) => {
+      pc.addTrack(track, stream);
+    });
 
     pcRef.current = pc;
     setPcVersion((v) => v + 1);
     return pc;
-  }, [resetLocal, sendLocalCandidate, showEnded, teardownMedia]);
+  }, [queueLocalCandidate, resetLocal, showEnded, teardownMedia]);
+
+  const markProcessed = (signal: CallSignalDTO) => {
+    processedSignalIdsRef.current.add(signal.signalId);
+    lastSeqRef.current = Math.max(lastSeqRef.current, signal.seq);
+  };
 
   const handleSignal = useCallback(
     async (signal: CallSignalDTO) => {
-      if (processedSignalIdsRef.current.has(signal.signalId)) return;
-      processedSignalIdsRef.current.add(signal.signalId);
-      lastSeqRef.current = Math.max(lastSeqRef.current, signal.seq);
+      if (processedSignalIdsRef.current.has(signal.signalId)) {
+        lastSeqRef.current = Math.max(lastSeqRef.current, signal.seq);
+        return;
+      }
 
       const pc = pcRef.current;
       if (signal.type === "offer") {
-        // Initial offer stored for accept path when callee; caller ignores.
+        // Initial offer is consumed on the accept path.
+        markProcessed(signal);
         return;
       }
 
@@ -391,6 +465,7 @@ export function useCall(currentUser: string, view: string) {
             await flushRemoteCandidates();
             setCallStatus((prev) => (prev === "dialing" || prev === "connecting" ? "connecting" : prev));
           }
+          markProcessed(signal);
         } catch (e) {
           console.error("apply answer failed", e);
         }
@@ -398,10 +473,11 @@ export function useCall(currentUser: string, view: string) {
       }
 
       if (signal.type === "ice-restart-offer") {
-        const offerCollision =
-          makingOfferRef.current || pc.signalingState !== "stable";
-        ignoreOfferRef.current = !politeRef.current && offerCollision;
-        if (ignoreOfferRef.current) return;
+        const offerCollision = makingOfferRef.current || pc.signalingState !== "stable";
+        if (!politeRef.current && offerCollision) {
+          markProcessed(signal);
+          return;
+        }
         try {
           if (offerCollision) {
             await pc.setLocalDescription({ type: "rollback" });
@@ -411,6 +487,7 @@ export function useCall(currentUser: string, view: string) {
           iceGenerationRef.current = Math.max(iceGenerationRef.current, signal.iceGeneration || 0);
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
+          await waitForIceGathering(pc, 1000);
           await actions.pushCallSignalAction({
             callId: signal.callId,
             signalId: crypto.randomUUID(),
@@ -420,6 +497,7 @@ export function useCall(currentUser: string, view: string) {
             revision: iceGenerationRef.current,
           });
           await flushRemoteCandidates();
+          markProcessed(signal);
         } catch (e) {
           console.error("apply restart offer failed", e);
         }
@@ -438,6 +516,21 @@ export function useCall(currentUser: string, view: string) {
         } catch (e) {
           console.error("apply candidate failed", e);
         }
+        markProcessed(signal);
+        return;
+      }
+
+      if (signal.type === "ice-complete") {
+        try {
+          if (remoteDescSetRef.current) {
+            await pc.addIceCandidate(null);
+          } else {
+            pendingRemoteCandidatesRef.current.push({ cand: { candidate: "" }, gen: signal.iceGeneration || 0 });
+          }
+        } catch {
+          // ignore
+        }
+        markProcessed(signal);
       }
     },
     [flushRemoteCandidates]
@@ -467,8 +560,11 @@ export function useCall(currentUser: string, view: string) {
       setEndReason(null);
 
       const pc = await setupPeerConnection();
-      const offer = await pc.createOffer();
+      makingOfferRef.current = true;
+      const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: false });
       await pc.setLocalDescription(offer);
+      await waitForIceGathering(pc, ICE_GATHER_WAIT_MS);
+      makingOfferRef.current = false;
 
       const startRequestId = crypto.randomUUID();
       const result = await actions.startCallAction(startRequestId, JSON.stringify(pc.localDescription));
@@ -484,7 +580,6 @@ export function useCall(currentUser: string, view: string) {
         return;
       }
 
-      // User hung up while the call was still being created — cancel it server-side.
       if (cancelRequestedRef.current) {
         endedCallIdsRef.current.add(result.session.callId);
         void actions.endCallAction(result.session.callId, "cancelled").catch(() => undefined);
@@ -493,6 +588,7 @@ export function useCall(currentUser: string, view: string) {
         return;
       }
 
+      initialOfferSentRef.current = true;
       applySession(result.session);
       openSignaling();
       await pullSignals();
@@ -503,6 +599,7 @@ export function useCall(currentUser: string, view: string) {
       showEnded("failed");
     } finally {
       startingRef.current = false;
+      makingOfferRef.current = false;
     }
   }, [
     applySession,
@@ -528,11 +625,17 @@ export function useCall(currentUser: string, view: string) {
       const pc = await setupPeerConnection();
       await pc.setRemoteDescription(new RTCSessionDescription(JSON.parse(offer.payload)));
       remoteDescSetRef.current = true;
-      processedSignalIdsRef.current.add(offer.signalId);
-      lastSeqRef.current = Math.max(lastSeqRef.current, offer.seq);
+      markProcessed(offer);
+
+      const queued = fetched.signals.filter((s) => s.type === "ice-candidate" || s.type === "ice-complete");
+      for (const signal of queued) {
+        await handleSignal(signal);
+      }
+      await flushRemoteCandidates();
 
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
+      await waitForIceGathering(pc, ICE_GATHER_WAIT_MS);
       const res = await actions.acceptCallAction(session.callId, JSON.stringify(pc.localDescription));
       if (!res.ok) throw new Error(res.error);
       applySession(res.session);
@@ -551,6 +654,7 @@ export function useCall(currentUser: string, view: string) {
   }, [
     applySession,
     flushRemoteCandidates,
+    handleSignal,
     openSignaling,
     pullSignals,
     resetLocal,
@@ -563,7 +667,6 @@ export function useCall(currentUser: string, view: string) {
     const session = sessionRef.current;
     const wasRinging = callStatusRef.current === "dialing" || callStatusRef.current === "ringing";
 
-    // End instantly in the UI; notify the server in the background.
     cancelRequestedRef.current = true;
     if (session) endedCallIdsRef.current.add(session.callId);
     teardownMedia();
@@ -572,7 +675,6 @@ export function useCall(currentUser: string, view: string) {
 
     if (session) {
       void actions.endCallAction(session.callId, "hangup").catch(() => {
-        // beacon fallback
         try {
           navigator.sendBeacon?.(
             "/api/calls/beacon",
@@ -589,7 +691,6 @@ export function useCall(currentUser: string, view: string) {
 
   const handleRejectCall = useCallback(() => {
     const session = sessionRef.current;
-    // Reject instantly in the UI; notify the server in the background.
     if (session) endedCallIdsRef.current.add(session.callId);
     teardownMedia();
     resetLocal();
@@ -599,14 +700,25 @@ export function useCall(currentUser: string, view: string) {
     }
   }, [resetLocal, showEnded, teardownMedia]);
 
-  // Poll + SSE wake for call state / signals
   useEffect(() => {
     if (view === "login") return;
 
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
+    let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
     let eventSource: EventSource | null = null;
     let inFlight = false;
+
+    const sendHeartbeat = () => {
+      const session = sessionRef.current;
+      if (!session || session.state === "ended") return;
+      const nowTs = Date.now();
+      if (nowTs - lastHeartbeatAtRef.current < HEARTBEAT_MS - 500) return;
+      lastHeartbeatAtRef.current = nowTs;
+      void actions.heartbeatCallAction(session.callId).catch(() => {
+        lastHeartbeatAtRef.current = 0;
+      });
+    };
 
     const tick = async () => {
       if (inFlight) return;
@@ -615,22 +727,10 @@ export function useCall(currentUser: string, view: string) {
         if (!sessionRef.current) {
           const active = await actions.getActiveCallAction();
           if (cancelled) return;
-          if (active) {
-            applySession(active);
-            if (active.role === "callee" && active.state === "ringing" && !pcRef.current) {
-              // wait for accept
-            }
-          }
+          if (active) applySession(active);
         } else {
           await pullSignals();
-          if (sessionRef.current && sessionRef.current.state !== "ended") {
-            // Throttled heartbeat — one lightweight write every 10s is enough.
-            const nowTs = Date.now();
-            if (nowTs - lastHeartbeatAtRef.current >= HEARTBEAT_MS) {
-              lastHeartbeatAtRef.current = nowTs;
-              void actions.heartbeatCallAction(sessionRef.current.callId);
-            }
-          }
+          sendHeartbeat();
         }
       } catch (e) {
         console.error("call poll error", e);
@@ -651,6 +751,7 @@ export function useCall(currentUser: string, view: string) {
     };
 
     tick();
+    heartbeatTimer = setInterval(sendHeartbeat, HEARTBEAT_MS);
 
     try {
       eventSource = new EventSource(`/api/realtime?user=${encodeURIComponent(currentUser)}`);
@@ -664,6 +765,7 @@ export function useCall(currentUser: string, view: string) {
     return () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
+      if (heartbeatTimer) clearInterval(heartbeatTimer);
       eventSource?.close();
     };
   }, [view, currentUser, applySession, pullSignals]);
@@ -684,10 +786,13 @@ export function useCall(currentUser: string, view: string) {
       }
     };
     window.addEventListener("beforeunload", handleUnload);
-    return () => window.removeEventListener("beforeunload", handleUnload);
+    window.addEventListener("pagehide", handleUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleUnload);
+      window.removeEventListener("pagehide", handleUnload);
+    };
   }, []);
 
-  // Map UI status to overlay-compatible legacy statuses
   const overlayStatus: "idle" | "ringing" | "on-call" =
     callStatus === "idle" || callStatus === "ended"
       ? "idle"

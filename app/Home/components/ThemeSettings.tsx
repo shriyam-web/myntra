@@ -36,6 +36,7 @@ const WALLPAPER_SECTIONS: { key: Wallpaper["category"]; label: string }[] = [
   { key: "love", label: "Love Atmosphere" },
   { key: "peaceful", label: "Peaceful Escape" },
   { key: "gradient", label: "Mood Gradients" },
+  { key: "scene", label: "Photo Scenes" },
   { key: "wild", label: "Wild Accents" },
 ];
 
@@ -50,7 +51,7 @@ function WallpaperPreview({ wallpaper }: { wallpaper: Wallpaper }) {
         src={wallpaper.value}
         alt={wallpaper.name}
         loading="lazy"
-        className="w-full h-full object-cover opacity-80"
+        className="w-full h-full object-cover"
       />
     );
   }
@@ -310,7 +311,9 @@ export const ThemeSettings: React.FC<ThemeSettingsProps> = ({
                 <h3 className="text-[9px] sm:text-[10px] font-black text-zinc-600 uppercase tracking-[0.3em] sm:tracking-[0.4em] px-1">
                   {section.label}
                 </h3>
-                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 sm:gap-3">
+                <div className={`grid gap-2 sm:gap-3 ${
+                  section.key === "scene" ? "grid-cols-2" : "grid-cols-3 sm:grid-cols-4 md:grid-cols-5"
+                }`}>
                   {sectionWallpapers.map((w) => {
                     const isSelected = chatWallpaper === w.value;
                     return (

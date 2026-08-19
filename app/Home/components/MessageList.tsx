@@ -530,28 +530,31 @@ export const MessageList: React.FC<MessageListProps> = ({
         <div className="flex justify-center mb-6">
           <button
             onClick={loadMoreMessages}
-            className="px-5 py-2.5 bg-zinc-800/40 border border-zinc-700/30 rounded-full text-[11px] font-bold uppercase tracking-wider text-zinc-400 hover:text-white hover:bg-zinc-800 hover:border-zinc-600 transition-all shadow-lg active:scale-95"
+            className="px-4 py-2 bg-zinc-900/50 border border-white/10 rounded-full text-[12px] font-medium text-zinc-400 hover:text-white hover:bg-zinc-800 hover:border-zinc-600 transition-all shadow-sm active:scale-95"
           >
-            Load History (Previous 50)
+            Load earlier messages
           </button>
         </div>
       )}
 
       {messages.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-full text-center py-20">
-          <div className="w-16 h-16 bg-zinc-950 rounded-full flex items-center justify-center mx-auto border border-zinc-800 mb-6 shadow-inner">
-            <span className={`text-xl ${activeTheme.accent}`}>✉</span>
+        <div className="flex flex-col items-center justify-center h-full text-center py-16 px-6">
+          <div className="w-14 h-14 rounded-2xl bg-zinc-900/80 flex items-center justify-center mx-auto border border-white/10 mb-5 shadow-inner">
+            <span className={`text-lg ${activeTheme.accent}`}>✦</span>
           </div>
-          <p className="text-zinc-400 font-normal text-sm tracking-tight px-4 max-w-[200px]">
-            Encrypted bridge active. Send a message to start.
+          <p className="text-white/90 font-medium text-[15px] tracking-tight">
+            Just the two of you
+          </p>
+          <p className="text-zinc-500 text-[13px] mt-1.5 max-w-[220px] leading-relaxed">
+            Messages stay here. Say hello whenever you're ready.
           </p>
         </div>
       ) : (
         <div className="flex flex-col">
           {groupedMessages.map((group) => (
             <div key={group.date} className="flex flex-col relative">
-              <div className="flex justify-center mb-4 sticky top-0 z-[40] -mx-4 py-2 pointer-events-none">
-                <div className="bg-zinc-800/80 text-zinc-400 text-[11px] font-medium uppercase tracking-widest px-4 py-1.5 rounded-full border border-zinc-700/50 shadow-sm backdrop-blur-sm pointer-events-auto">
+              <div className="flex justify-center mb-3 sticky top-0 z-[40] -mx-4 py-1.5 pointer-events-none">
+                <div className="bg-black/45 text-zinc-300 text-[10px] font-medium tracking-wide px-3 py-1 rounded-full border border-white/10 shadow-sm backdrop-blur-md pointer-events-auto">
                   {group.label}
                 </div>
               </div>
@@ -721,7 +724,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                       transition: swipingMessageId === m._id ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)'
                     }}
                       className={`flex flex-col w-full transition-all duration-300 relative group/msg ${
-                        sameSenderAsNext ? "mb-1" : "mb-2.5"
+                        sameSenderAsNext ? "mb-0.5" : "mb-3"
                       } ${
                         isMe ? "items-end" : "items-start"
                       } ${actionMenuId === m._id ? "z-[160]" : ""} ${
@@ -749,7 +752,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                           className="flex-shrink-0 cursor-pointer active:scale-95 transition-transform mt-0.5 relative"
                           onClick={() => setZoomedAvatar(avatarSrc)}
                         >
-                          <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full border border-zinc-800/50 overflow-hidden shadow-md">
+                          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border border-white/10 overflow-hidden shadow-md ring-1 ring-black/20">
                             <img src={avatarSrc} className="w-full h-full object-cover" alt="avatar" />
                           </div>
                           {isOnline && (
@@ -757,7 +760,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                           )}
                         </div>
                       ) : (
-                        <div className="flex-shrink-0 w-6 sm:w-7" aria-hidden="true" />
+                        <div className="flex-shrink-0 w-7 sm:w-8" aria-hidden="true" />
                       )}
 
                       <div
@@ -787,10 +790,10 @@ export const MessageList: React.FC<MessageListProps> = ({
                           }}
                           onMouseUp={clearLongPressTimer}
                           onMouseLeave={clearLongPressTimer}
-                          className={`relative p-2.5 sm:p-3 text-sm font-normal shadow-md border transition-all duration-200 ${
+                          className={`relative px-3 py-2 sm:px-3.5 sm:py-2.5 text-[14.5px] leading-[1.45] font-normal border chat-bubble-in ${
                             isMe 
-                              ? `${activeTheme.bubbleMe} ${activeTheme.textMe || "text-white"} rounded-2xl rounded-tr-sm border-white/10` 
-                              : `${activeTheme.bubblePartner} rounded-2xl rounded-tl-sm border-zinc-700/30 cursor-pointer active:scale-[0.98]`
+                              ? `${activeTheme.bubbleMe} ${activeTheme.textMe || "text-white"} border-white/10 rounded-[1.15rem] ${showAvatar ? "rounded-tr-[5px]" : "rounded-tr-[1.15rem]"} ${sameSenderAsNext ? "rounded-br-[5px]" : "rounded-br-[1.15rem]"} shadow-lg ${activeTheme.shadow}` 
+                              : `${activeTheme.bubblePartner} border-white/5 cursor-pointer active:scale-[0.98] rounded-[1.15rem] ${showAvatar ? "rounded-tl-[5px]" : "rounded-tl-[1.15rem]"} ${sameSenderAsNext ? "rounded-bl-[5px]" : "rounded-bl-[1.15rem]"} shadow-[0_6px_18px_rgba(0,0,0,0.22)]`
                           } ${
                             editingMessage === m._id
                               ? "w-full max-w-[calc(100vw-3.5rem)] sm:min-w-[260px] sm:w-[min(65vw,520px)] sm:max-w-[min(65vw,520px)]"
@@ -967,7 +970,15 @@ export const MessageList: React.FC<MessageListProps> = ({
                                           <img 
                                               src={mediaUrl} 
                                               alt="Shared content" 
-                                              className="w-full h-auto max-h-[250px] object-cover hover:scale-105 transition-transform duration-500 cursor-pointer"
+                                              className="w-full h-auto max-h-[250px] object-contain bg-zinc-950 hover:scale-[1.02] transition-transform duration-500 cursor-pointer"
+                                              onError={(event) => {
+                                                  const img = event.currentTarget;
+                                                  const tries = Number(img.dataset.retry || "0");
+                                                  if (tries >= 2) return;
+                                                  img.dataset.retry = String(tries + 1);
+                                                  const joiner = mediaUrl.includes("?") ? "&" : "?";
+                                                  img.src = `${mediaUrl}${joiner}retry=${tries + 1}`;
+                                              }}
                                               onClick={() => {
                                                   setPreviewMessage(m);
                                                   setPreviewImageIndex(idx);
@@ -1000,7 +1011,8 @@ export const MessageList: React.FC<MessageListProps> = ({
                                           <video 
                                               src={mediaUrl} 
                                               poster={getVideoPoster(mediaUrl)}
-                                              className="w-full h-full object-cover cursor-pointer"
+                                              preload="metadata"
+                                              className="w-full h-full object-contain cursor-pointer bg-zinc-950"
                                               onClick={() => {
                                                   setPreviewMessage(m);
                                                   setPreviewImageIndex(idx + (m.imageUrls?.length || (m.imageUrl ? 1 : 0)));
@@ -1181,7 +1193,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                             </a>
                           )}
 
-                          <div className={`text-[8px] mt-1 flex items-center gap-1 font-normal uppercase tracking-wider opacity-60 ${isMe ? 'justify-end' : 'justify-start'}`}>
+                          <div className={`${sameSenderAsNext ? "hidden" : "flex"} text-[10px] mt-1 items-center gap-1 font-medium tracking-normal ${isMe ? "justify-end text-white/50" : "justify-start text-zinc-500"}`}>
                               {isDisappearingMsg && (
                                 <span className="text-violet-200/90 normal-case tracking-normal" title={disappearLabel || ""}>
                                   ⏱
@@ -1248,19 +1260,19 @@ export const MessageList: React.FC<MessageListProps> = ({
             </div>
           ))}
           {partnerIsTyping && (
-            <div className="flex items-start gap-1.5 max-w-[95%] sm:max-w-[85%] mb-2.5 animate-in fade-in slide-in-from-bottom-2 duration-200">
+            <div className="flex items-start gap-1.5 max-w-[95%] sm:max-w-[85%] mb-3 animate-in fade-in slide-in-from-bottom-2 duration-200">
               <div className="flex-shrink-0 mt-0.5">
-                <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full border border-zinc-800/50 overflow-hidden shadow-md">
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border border-white/10 overflow-hidden shadow-md">
                   <img src={partnerAvatarSrc} className="w-full h-full object-cover" alt="" />
                 </div>
               </div>
               <div
-                className={`relative px-3.5 py-2.5 ${activeTheme.bubblePartner} rounded-2xl rounded-tl-sm border border-zinc-700/30 shadow-md`}
+                className={`relative px-3.5 py-2.5 ${activeTheme.bubblePartner} rounded-[1.15rem] rounded-tl-[5px] border border-white/5 shadow-[0_1px_2px_rgba(0,0,0,0.22)]`}
               >
                 <span className="flex items-center gap-1 h-4" aria-label="typing">
-                  <span className="w-1.5 h-1.5 rounded-full bg-zinc-400/90 animate-bounce [animation-delay:0ms]" />
-                  <span className="w-1.5 h-1.5 rounded-full bg-zinc-400/90 animate-bounce [animation-delay:150ms]" />
-                  <span className="w-1.5 h-1.5 rounded-full bg-zinc-400/90 animate-bounce [animation-delay:300ms]" />
+                  <span className="typing-dot w-1.5 h-1.5 rounded-full bg-zinc-300/90" />
+                  <span className="typing-dot w-1.5 h-1.5 rounded-full bg-zinc-300/90 [animation-delay:160ms]" />
+                  <span className="typing-dot w-1.5 h-1.5 rounded-full bg-zinc-300/90 [animation-delay:320ms]" />
                 </span>
               </div>
             </div>

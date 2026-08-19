@@ -72,7 +72,7 @@ export const CallOverlay = memo(function CallOverlay({
   const ringbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [accepting, setAccepting] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
-  const [isSpeakerOn, setIsSpeakerOn] = useState(false);
+  const [isSpeakerOn, setIsSpeakerOn] = useState(true);
   const [speakerSupported, setSpeakerSupported] = useState(false);
   const audioRoutesRef = useRef<{ earpiece: string | null; speaker: string | null }>({
     earpiece: null,
@@ -86,9 +86,40 @@ export const CallOverlay = memo(function CallOverlay({
   );
 
   useEffect(() => {
-    if (remoteAudioRef.current && remoteStream) {
-      remoteAudioRef.current.srcObject = remoteStream;
-    }
+    const el = remoteAudioRef.current;
+    if (!el || !remoteStream) return;
+
+    el.srcObject = remoteStream;
+    el.autoplay = true;
+    el.muted = false;
+    el.volume = 1;
+    el.setAttribute("playsinline", "true");
+
+    const tryPlay = () => {
+      const playPromise = el.play();
+      if (playPromise) {
+        playPromise.catch(() => {
+          window.setTimeout(() => {
+            void el.play().catch(() => undefined);
+          }, 200);
+        });
+      }
+    };
+
+    tryPlay();
+    const onUnmute = () => tryPlay();
+    const onAddTrack = () => tryPlay();
+    remoteStream.getAudioTracks().forEach((track) => {
+      track.addEventListener("unmute", onUnmute);
+    });
+    remoteStream.addEventListener("addtrack", onAddTrack);
+
+    return () => {
+      remoteStream.getAudioTracks().forEach((track) => {
+        track.removeEventListener("unmute", onUnmute);
+      });
+      remoteStream.removeEventListener("addtrack", onAddTrack);
+    };
   }, [remoteStream]);
 
   useEffect(() => {
@@ -97,9 +128,48 @@ export const CallOverlay = memo(function CallOverlay({
     }
   }, [stream]);
 
+  // Incoming ringtone for the callee (best-effort — some browsers block it until a tap).
   useEffect(() => {
-    if (callStatus !== 'ringing') setAccepting(false);
-  }, [callStatus]);
+    const shouldRing = callStatus === "ringing" && isIncoming && !endReason && !accepting;
+    if (!shouldRing) return;
+
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    const ctx = new AudioContextClass();
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const playBurst = (startAt: number, durationSec: number) => {
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.0001, startAt);
+      gain.gain.exponentialRampToValueAtTime(0.16, startAt + 0.02);
+      gain.gain.setValueAtTime(0.16, startAt + durationSec - 0.04);
+      gain.gain.exponentialRampToValueAtTime(0.0001, startAt + durationSec);
+      gain.connect(ctx.destination);
+      for (const freq of [440, 480]) {
+        const osc = ctx.createOscillator();
+        osc.type = "sine";
+        osc.frequency.value = freq;
+        osc.connect(gain);
+        osc.start(startAt);
+        osc.stop(startAt + durationSec);
+      }
+    };
+
+    const scheduleCycle = () => {
+      if (ctx.state === "closed") return;
+      if (ctx.state === "suspended") void ctx.resume();
+      const now = ctx.currentTime;
+      playBurst(now, 0.9);
+      playBurst(now + 1.1, 0.9);
+      timer = setTimeout(scheduleCycle, 3200);
+    };
+
+    scheduleCycle();
+
+    return () => {
+      if (timer) clearTimeout(timer);
+      void ctx.close().catch(() => undefined);
+    };
+  }, [callStatus, isIncoming, endReason, accepting]);
 
   // Outgoing ringback: tring…tring… while waiting for the partner to pick up.
   useEffect(() => {
@@ -162,15 +232,38 @@ export const CallOverlay = memo(function CallOverlay({
     return stopRingback;
   }, [callStatus, isIncoming, endReason]);
 
-  // Audio routing (Android Chrome): find the earpiece and speakerphone outputs,
-  // default the call to the earpiece like a normal phone call, and let the
-  // Speaker button switch between the two. The toggle only shows when both
-  // routes exist (i.e., on phones that support output selection).
   useEffect(() => {
-    if (callStatus !== 'on-call' || !remoteStream) return;
+    if (callStatus !== "ringing") setAccepting(false);
+  }, [callStatus]);
+
+  // Keep the screen awake while a call is live so mobile browsers don't freeze WebRTC.
+  useEffect(() => {
+    if (callStatus !== "on-call") return;
+    const nav = navigator as Navigator & { wakeLock?: { request: (type: "screen") => Promise<{ release: () => Promise<void> }> } };
+    if (!nav.wakeLock?.request) return;
+    let sentinel: { release: () => Promise<void> } | null = null;
+    let cancelled = false;
+    nav.wakeLock
+      .request("screen")
+      .then((lock) => {
+        if (cancelled) {
+          void lock.release();
+          return;
+        }
+        sentinel = lock;
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+      void sentinel?.release();
+    };
+  }, [callStatus]);
+
+  useEffect(() => {
+    if (callStatus !== "on-call" || !remoteStream) return;
 
     const el = remoteAudioRef.current as (HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> }) | null;
-    if (!el || typeof el.setSinkId !== 'function') {
+    if (!el || typeof el.setSinkId !== "function") {
       setSpeakerSupported(false);
       return;
     }
@@ -179,32 +272,28 @@ export const CallOverlay = memo(function CallOverlay({
 
     (async () => {
       try {
-        // Mic permission is already granted mid-call, so labels are populated.
         const devices = await navigator.mediaDevices.enumerateDevices();
-        const outputs = devices.filter((d) => d.kind === 'audiooutput');
+        const outputs = devices.filter((d) => d.kind === "audiooutput");
         const earpiece = outputs.find((d) => /earpiece|receiver/i.test(d.label));
-        const speaker = outputs.find((d) => /speaker/i.test(d.label));
+        const speaker = outputs.find((d) => /speakerphone|loudspeaker/i.test(d.label))
+          || outputs.find((d) => /speaker/i.test(d.label) && !/earpiece|receiver/i.test(d.label));
         if (cancelled) return;
 
         audioRoutesRef.current = {
           earpiece: earpiece?.deviceId ?? null,
-          // "" = browser default output; on phones that's the loudspeaker.
           speaker: speaker?.deviceId ?? "",
         };
 
-        if (earpiece) {
-          // Always force the earpiece, like a normal phone call — never start
-          // on the loudspeaker even if no distinct speaker device was found.
-          try {
-            await el.setSinkId(earpiece.deviceId);
-            if (!cancelled) setIsSpeakerOn(false);
-          } catch (e) {
-            console.error("Failed to route audio to earpiece:", e);
-          }
-          if (!cancelled) setSpeakerSupported(true);
-        } else {
-          // Desktop or browsers without an earpiece route — no toggle needed.
-          setSpeakerSupported(false);
+        // Default to the loudspeaker. Forcing the earpiece previously made some
+        // Android Chrome calls silent.
+        try {
+          await el.setSinkId(audioRoutesRef.current.speaker ?? "");
+        } catch {
+          // keep browser default
+        }
+        if (!cancelled) {
+          setIsSpeakerOn(true);
+          setSpeakerSupported(Boolean(earpiece));
         }
       } catch (e) {
         console.error("Failed to enumerate audio outputs:", e);
@@ -221,7 +310,7 @@ export const CallOverlay = memo(function CallOverlay({
   useEffect(() => {
     if (callStatus === 'idle') {
       setIsMuted(false);
-      setIsSpeakerOn(false);
+      setIsSpeakerOn(true);
       audioRoutesRef.current = { earpiece: null, speaker: null };
     }
   }, [callStatus]);
@@ -238,6 +327,7 @@ export const CallOverlay = memo(function CallOverlay({
   const handleAcceptTap = () => {
     if (accepting) return;
     setAccepting(true);
+    void remoteAudioRef.current?.play().catch(() => undefined);
     onAccept();
   };
 

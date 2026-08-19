@@ -4,6 +4,7 @@ import { assertMediaStillAvailable } from "../../../../lib/media-access";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,

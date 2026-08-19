@@ -180,3 +180,44 @@ body {
 .chat-wallpaper-drift {
   animation: wallpaper-drift 12s ease-in-out infinite;
 }
+
+@keyframes typing-dot {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.45; }
+  30% { transform: translateY(-3px); opacity: 1; }
+}
+
+.typing-dot {
+  animation: typing-dot 1s ease-in-out infinite;
+}
+
+@keyframes wallpaper-kenburns {
+  0% { transform: scale(1.05); }
+  100% { transform: scale(1.14); }
+}
+
+.chat-wallpaper-kenburns {
+  animation: wallpaper-kenburns 28s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+@keyframes chat-bubble-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.chat-bubble-in {
+  animation: chat-bubble-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+[data-message-bubble] {
+  transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.2s ease, filter 0.2s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-wallpaper-animated,
+  .chat-wallpaper-drift,
+  .chat-wallpaper-kenburns,
+  .chat-bubble-in {
+    animation: none !important;
+  }
+}

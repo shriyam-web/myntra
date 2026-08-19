@@ -31,6 +31,7 @@ import {
 import {
   disappearingCreateFields,
   getDisappearingModePayload,
+  invalidateDisappearingCache,
   markDisappearingMessagesViewed,
   notExpiredMessageFilter,
   notExpiredSharedFilter,
@@ -81,6 +82,7 @@ async function getAppModePayload() {
 export async function setDisappearingMode(enabled: boolean) {
   const me = await requireUser();
   await dbConnect();
+  invalidateDisappearingCache();
   const now = new Date();
   if (enabled) {
     await AppSettings.findOneAndUpdate(
@@ -301,6 +303,45 @@ export async function getCloudinarySignature(opts?: { authenticated?: boolean })
     folder,
     type: useAuthenticated ? "authenticated" : "upload",
   };
+}
+
+/** Poll until Cloudinary has finished storing the asset (videos can lag after 200 OK). */
+export async function waitForCloudinaryAsset(opts: {
+  publicId: string;
+  resourceType: string;
+  deliveryType: string;
+}) {
+  await requireUser();
+  const publicId = opts.publicId || "";
+  if (!publicId.startsWith("messaging/") || publicId.includes("..")) {
+    throw new Error("Invalid media");
+  }
+
+  const resourceType =
+    opts.resourceType === "video" || opts.resourceType === "raw" ? opts.resourceType : "image";
+  const deliveryType =
+    opts.deliveryType === "upload" || opts.deliveryType === "private"
+      ? opts.deliveryType
+      : "authenticated";
+
+  const attempts = resourceType === "video" ? 8 : 4;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const resource = await cloudinary.api.resource(publicId, {
+        resource_type: resourceType,
+        type: deliveryType,
+      });
+      const bytes = Number(resource?.bytes) || 0;
+      if (bytes > 0) {
+        return { bytes, format: String(resource?.format || "") };
+      }
+    } catch {
+      // Not visible yet — retry.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250 + i * 150));
+  }
+
+  throw new Error("Media is still processing. Please try again in a moment.");
 }
 
 /** Rewrite message media fields so clients never receive raw Cloudinary CDN URLs. */
@@ -1141,10 +1182,11 @@ export async function sendMessage(
 
   try {
     // Sender identity comes from the authenticated session, never the client arg.
-    const me = await requireUser();
+    const [me] = await Promise.all([
+      requireUser(),
+      withTimeout(dbConnect(), 8000, "Database connection timed out. Please try again."),
+    ]);
     void createdBy;
-
-    await withTimeout(dbConnect(), 15000, "Database connection timed out. Please try again.");
 
     updatePresence(me).catch(err => console.error("Background presence update error:", err));
 
@@ -1170,7 +1212,7 @@ export async function sendMessage(
     try {
       message = await withTimeout(
         Message.create(data),
-        20000,
+        12000,
         "Saving message timed out. Please check your connection and try again."
       );
       // Return the quoted message as an object, not a raw ObjectId, so the
@@ -1214,10 +1256,8 @@ export async function sendMessage(
     return protectMessageMedia(JSON.parse(JSON.stringify(message)));
   } catch (error) {
     console.error('Failed to create message:', error);
-    if (error instanceof Error && /Unauthorized|Invalid|Too many|too long/i.test(error.message)) {
-      throw error;
-    }
-    throw new Error('Failed to create message. Database connection error.');
+    if (error instanceof Error) throw error;
+    throw new Error('Failed to create message. Please try again.');
   }
 }
 
@@ -1599,8 +1639,17 @@ export async function getIceServers(): Promise<IceServerEntry[]> {
       if (res.ok) {
         const servers = (await res.json()) as IceServerEntry[];
         if (Array.isArray(servers) && servers.length > 0) {
-          cachedIceServers = { servers, fetchedAt: Date.now() };
-          return servers;
+          const withStun: IceServerEntry[] = [
+            {
+              urls: [
+                "stun:stun.l.google.com:19302",
+                "stun:stun1.l.google.com:19302",
+              ],
+            },
+            ...servers,
+          ];
+          cachedIceServers = { servers: withStun, fetchedAt: Date.now() };
+          return withStun;
         }
       }
       console.error('Metered TURN API returned unexpected response:', res.status);
@@ -1676,6 +1725,21 @@ export async function pushCallSignalAction(input: {
   noStore();
   const me = await requireUser();
   return callService.pushSignal(me, input);
+}
+
+export async function pushCallSignalsBatchAction(input: {
+  callId: string;
+  items: Array<{
+    signalId: string;
+    type: CallSignalType;
+    payload: string;
+    revision?: number;
+    iceGeneration?: number;
+  }>;
+}) {
+  noStore();
+  const me = await requireUser();
+  return callService.pushSignalBatch(me, input.callId, input.items);
 }
 
 export async function fetchCallSignalsAction(callId: string, afterSeq = 0) {

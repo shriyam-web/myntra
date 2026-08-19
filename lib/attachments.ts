@@ -67,6 +67,10 @@ export function isDocumentFile(file: File): boolean {
   return DOCUMENT_EXTENSIONS.has(ext);
 }
 
+const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "gif", "webp", "heic", "heif", "avif", "bmp"]);
+const VIDEO_EXTENSIONS = new Set(["mp4", "mov", "webm", "m4v", "avi", "mkv", "3gp"]);
+const AUDIO_EXTENSIONS = new Set(["mp3", "m4a", "wav", "aac", "ogg", "oga", "flac", "webm"]);
+
 export function classifyFile(file: File): AttachmentKind | null {
   if (isBlockedAttachment(file)) return null;
   if (file.type.startsWith("image/")) return "image";
@@ -74,6 +78,9 @@ export function classifyFile(file: File): AttachmentKind | null {
   if (file.type.startsWith("audio/")) return "audio";
   if (isDocumentFile(file)) return "document";
   const ext = getFileExtension(file.name);
+  if (IMAGE_EXTENSIONS.has(ext)) return "image";
+  if (VIDEO_EXTENSIONS.has(ext)) return "video";
+  if (AUDIO_EXTENSIONS.has(ext)) return "audio";
   if (DOCUMENT_EXTENSIONS.has(ext)) return "document";
   return null;
 }

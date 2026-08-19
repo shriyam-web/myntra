@@ -140,7 +140,13 @@ async function finalizeEndedSession(session: Record<string, unknown>, endedBy: s
   void endedBy;
 }
 
+let lastExpireAt = 0;
+
 export async function expireDueCalls(): Promise<number> {
+  const nowMs = Date.now();
+  if (nowMs - lastExpireAt < 4_000) return 0;
+  lastExpireAt = nowMs;
+
   await dbConnect();
   const now = new Date();
   let count = 0;
@@ -531,6 +537,82 @@ export async function pushSignal(
   }
 }
 
+export async function pushSignalBatch(
+  me: AuthUser,
+  callId: string,
+  items: Array<{
+    signalId: string;
+    type: CallSignalType;
+    payload: string;
+    revision?: number;
+    iceGeneration?: number;
+  }>
+): Promise<{ ok: true; lastSeq: number } | { ok: false; error: string }> {
+  if (items.length === 0) return { ok: true, lastSeq: 0 };
+  if (items.length === 1) {
+    const res = await pushSignal(me, { callId, ...items[0] });
+    return res.ok ? { ok: true, lastSeq: res.seq } : res;
+  }
+
+  await dbConnect();
+  const session = await CallSession.findOne({ callId }).lean();
+  if (!session) return { ok: false, error: "Not found" };
+  if (session.caller !== me && session.callee !== me) return { ok: false, error: "Forbidden" };
+  if (session.state === "ended") return { ok: false, error: "Ended" };
+
+  const to = me === session.caller ? String(session.callee) : String(session.caller);
+  const now = new Date();
+
+  try {
+    const updated = await CallSession.findOneAndUpdate(
+      { callId, state: { $ne: "ended" } },
+      {
+        $inc: { nextSignalSeq: items.length },
+        $set: { updatedAt: now, [`lastHeartbeatByParticipant.${me}`]: now },
+      },
+      { new: true }
+    ).lean();
+    if (!updated) return { ok: false, error: "Ended" };
+
+    const lastSeq = Number(updated.nextSignalSeq) - 1;
+    const firstSeq = lastSeq - items.length + 1;
+    try {
+      await CallSignal.insertMany(
+        items.map((item, i) => ({
+          callId,
+          signalId: item.signalId,
+          seq: firstSeq + i,
+          from: me,
+          to,
+          type: item.type,
+          revision: item.revision ?? 0,
+          iceGeneration: item.iceGeneration ?? 0,
+          payload: item.payload,
+          createdAt: now,
+          expiresAt: new Date(now.getTime() + SIGNAL_TTL_MS),
+        })),
+        { ordered: false }
+      );
+    } catch (insertError) {
+      const code = (insertError as { code?: number }).code;
+      const hasDupes = Boolean((insertError as { writeErrors?: Array<{ code?: number }> }).writeErrors);
+      if (code !== 11000 && !hasDupes) throw insertError;
+    }
+
+    await publishCallWake([session.caller as string, session.callee as string], {
+      type: "call.wake",
+      callId,
+      latestSeq: lastSeq,
+      state: String(updated.state),
+    });
+
+    return { ok: true, lastSeq };
+  } catch (error) {
+    console.error("pushSignalBatch failed:", error);
+    return { ok: false, error: "Failed to push signals" };
+  }
+}
+
 export async function fetchSignals(
   me: AuthUser,
   callId: string,
@@ -566,6 +648,10 @@ export async function getActiveCallForUser(me: AuthUser): Promise<CallSessionDTO
       state: { $ne: "ended" },
     }).lean();
     if (session) return toDTO(session as Record<string, unknown>, me);
+    await User.updateOne(
+      { username: me, activeCallId: user.activeCallId },
+      { $set: { activeCallId: null, callStatus: "idle", callerId: null } }
+    );
   }
 
   const session = await CallSession.findOne({

@@ -33,6 +33,24 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+      // Media proxy: allow short private cache + Range so images/videos are not truncated.
+      {
+        source: '/api/attachments/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'private, max-age=120',
+          },
+          {
+            key: 'Pragma',
+            value: 'no-cache',
+          },
+          {
+            key: 'Surrogate-Control',
+            value: 'private',
+          },
+        ],
+      },
     ];
   },
 };

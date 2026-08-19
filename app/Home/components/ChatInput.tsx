@@ -12,6 +12,7 @@ import {
   classifyFile,
   formatFileSize,
 } from "../../../lib/attachments";
+import { materializeFile } from "../../../lib/media-file";
 
 interface ChatInputProps {
   newMessage: string;
@@ -158,7 +159,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     setTimeout(() => setCopyFeedback(null), 2000);
   }, [newMessage, lastFailedText]);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
     setAttachMenuOpen(false);
@@ -187,10 +188,15 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         errors.push(`${file.name} is not allowed`);
         continue;
       }
-      accepted.push(file);
+      try {
+        accepted.push(await materializeFile(file));
+      } catch (error) {
+        errors.push(error instanceof Error ? error.message : `${file.name} could not be read`);
+      }
     }
 
     if (errors.length) setAttachError(errors[0]);
+    else setAttachError(null);
     if (!accepted.length) {
       e.target.value = "";
       return;
@@ -427,8 +433,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         attachMenuOpen ? "z-50" : "z-20"
       } ${
         disappearingMode
-          ? "bg-violet-950/50 border-violet-500/30"
-          : "bg-zinc-900/70 border-zinc-800/50"
+          ? "bg-violet-950/50 border-violet-400/25"
+          : "bg-zinc-950/70 border-white/10"
       } ${
         isMessageExpanded
           ? "p-3 sm:p-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
@@ -934,7 +940,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           e.preventDefault();
           handleSendMessage();
         }}
-        className="flex items-end gap-3 max-w-2xl mx-auto"
+        className="flex items-end gap-2 max-w-2xl mx-auto"
       >
         <div className="flex-1 flex flex-col gap-2">
           {queueLabel && (
@@ -958,10 +964,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               )}
             </div>
           )}
-          <div className={`relative group/input flex items-center rounded-2xl sm:rounded-[1.5rem] transition-all shadow-inner overflow-hidden px-1.5 ${
+          <div className={`relative group/input flex items-end rounded-[1.55rem] transition-all overflow-hidden px-1 ${
             disappearingMode
-              ? "bg-violet-950/70 border border-violet-400/35 focus-within:border-violet-300/50 focus-within:ring-1 focus-within:ring-violet-400/20"
-              : "bg-zinc-950/90 border border-zinc-700/50 focus-within:border-zinc-500/60 focus-within:ring-1 focus-within:ring-white/10"
+              ? "bg-violet-950/60 border border-violet-400/30 focus-within:border-violet-300/45"
+              : "bg-zinc-900/85 border border-white/12 focus-within:border-fuchsia-400/35 focus-within:shadow-[0_0_0_3px_rgba(232,121,249,0.12)]"
           }`}>
             <div className="flex items-center gap-1 pr-1.5 relative">
               <button
@@ -1014,7 +1020,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   handleSendMessage();
                 }
               }}
-              className="w-full bg-transparent text-white text-sm font-normal py-3.5 px-1 outline-none no-scrollbar resize-none max-h-40 placeholder:text-zinc-800"
+              className="w-full bg-transparent text-white text-[15px] font-normal py-3 px-1 outline-none no-scrollbar resize-none max-h-40 placeholder:text-zinc-500"
               placeholder={
                 isRecording
                   ? ""
@@ -1022,7 +1028,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   ? "Type another message…"
                   : disappearingMode
                   ? "Ephemeral message…"
-                  : "Say, Hello!"
+                  : "Message…"
               }
               rows={1}
               autoFocus
@@ -1109,12 +1115,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           type="submit"
           disabled={!canSend}
           aria-label="Send message"
-          className={`relative h-12 w-12 flex items-center justify-center rounded-full shrink-0 transition-all duration-300 ease-out ${
+          className={`relative h-11 w-11 flex items-center justify-center rounded-full shrink-0 transition-all duration-200 ease-out ${
             canSend
               ? disappearingMode
-                ? "bg-violet-500 text-white shadow-lg shadow-violet-900/40 hover:brightness-110 active:scale-90"
+                ? "bg-violet-500 text-white shadow-lg shadow-violet-900/30 hover:brightness-110 active:scale-90"
                 : `${activeTheme.bubbleMe} text-white shadow-lg ${activeTheme.shadow} hover:brightness-110 active:scale-90`
-              : "bg-zinc-800/35 text-zinc-600 opacity-45 cursor-not-allowed"
+              : "bg-zinc-800/50 text-zinc-600 cursor-not-allowed"
           }`}
         >
           <svg
