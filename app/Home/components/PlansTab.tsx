@@ -48,7 +48,7 @@ export const PlansTab: React.FC<PlansTabProps> = ({
         onClick={() => handleTogglePlan(p._id)}
         className={`w-5 h-5 rounded-md shrink-0 flex items-center justify-center border transition-colors ${
           p.done
-            ? "bg-blue-500 border-blue-500 text-white text-[10px] font-black"
+            ? "bg-blue-500 border-blue-500 text-white text-[10px] font-semibold"
             : "border-zinc-600 hover:border-blue-400"
         }`}
         aria-label={p.done ? "Mark active" : "Mark done"}
@@ -67,7 +67,7 @@ export const PlansTab: React.FC<PlansTabProps> = ({
               setEditingPlanText("");
             }
           }}
-          className="flex-1 bg-zinc-950 border border-zinc-600 rounded-lg px-3 py-1 text-sm font-bold text-white outline-none"
+          className="flex-1 bg-zinc-950 border border-zinc-600 rounded-lg px-3 py-1 text-sm font-normal text-white outline-none"
           autoFocus
         />
       ) : (
@@ -129,7 +129,7 @@ export const PlansTab: React.FC<PlansTabProps> = ({
 
   return (
     <section className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <h2 className="text-sm font-black text-white px-1 uppercase tracking-[0.3em] flex items-center gap-3">
+      <h2 className="text-[15px] font-semibold text-white px-1 tracking-tight flex items-center gap-3">
         <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
         Shared Tasks
       </h2>
@@ -144,7 +144,7 @@ export const PlansTab: React.FC<PlansTabProps> = ({
               onKeyDown={(e) => {
                 if (e.key === "Enter") handleCreatePlan();
               }}
-              className="flex-1 bg-zinc-950 border border-zinc-800 rounded-2xl px-5 py-4 text-sm font-bold text-white outline-none focus:border-zinc-600 placeholder:text-zinc-800"
+              className="flex-1 bg-zinc-950 border border-zinc-800 rounded-2xl px-5 py-4 text-sm font-normal text-white outline-none focus:border-zinc-600 placeholder:text-zinc-600"
               placeholder="Add a shared task…"
             />
             <button
@@ -161,14 +161,14 @@ export const PlansTab: React.FC<PlansTabProps> = ({
             type="date"
             value={newPlanDue}
             onChange={(e) => setNewPlanDue(e.target.value)}
-            className="bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3 text-xs font-bold text-zinc-400 outline-none [color-scheme:dark] w-full sm:w-auto"
+            className="bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3 text-xs font-medium text-zinc-400 outline-none [color-scheme:dark] w-full sm:w-auto"
             title="Optional due date"
           />
         </div>
 
         <div className="space-y-3 relative z-10">
           {plans.length === 0 ? (
-            <p className="text-zinc-600 text-[10px] font-black text-center uppercase tracking-widest py-8 italic">
+            <p className="text-zinc-500 text-sm font-medium text-center py-8">
               No tasks yet
             </p>
           ) : (
@@ -176,7 +176,7 @@ export const PlansTab: React.FC<PlansTabProps> = ({
               {active.map(renderTask)}
               {done.length > 0 && (
                 <>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600 pt-3 px-1">
+                  <p className="text-xs font-medium text-zinc-500 pt-3 px-1">
                     Done ({done.length})
                   </p>
                   {done.map(renderTask)}

@@ -13,6 +13,7 @@ import {
   formatFileSize,
 } from "../../../lib/attachments";
 import { materializeFile } from "../../../lib/media-file";
+import { prepareChatImageFile } from "../../../lib/rasterize-image";
 
 interface ChatInputProps {
   newMessage: string;
@@ -87,6 +88,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [recordingElapsedSec, setRecordingElapsedSec] = useState(0);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const [attachError, setAttachError] = useState<string | null>(null);
+  const [preparingPhoto, setPreparingPhoto] = useState(false);
   const [pollComposerOpen, setPollComposerOpen] = useState(false);
   const [pollQuestion, setPollQuestion] = useState("");
   const [pollOptions, setPollOptions] = useState(["", ""]);
@@ -164,68 +166,77 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     if (!files) return;
     setAttachMenuOpen(false);
     setAttachError(null);
+    setPreparingPhoto(true);
 
-    const incoming = Array.from(files);
-    const remainingSlots =
-      MAX_ATTACHMENTS_PER_MESSAGE -
-      (selectedImages.length + selectedVideos.length + selectedAudios.length + selectedDocuments.length);
-    if (remainingSlots <= 0) {
-      setAttachError(`You can attach up to ${MAX_ATTACHMENTS_PER_MESSAGE} files per message.`);
+    try {
+      const incoming = Array.from(files);
+      const remainingSlots =
+        MAX_ATTACHMENTS_PER_MESSAGE -
+        (selectedImages.length + selectedVideos.length + selectedAudios.length + selectedDocuments.length);
+      if (remainingSlots <= 0) {
+        setAttachError(`You can attach up to ${MAX_ATTACHMENTS_PER_MESSAGE} files per message.`);
+        e.target.value = "";
+        return;
+      }
+
+      const accepted: File[] = [];
+      const errors: string[] = [];
+
+      for (const file of incoming.slice(0, remainingSlots)) {
+        if (file.size > MAX_ATTACHMENT_BYTES) {
+          errors.push(`${file.name} is over 50 MB`);
+          continue;
+        }
+        const kind = classifyFile(file);
+        if (!kind) {
+          errors.push(`${file.name} is not allowed`);
+          continue;
+        }
+        try {
+          if (kind === "image") {
+            accepted.push(await prepareChatImageFile(file));
+          } else {
+            accepted.push(await materializeFile(file));
+          }
+        } catch (error) {
+          errors.push(error instanceof Error ? error.message : `${file.name} could not be read`);
+        }
+      }
+
+      if (errors.length) setAttachError(errors[0]);
+      else setAttachError(null);
+      if (!accepted.length) {
+        e.target.value = "";
+        return;
+      }
+
+      setSelectedFiles((prev) => [...prev, ...accepted]);
+
+      accepted.forEach((file) => {
+        const kind = classifyFile(file)!;
+        if (kind === "video") {
+          setSelectedVideos((prev) => [...prev, URL.createObjectURL(file)]);
+        } else if (kind === "audio") {
+          setSelectedAudios((prev) => [...prev, URL.createObjectURL(file)]);
+        } else if (kind === "document") {
+          setSelectedDocuments((prev) => [
+            ...prev,
+            {
+              url: "",
+              name: file.name,
+              mimeType: file.type,
+              size: file.size,
+            },
+          ]);
+        } else {
+          setSelectedImages((prev) => [...prev, URL.createObjectURL(file)]);
+        }
+      });
+
       e.target.value = "";
-      return;
+    } finally {
+      setPreparingPhoto(false);
     }
-
-    const accepted: File[] = [];
-    const errors: string[] = [];
-
-    for (const file of incoming.slice(0, remainingSlots)) {
-      if (file.size > MAX_ATTACHMENT_BYTES) {
-        errors.push(`${file.name} is over 50 MB`);
-        continue;
-      }
-      const kind = classifyFile(file);
-      if (!kind) {
-        errors.push(`${file.name} is not allowed`);
-        continue;
-      }
-      try {
-        accepted.push(await materializeFile(file));
-      } catch (error) {
-        errors.push(error instanceof Error ? error.message : `${file.name} could not be read`);
-      }
-    }
-
-    if (errors.length) setAttachError(errors[0]);
-    else setAttachError(null);
-    if (!accepted.length) {
-      e.target.value = "";
-      return;
-    }
-
-    setSelectedFiles((prev) => [...prev, ...accepted]);
-
-    accepted.forEach((file) => {
-      const kind = classifyFile(file)!;
-      if (kind === "video") {
-        setSelectedVideos((prev) => [...prev, URL.createObjectURL(file)]);
-      } else if (kind === "audio") {
-        setSelectedAudios((prev) => [...prev, URL.createObjectURL(file)]);
-      } else if (kind === "document") {
-        setSelectedDocuments((prev) => [
-          ...prev,
-          {
-            url: "",
-            name: file.name,
-            mimeType: file.type,
-            size: file.size,
-          },
-        ]);
-      } else {
-        setSelectedImages((prev) => [...prev, URL.createObjectURL(file)]);
-      }
-    });
-
-    e.target.value = "";
   };
 
   const removeImage = (idx: number) => {
@@ -772,6 +783,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         </div>
       )}
 
+      {preparingPhoto && (
+        <div className="mb-3 px-3 py-2 rounded-xl bg-zinc-900 border border-white/10 text-[11px] text-zinc-300 flex items-center gap-2">
+          <span className="w-3.5 h-3.5 border-2 border-zinc-500 border-t-white rounded-full animate-spin" />
+          Preparing photo…
+        </div>
+      )}
       {attachError && (
         <div className="mb-3 px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-200">
           {attachError}
@@ -862,15 +879,17 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         <div className="mb-4 flex gap-3 overflow-x-auto no-scrollbar pb-2 animate-in slide-in-from-bottom-2 duration-300">
           {selectedImages.map((url, idx) => (
             <div key={`img-${idx}`} className="relative group shrink-0">
-              <img
-                src={url}
-                className="w-24 h-24 object-cover rounded-[1.5rem] border-2 border-zinc-800 group-hover:border-white transition-all"
-                alt=""
-              />
+              <div className="relative w-24 h-24 rounded-[1.5rem] border-2 border-zinc-800 overflow-hidden bg-zinc-900 group-hover:border-white transition-all">
+                <img
+                  src={url}
+                  className="absolute inset-0 block w-full h-full object-cover"
+                  alt=""
+                />
+              </div>
               <button
                 type="button"
                 onClick={() => removeImage(idx)}
-                className="absolute -top-2 -right-2 p-2 bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-all hover:scale-110 active:scale-90"
+                className="absolute -top-2 -right-2 p-2 bg-red-600 text-white rounded-full opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all hover:scale-110 active:scale-90"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
               </button>
@@ -1001,7 +1020,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               )}
             </div>
             <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" multiple accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.rtf,.csv,.zip,.rar,.7z,.json,.xml,.md" />
-            <input type="file" ref={mediaInputRef} onChange={handleFileChange} className="hidden" multiple accept="image/*,video/*" />
+            <input type="file" ref={mediaInputRef} onChange={handleFileChange} className="hidden" multiple accept="image/jpeg,image/png,image/webp,image/heic,image/heif,image/*,video/*,.jpg,.jpeg,.png,.webp,.heic,.heif,.mp4,.mov,.webm" />
             <input type="file" ref={audioInputRef} onChange={handleFileChange} className="hidden" multiple accept="audio/*" />
             <input type="file" ref={docInputRef} onChange={handleFileChange} className="hidden" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.rtf,.csv,.odt,.ods,.odp,.zip,.rar,.7z,.tar,.gz,.json,.xml,.md,.epub" />
             <textarea

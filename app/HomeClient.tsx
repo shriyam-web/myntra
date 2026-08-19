@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { createPortal } from "react-dom";
 import * as actions from "../lib/actions";
 import { useAppData } from "./Home/hooks/useAppData";
 import { useMessageSendQueue } from "./Home/hooks/useMessageSendQueue";
@@ -61,6 +62,8 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
   const [togglingDisappearing, setTogglingDisappearing] = useState(false);
   
   const [messageLimit, setMessageLimit] = useState(50);
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+  const skipNextBottomScrollRef = useRef(false);
   
   // Custom Hooks
   const {
@@ -85,7 +88,14 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
     fetchMessagesOnly,
     scheduleFetchMessages,
     fetchSharedData,
-    fetchAllMedia
+    fetchAllMedia,
+    refreshCallLogs,
+    loadMoreCallLogs,
+    hasMoreCallLogs,
+    callLogsTotal,
+    isLoadingCallLogs,
+    updateMessagesState,
+    setHasMoreMessages,
   } = useAppData(view, messageLimit);
 
   const handleManualRefresh = useCallback(async (silent = false) => {
@@ -256,6 +266,12 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
   }, [activeTab, fetchAllMedia]);
 
   useEffect(() => {
+    if (activeTab === "calls") {
+      void refreshCallLogs();
+    }
+  }, [activeTab, refreshCallLogs]);
+
+  useEffect(() => {
     if (activeTab !== "messages") {
       setShowPinnedMessagesOnly(false);
     }
@@ -291,23 +307,38 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
     };
   }, []);
 
-  // Handlers
+  const prevActiveTabRef = useRef(activeTab);
   useEffect(() => {
-    if (activeTab === "messages") {
-      const currentLastMessageId = messages.length > 0 ? messages[messages.length - 1]._id : null;
-      const isNewMessage = currentLastMessageId !== prevLastMessageIdRef.current;
+    const openedMessages = activeTab === "messages" && prevActiveTabRef.current !== "messages";
+    prevActiveTabRef.current = activeTab;
 
-      if (isNewMessage) {
-        const lastMsg = messages[messages.length - 1];
-        const isMyMessage = lastMsg?.createdBy === currentUser;
+    if (activeTab !== "messages") return;
 
-        if (prevLastMessageIdRef.current === null || isMyMessage || !showScrollButton) {
-          scrollToBottom(messages.length <= messageLimit);
-        }
-      }
+    const currentLastMessageId = messages.length > 0 ? messages[messages.length - 1]._id : null;
+    const isNewMessage = currentLastMessageId !== prevLastMessageIdRef.current;
+
+    if (skipNextBottomScrollRef.current) {
+      skipNextBottomScrollRef.current = false;
       prevLastMessageIdRef.current = currentLastMessageId;
+      return;
     }
-  }, [activeTab, messages, messageLimit, showScrollButton, currentUser]);
+
+    if (openedMessages) {
+      prevLastMessageIdRef.current = currentLastMessageId;
+      if (!highlightedMessageId) scrollToBottom(true);
+      return;
+    }
+
+    if (isNewMessage) {
+      const lastMsg = messages[messages.length - 1];
+      const isMyMessage = lastMsg?.createdBy === currentUser;
+
+      if (prevLastMessageIdRef.current === null || isMyMessage || !showScrollButton) {
+        scrollToBottom(true);
+      }
+    }
+    prevLastMessageIdRef.current = currentLastMessageId;
+  }, [activeTab, messages, messageLimit, showScrollButton, currentUser, highlightedMessageId]);
 
   useEffect(() => {
     if (activeTab !== "messages") return;
@@ -1104,15 +1135,55 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
     setMessageLimit(prev => prev + 50);
   };
 
-  const scrollToBottom = (instant = false) => {
-    setTimeout(() => {
-      if (messagesContainerRef.current) {
-        messagesContainerRef.current.scrollTo({
-          top: messagesContainerRef.current.scrollHeight,
-          behavior: instant ? 'auto' : 'smooth'
-        });
+  useEffect(() => {
+    if (view === "login" || messageLimit <= 50) return;
+    void fetchMessagesOnly(true);
+  }, [messageLimit, view, fetchMessagesOnly]);
+
+  const jumpToSearchedMessage = useCallback(async (messageId: string) => {
+    setShowMessageSearch(false);
+    setShowPinnedMessagesOnly(false);
+    setActiveTab("messages");
+    setIsMessageExpanded(true);
+    skipNextBottomScrollRef.current = true;
+    setHighlightedMessageId(messageId);
+
+    if (messages.some((m) => m._id === messageId)) return;
+
+    try {
+      const result = await actions.fetchMessagesAround(messageId, currentUser as string);
+      if (!result.found) {
+        setHighlightedMessageId(null);
+        return;
       }
-    }, 100);
+      skipNextBottomScrollRef.current = true;
+      setMessageLimit((prev) => Math.max(prev, result.limit));
+      setHasMoreMessages(result.hasMore);
+      updateMessagesState(result.messages as Message[]);
+    } catch (error) {
+      console.error("Failed to open searched message:", error);
+    }
+  }, [messages, currentUser, updateMessagesState, setHasMoreMessages]);
+
+  const scrollToBottom = (instant = false) => {
+    const run = (attempt = 0) => {
+      const el = messagesContainerRef.current;
+      if (!el) {
+        if (attempt < 12) window.setTimeout(() => run(attempt + 1), 40);
+        return;
+      }
+      const prevBehavior = el.style.scrollBehavior;
+      el.style.scrollBehavior = instant ? "auto" : prevBehavior;
+      el.scrollTo({
+        top: el.scrollHeight,
+        behavior: instant ? "auto" : "smooth",
+      });
+      el.style.scrollBehavior = prevBehavior;
+      if (instant && attempt < 6) {
+        window.setTimeout(() => run(attempt + 1), 60);
+      }
+    };
+    run();
   };
 
   const handleScroll = useCallback(() => {
@@ -1184,12 +1255,16 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
   if (view === "login") return <LoginView password={password} setPassword={setPassword} handleLogin={handleLogin} loginError={loginError} isLoggingIn={isLoggingIn} failedAttempts={loginAttempts} />;
 
   return (
-    <div className="relative flex flex-col min-h-[100svh] bg-zinc-950 text-zinc-100 font-sans pb-2 selection:bg-white selection:text-black overflow-x-hidden">
+    <div className={`relative flex flex-col min-h-[100svh] bg-zinc-950 text-zinc-100 font-sans selection:bg-white selection:text-black ${
+      isMessageExpanded && activeTab === "messages" ? "h-[100dvh] overflow-hidden" : "pb-2"
+    }`}>
+      {!(isMessageExpanded && activeTab === "messages") && (
       <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
         <div className="absolute -top-24 -left-16 w-72 h-72 rounded-full bg-fuchsia-600/25 blur-3xl" />
         <div className="absolute top-1/3 -right-20 w-80 h-80 rounded-full bg-cyan-500/20 blur-3xl" />
         <div className="absolute -bottom-24 left-1/4 w-96 h-96 rounded-full bg-violet-600/20 blur-3xl" />
       </div>
+      )}
       {currentUser.trim().toLowerCase() === "alpha 1" && <EmeButton />}
 
       {showCopyToast && (
@@ -1199,8 +1274,8 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
           </div>
         </div>
       )}
-      <div className="sticky top-0 z-50">
-        {!(isMessageExpanded && activeTab === "messages") && (
+      {!(isMessageExpanded && activeTab === "messages") && (
+      <div className={`sticky top-0 z-50 ${activeTab !== "messages" ? "font-plain" : ""}`}>
         <ChatHeader
           connectionStatusDisplay={connectionStatusDisplay && isConnected}
           currentUser={currentUser}
@@ -1210,9 +1285,7 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
           fetchInitialData={handleManualRefresh}
           handleLogout={handleLogout}
         />
-        )}
 
-        {!(isMessageExpanded && activeTab === "messages") && (
         <TabNavigation 
           activeTab={activeTab}
           setActiveTab={setActiveTab}
@@ -1222,12 +1295,14 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
           messages={messages}
           currentUser={currentUser}
         />
-        )}
       </div>
+      )}
 
-      <main className={`flex-1 w-full px-4 pt-4 pb-10 md:pb-16 ${
-        isMessageExpanded && activeTab === "messages" ? "overflow-hidden" : "max-w-md mx-auto"
-      }`}>
+      <main className={`flex-1 w-full ${
+        isMessageExpanded && activeTab === "messages"
+          ? "p-0 max-w-none overflow-visible"
+          : "px-4 pt-4 pb-10 md:pb-16 max-w-md mx-auto"
+      } ${activeTab !== "messages" ? "font-plain" : ""}`}>
         {activeTab === "complaints" && (
           <ComplaintsTab 
             tickets={tickets}
@@ -1320,6 +1395,10 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
           <CallLogsTab 
             callLogs={callLogs}
             currentUser={currentUser as any}
+            total={callLogsTotal}
+            hasMore={hasMoreCallLogs}
+            isLoading={isLoadingCallLogs}
+            onLoadMore={loadMoreCallLogs}
           />
         )}
 
@@ -1330,7 +1409,7 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
               className="flex items-center gap-2 mb-6 text-zinc-500 hover:text-white transition-colors group"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="group-hover:-translate-x-1 transition-transform"><polyline points="15 18 9 12 15 6"/></svg>
-              <span className="text-[10px] font-black uppercase tracking-widest">Back to Messages</span>
+              <span className="text-sm font-medium">Back to Messages</span>
             </button>
             <MediaTab 
               messages={mediaMessages}
@@ -1343,11 +1422,11 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
           </div>
         )}
 
-        {activeTab === "messages" && (
-          <>
+        {activeTab === "messages" && (() => {
+          const chatPane = (
           <div className={`flex flex-col ${
             isMessageExpanded
-              ? "fixed inset-0 z-[60] bg-zinc-950 h-[100dvh] max-h-[100dvh] overflow-hidden pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)]"
+              ? "fixed inset-0 z-[80] w-full bg-zinc-950 h-[100dvh] max-h-[100dvh] overflow-hidden pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)]"
               : "gap-4 animate-in fade-in slide-in-from-bottom-4 duration-700"
           }`}>
              <div className={`flex items-center justify-between shrink-0 ${
@@ -1526,8 +1605,8 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
                </div>
              )}
 
-             <div className={`relative flex flex-col min-h-0 flex-1 w-full mx-auto ${
-               isMessageExpanded ? "max-w-lg" : "max-w-full"
+             <div className={`relative flex flex-col min-h-0 flex-1 w-full ${
+               isMessageExpanded ? "max-w-none h-full" : "max-w-full mx-auto"
              } ${chatBgColor} ${
                isMessageExpanded
                  ? "border-none shadow-none rounded-none"
@@ -1606,6 +1685,8 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
                     onViewDisappearingMessages={handleViewDisappearingMessages}
                     setPreviewImageIndex={setPreviewImageIndex}
                     partnerIsTyping={partnerIsTyping}
+                    highlightedMessageId={highlightedMessageId}
+                    onClearHighlight={() => setHighlightedMessageId(null)}
                 />
 
                 <ChatInput 
@@ -1646,8 +1727,11 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
                 />
              </div>
           </div>
-          </>
-        )}
+          );
+          return isMessageExpanded && typeof document !== "undefined"
+            ? createPortal(chatPane, document.body)
+            : chatPane;
+        })()}
       </main>
 
       <ThemeSettings 
@@ -1669,23 +1753,7 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
       {showMessageSearch && (
         <MessageSearchOverlay
           onClose={() => setShowMessageSearch(false)}
-          onJump={(messageId) => {
-            setShowMessageSearch(false);
-            setActiveTab("messages");
-            // Message rows render after the tab switch; retry until the row exists.
-            let attempts = 0;
-            const tryScroll = () => {
-              const el = document.getElementById(`message-${messageId}`);
-              if (el) {
-                el.scrollIntoView({ behavior: "smooth", block: "center" });
-                el.classList.add("ring-2", "ring-white/50", "bg-white/5");
-                setTimeout(() => el.classList.remove("ring-2", "ring-white/50", "bg-white/5"), 2000);
-                return;
-              }
-              if (attempts++ < 8) setTimeout(tryScroll, 200);
-            };
-            setTimeout(tryScroll, 150);
-          }}
+          onJump={jumpToSearchedMessage}
         />
       )}
 

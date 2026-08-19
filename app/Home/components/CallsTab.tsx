@@ -30,8 +30,8 @@ export function CallsTab({ callLogs, currentUser }: CallsTabProps) {
   return (
     <div className="flex flex-col gap-4 p-4 pb-24">
       <div className="flex items-center justify-between mb-2">
-        <h2 className="text-2xl font-black uppercase tracking-tighter text-white">Recent Calls</h2>
-        <div className="px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-[10px] font-black uppercase tracking-widest text-indigo-400">
+        <h2 className="text-2xl font-semibold tracking-tight text-white">Recent Calls</h2>
+        <div className="px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-xs font-medium text-indigo-400">
           {callLogs.length} Logs
         </div>
       </div>
@@ -71,7 +71,7 @@ export function CallsTab({ callLogs, currentUser }: CallsTabProps) {
                           <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m22 22-5-5"/><path d="M9 22H3a2 2 0 0 1-2-2v-6"/><path d="M21 15V9a2 2 0 0 0-2-2H5"/><path d="M21 9V3a2 2 0 0 0-2-2h-6"/></svg>
                         )}
                       </span>
-                      <p className={`text-[10px] font-black uppercase tracking-widest ${
+                      <p className={`text-xs font-medium ${
                         log.status === 'missed' ? 'text-red-500/70' : 
                         log.status === 'rejected' ? 'text-orange-500/70' :
                         'text-zinc-500'
@@ -83,8 +83,8 @@ export function CallsTab({ callLogs, currentUser }: CallsTabProps) {
                 </div>
 
                 <div className="text-right">
-                  <p className="text-[10px] font-black text-white/40 uppercase">{formatDate(log.createdAt)}</p>
-                  <p className="text-xs font-bold text-white/20">{formatTime(log.createdAt)}</p>
+                  <p className="text-xs font-medium text-white/50">{formatDate(log.createdAt)}</p>
+                  <p className="text-xs font-normal text-white/30">{formatTime(log.createdAt)}</p>
                 </div>
               </div>
             );

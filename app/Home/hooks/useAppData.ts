@@ -14,10 +14,15 @@ import {
   isOptimisticMessageId,
 } from "../types";
 
+const CALL_LOG_PAGE_SIZE = 15;
+
 export function useAppData(view: ViewType, messageLimit: number) {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [callLogs, setCallLogs] = useState<CallLog[]>([]);
+  const [hasMoreCallLogs, setHasMoreCallLogs] = useState(false);
+  const [callLogsTotal, setCallLogsTotal] = useState(0);
+  const [isLoadingCallLogs, setIsLoadingCallLogs] = useState(false);
   const [mediaMessages, setMediaMessages] = useState<Message[]>([]);
   const [wishlist, setWishlist] = useState<WishlistItem[]>([]);
   const [plans, setPlans] = useState<PlanItem[]>([]);
@@ -121,7 +126,6 @@ export function useAppData(view: ViewType, messageLimit: number) {
       if (!silent) setIsRefreshing(true);
       const data = await actions.fetchMessages(messageLimit, view as string);
       setUsers(data.users || []);
-      setCallLogs(data.callLogs || []);
       setHasMoreMessages(data.messages.length >= messageLimit);
       updateMessagesState(data.messages);
       applyMaintenance(data);
@@ -175,7 +179,6 @@ export function useAppData(view: ViewType, messageLimit: number) {
       setReminders(data.reminders || []);
       setMoods(data.moods || []);
       setUsers(data.users || []);
-      setCallLogs(data.callLogs || []);
       setHasMoreMessages(data.messages.length >= messageLimit);
       updateMessagesState(data.messages);
       applyMaintenance(data);
@@ -218,6 +221,39 @@ export function useAppData(view: ViewType, messageLimit: number) {
     }
   }, [view]);
 
+  const refreshCallLogs = useCallback(async () => {
+    if (view === "login") return;
+    try {
+      setIsLoadingCallLogs(true);
+      const data = await actions.fetchCallLogsPage(0, CALL_LOG_PAGE_SIZE);
+      setCallLogs(data.logs);
+      setHasMoreCallLogs(data.hasMore);
+      setCallLogsTotal(data.total);
+    } catch (error) {
+      console.error("Failed to fetch call logs:", error);
+    } finally {
+      setIsLoadingCallLogs(false);
+    }
+  }, [view]);
+
+  const loadMoreCallLogs = useCallback(async () => {
+    if (view === "login" || isLoadingCallLogs || !hasMoreCallLogs) return;
+    try {
+      setIsLoadingCallLogs(true);
+      const data = await actions.fetchCallLogsPage(callLogs.length, CALL_LOG_PAGE_SIZE);
+      setCallLogs((prev) => {
+        const seen = new Set(prev.map((l) => l._id));
+        return [...prev, ...data.logs.filter((l: CallLog) => !seen.has(l._id))];
+      });
+      setHasMoreCallLogs(data.hasMore);
+      setCallLogsTotal(data.total);
+    } catch (error) {
+      console.error("Failed to load more call logs:", error);
+    } finally {
+      setIsLoadingCallLogs(false);
+    }
+  }, [view, isLoadingCallLogs, hasMoreCallLogs, callLogs.length]);
+
   return {
     tickets, setTickets,
     messages, setMessages,
@@ -242,6 +278,13 @@ export function useAppData(view: ViewType, messageLimit: number) {
     fetchMessagesOnly,
     scheduleFetchMessages,
     fetchSharedData,
-    fetchAllMedia
+    fetchAllMedia,
+    refreshCallLogs,
+    loadMoreCallLogs,
+    hasMoreCallLogs,
+    callLogsTotal,
+    isLoadingCallLogs,
+    updateMessagesState,
+    setHasMoreMessages,
   };
 }

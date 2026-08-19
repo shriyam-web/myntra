@@ -28,9 +28,9 @@ export const WishlistTab: React.FC<WishlistTabProps> = ({
 }) => {
   return (
     <section className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <h2 className="text-sm font-black text-white px-1 uppercase tracking-[0.3em] flex items-center gap-3">
+      <h2 className="text-[15px] font-semibold text-white px-1 tracking-tight flex items-center gap-3">
         <span className="w-2 h-2 bg-pink-500 rounded-full"></span>
-        Wishlist Terminal
+        Wishlist
       </h2>
       <div className="bg-zinc-900 p-6 sm:p-8 rounded-[2.5rem] sm:rounded-[3rem] border border-zinc-800/50 shadow-2xl space-y-8 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-32 h-32 bg-pink-500/5 blur-[80px] -mr-16 -mt-16 rounded-full"></div>
@@ -40,8 +40,8 @@ export const WishlistTab: React.FC<WishlistTabProps> = ({
             spellCheck={false}
             value={newWish}
             onChange={(e) => setNewWish(e.target.value)}
-            className="flex-1 bg-zinc-950 border border-zinc-800 rounded-2xl px-6 py-5 text-sm font-bold text-white outline-none focus:border-zinc-600 placeholder:text-zinc-800 transition-all shadow-inner"
-            placeholder="Data entry..."
+            className="flex-1 bg-zinc-950 border border-zinc-800 rounded-2xl px-6 py-5 text-sm font-normal text-white outline-none focus:border-zinc-600 placeholder:text-zinc-600 transition-all shadow-inner"
+            placeholder="Add something…"
           />
           <button
             onClick={handleCreateWish}
@@ -65,14 +65,14 @@ export const WishlistTab: React.FC<WishlistTabProps> = ({
         </div>
         <div className="space-y-3 relative z-10">
           {wishlist.length === 0 ? (
-            <p className="text-zinc-800 text-[10px] font-black text-center uppercase tracking-widest py-8 italic">
-              Wishlist buffer empty
+            <p className="text-zinc-500 text-sm font-medium text-center py-8">
+              Nothing saved yet
             </p>
           ) : (
             wishlist.map((w) => (
               <div
                 key={w._id}
-                className="flex items-center gap-5 text-sm text-zinc-200 font-bold bg-zinc-950/60 p-5 rounded-2xl border border-zinc-800/50 hover:border-zinc-700 transition-colors group"
+                className="flex items-center gap-5 text-sm text-zinc-200 font-medium bg-zinc-950/60 p-5 rounded-2xl border border-zinc-800/50 hover:border-zinc-700 transition-colors group"
               >
                 <span className="text-zinc-700 group-hover:text-pink-500 transition-colors">♥</span>
                 {editingWish === w._id ? (
@@ -86,7 +86,7 @@ export const WishlistTab: React.FC<WishlistTabProps> = ({
                         setEditingWishText("");
                       }
                     }}
-                    className="flex-1 bg-zinc-950 border border-zinc-600 rounded-lg px-3 py-1 text-sm font-bold text-white outline-none"
+                    className="flex-1 bg-zinc-950 border border-zinc-600 rounded-lg px-3 py-1 text-sm font-normal text-white outline-none"
                     autoFocus
                   />
                 ) : (

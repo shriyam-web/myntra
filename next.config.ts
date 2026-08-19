@@ -6,6 +6,7 @@ const nextConfig: NextConfig = {
       bodySizeLimit: '20mb',
     },
   },
+  transpilePackages: ["heic2any"],
   async headers() {
     return [
       {

@@ -71,7 +71,7 @@ export const CheckInTab: React.FC<CheckInTabProps> = ({
 
   return (
     <section className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <h2 className="text-sm font-black text-white px-1 uppercase tracking-[0.3em] flex items-center gap-3">
+      <h2 className="text-[15px] font-semibold text-white px-1 tracking-tight flex items-center gap-3">
         <span className="w-2 h-2 bg-pink-500 rounded-full"></span>
         Daily Check-in
       </h2>
@@ -92,7 +92,7 @@ export const CheckInTab: React.FC<CheckInTabProps> = ({
                 }`}
               >
                 <span className="text-xl">{m.emoji}</span>
-                <span className="text-[10px] font-bold uppercase tracking-wider">{m.label}</span>
+                <span className="text-[11px] font-medium">{m.label}</span>
               </button>
             );
           })}
@@ -110,14 +110,14 @@ export const CheckInTab: React.FC<CheckInTabProps> = ({
           <button
             onClick={handleSaveMood}
             disabled={(!selectedMood && !myToday) || isSaving}
-            className="flex-1 bg-white text-black py-3.5 rounded-2xl font-black uppercase tracking-widest text-[10px] disabled:opacity-40 active:scale-95"
+            className="flex-1 bg-white text-black py-3.5 rounded-2xl text-sm font-semibold tracking-tight disabled:opacity-40 active:scale-95"
           >
             {myToday ? "Update Today" : "Check In"}
           </button>
           {myToday && (
             <button
               onClick={handleShareMoodToChat}
-              className="px-5 py-3.5 rounded-2xl border border-zinc-700 text-zinc-300 text-[10px] font-black uppercase tracking-widest hover:bg-zinc-800"
+              className="px-5 py-3.5 rounded-2xl border border-zinc-700 text-zinc-300 text-sm font-medium hover:bg-zinc-800"
             >
               Share to Chat
             </button>
@@ -127,11 +127,11 @@ export const CheckInTab: React.FC<CheckInTabProps> = ({
 
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-5">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-2">You</p>
+          <p className="text-xs font-medium text-zinc-500 mb-2">You</p>
           {myToday ? (
             <>
               <p className="text-2xl">{moodMeta(myToday.mood)?.emoji}</p>
-              <p className="text-sm font-bold text-white mt-1 capitalize">{myToday.mood}</p>
+              <p className="text-sm font-medium text-white mt-1 capitalize">{myToday.mood}</p>
               {myToday.note ? <p className="text-xs text-zinc-500 mt-1">{myToday.note}</p> : null}
             </>
           ) : (
@@ -139,11 +139,11 @@ export const CheckInTab: React.FC<CheckInTabProps> = ({
           )}
         </div>
         <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-5">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-2">Partner</p>
+          <p className="text-xs font-medium text-zinc-500 mb-2">Partner</p>
           {partnerToday ? (
             <>
               <p className="text-2xl">{moodMeta(partnerToday.mood)?.emoji}</p>
-              <p className="text-sm font-bold text-white mt-1 capitalize">{partnerToday.mood}</p>
+              <p className="text-sm font-medium text-white mt-1 capitalize">{partnerToday.mood}</p>
               {partnerToday.note ? <p className="text-xs text-zinc-500 mt-1">{partnerToday.note}</p> : null}
             </>
           ) : (
@@ -153,7 +153,7 @@ export const CheckInTab: React.FC<CheckInTabProps> = ({
       </div>
 
       <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-5 space-y-3">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Last 7 days</p>
+        <p className="text-xs font-medium text-zinc-500">Last 7 days</p>
         <div className="space-y-2">
           {last7.map(({ day, mine, theirs }) => (
             <div key={day} className="flex items-center justify-between gap-3 text-xs">
@@ -167,7 +167,7 @@ export const CheckInTab: React.FC<CheckInTabProps> = ({
             </div>
           ))}
         </div>
-        <div className="flex justify-between text-[9px] uppercase tracking-widest text-zinc-600 px-20">
+        <div className="flex justify-between text-xs text-zinc-600 px-20">
           <span>You</span>
           <span>Partner</span>
         </div>

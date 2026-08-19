@@ -115,12 +115,12 @@ export function TabNavigation({
   };
 
   return (
-    <nav className="max-w-md mx-auto flex items-center gap-2 overflow-x-auto no-scrollbar pt-3 px-4 pb-3 z-40 bg-zinc-950/70 backdrop-blur-xl border-b border-white/5">
+    <nav className="max-w-md mx-auto flex items-center gap-2 overflow-x-auto no-scrollbar pt-3 px-4 pb-3 z-40 bg-zinc-950/70 backdrop-blur-xl border-b border-white/5 font-plain">
       {TABS.map((tab) => (
         <button
           key={tab.id}
           onClick={() => setActiveTab(tab.id as TabType)}
-          className={`flex items-center gap-2.5 px-5 py-3.5 rounded-2xl text-[11px] font-bold uppercase tracking-wider transition-all whitespace-nowrap border ${
+          className={`flex items-center gap-2.5 px-5 py-3.5 rounded-2xl text-[13px] font-medium tracking-tight transition-all whitespace-nowrap border ${
             activeTab === tab.id 
               ? tab.id === "messages"
                 ? "bg-gradient-to-r from-fuchsia-500 via-violet-500 to-cyan-400 text-white shadow-lg shadow-fuchsia-500/25 border-transparent scale-105"

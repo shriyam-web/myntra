@@ -384,7 +384,7 @@ export async function fetchData(messageLimit = 50, currentUser?: string) {
       (messageQuery.$and as Record<string, unknown>[]).push({ deletedFor: { $ne: currentUser } });
     }
 
-    const [tickets, wishlist, plans, dates, reminders, moods, messages, rawUsers, callLogs] = await Promise.all([
+    const [tickets, wishlist, plans, dates, reminders, moods, messages, rawUsers] = await Promise.all([
       Ticket.find({}).sort({ createdAt: -1 }).lean(),
       Wishlist.find({}).lean(),
       Plan.find(sharedAlive).sort({ createdAt: -1 }).lean(),
@@ -393,7 +393,6 @@ export async function fetchData(messageLimit = 50, currentUser?: string) {
       MoodCheckIn.find({}).sort({ day: -1 }).limit(60).lean(),
       Message.find(messageQuery).sort({ createdAt: -1 }).limit(messageLimit).populate('repliedTo').lean(),
       User.find({}).select('username lastSeen lastReadAt chatBackgroundColor chatBubbleColor themeName chatWallpaper').lean(),
-      CallLog.find(sharedAlive).sort({ createdAt: -1 }).limit(50).lean()
     ]);
 
     // Deduplicate users by username (lowercase)
@@ -427,7 +426,6 @@ export async function fetchData(messageLimit = 50, currentUser?: string) {
       moods: JSON.parse(JSON.stringify(moods)),
       messages: JSON.parse(JSON.stringify(sortedMessages)),
       users: JSON.parse(JSON.stringify(users)),
-      callLogs: JSON.parse(JSON.stringify(callLogs)),
       ...modes,
     };
   } catch (error) {
@@ -471,7 +469,6 @@ export async function fetchMessages(messageLimit = 50, currentUser?: string) {
 
     // Presence is updated on its own interval in HomeClient — avoid on every poll.
     const now = new Date();
-    const sharedAlive = notExpiredSharedFilter(now);
     const messageQuery: Record<string, unknown> = {
       $and: [notExpiredMessageFilter(now)],
     };
@@ -479,10 +476,9 @@ export async function fetchMessages(messageLimit = 50, currentUser?: string) {
       (messageQuery.$and as Record<string, unknown>[]).push({ deletedFor: { $ne: currentUser } });
     }
 
-    const [messages, rawUsers, callLogs] = await Promise.all([
+    const [messages, rawUsers] = await Promise.all([
       Message.find(messageQuery).sort({ createdAt: -1 }).limit(messageLimit).populate('repliedTo').lean(),
       User.find({}).select('username lastSeen lastReadAt chatBackgroundColor chatBubbleColor themeName chatWallpaper').lean(),
-      CallLog.find(sharedAlive).sort({ createdAt: -1 }).limit(50).lean()
     ]);
 
     const userMap = new Map<string, UserDocument>();
@@ -505,7 +501,6 @@ export async function fetchMessages(messageLimit = 50, currentUser?: string) {
         JSON.stringify(messages.reverse().map((m) => protectMessageMedia(m as Record<string, unknown>)))
       ),
       users: JSON.parse(JSON.stringify(users)),
-      callLogs: JSON.parse(JSON.stringify(callLogs)),
       ...modes,
     };
   } catch (error) {
@@ -546,6 +541,56 @@ export async function searchMessages(query: string) {
     console.error("Message search failed:", error);
     if (error instanceof Error && /Unauthorized/i.test(error.message)) throw error;
     throw new Error("Search failed. Please try again.");
+  }
+}
+
+/** Load a contiguous window of chat history that includes a specific message. */
+export async function fetchMessagesAround(messageId: string, currentUser?: string) {
+  noStore();
+  try {
+    const me = await requireUser();
+    await dbConnect();
+    await purgeExpiredDisappearingMessages().catch(() => 0);
+
+    const now = new Date();
+    const clauses: Record<string, unknown>[] = [notExpiredMessageFilter(now)];
+    const viewer = currentUser || me;
+    if (viewer) {
+      clauses.push({ deletedFor: { $ne: viewer } });
+    }
+    const messageQuery = { $and: clauses };
+
+    const target = await Message.findOne({
+      $and: [...clauses, { _id: messageId }],
+    }).lean();
+
+    if (!target) {
+      return { found: false as const, messages: [] as unknown[], limit: 50, hasMore: false };
+    }
+
+    const newerCount = await Message.countDocuments({
+      $and: [...clauses, { createdAt: { $gte: (target as { createdAt: Date }).createdAt } }],
+    });
+    const neededLimit = Math.min(Math.max(newerCount + 40, 50), 1500);
+
+    const messages = await Message.find(messageQuery)
+      .sort({ createdAt: -1 })
+      .limit(neededLimit)
+      .populate("repliedTo")
+      .lean();
+
+    return {
+      found: true as const,
+      limit: neededLimit,
+      hasMore: messages.length >= neededLimit,
+      messages: JSON.parse(
+        JSON.stringify(messages.reverse().map((m) => protectMessageMedia(m as Record<string, unknown>)))
+      ),
+    };
+  } catch (error) {
+    console.error("fetchMessagesAround failed:", error);
+    if (error instanceof Error && /Unauthorized/i.test(error.message)) throw error;
+    throw new Error("Unable to open that message.");
   }
 }
 
@@ -1766,17 +1811,35 @@ export async function heartbeatCallAction(callId: string) {
   return callService.heartbeatCall(me, callId);
 }
 
-export async function getCallLogs() {
+export async function fetchCallLogsPage(skip = 0, limit = 15) {
   noStore();
   try {
     await requireUser();
     await dbConnect();
-    const logs = await CallLog.find({}).sort({ createdAt: -1 }).limit(50).lean();
-    return JSON.parse(JSON.stringify(logs));
+    await purgeExpiredDisappearingMessages().catch(() => 0);
+    const filter = notExpiredSharedFilter();
+    const safeLimit = Math.min(Math.max(limit, 1), 50);
+    const safeSkip = Math.max(skip, 0);
+    const [logs, total] = await Promise.all([
+      CallLog.find(filter).sort({ createdAt: -1 }).skip(safeSkip).limit(safeLimit).lean(),
+      CallLog.countDocuments(filter),
+    ]);
+    const items = JSON.parse(JSON.stringify(logs));
+    return {
+      logs: items,
+      total,
+      hasMore: safeSkip + items.length < total,
+    };
   } catch (error) {
     console.error("Failed to fetch call logs:", error);
+    if (error instanceof Error && /Unauthorized/i.test(error.message)) throw error;
     throw new Error("Failed to fetch call logs.");
   }
+}
+
+export async function getCallLogs() {
+  const page = await fetchCallLogsPage(0, 15);
+  return page.logs;
 }
 
 /** @deprecated Legacy — kept temporarily for older clients */

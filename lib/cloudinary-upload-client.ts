@@ -1,5 +1,6 @@
 import { classifyFile, cloudinaryResourceForKind } from "./attachments";
 import { materializeFile } from "./media-file";
+import { prepareChatImageFile } from "./rasterize-image";
 import { buildProtectedMediaUrl } from "./media-url";
 
 export type CloudinaryUploadResult = {
@@ -185,7 +186,8 @@ export async function uploadFileToCloudinary(
   const useAuthenticated = kind !== "document";
 
   opts.onProgress(0);
-  const readyFile = await materializeFile(file);
+  const readyFile =
+    kind === "image" ? await prepareChatImageFile(file) : await materializeFile(file);
 
   let signature: CloudinarySignature | null = null;
   let signatureError: unknown;

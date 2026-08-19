@@ -11,6 +11,7 @@
   --color-foreground: var(--foreground);
   --font-sans: 'Product Sans', 'Google Sans', var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-plain: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -24,6 +25,18 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: 'Product Sans', 'Google Sans', sans-serif;
+}
+
+input[type="date"],
+input[type="datetime-local"] {
+  min-width: 0;
+  max-width: 100%;
+}
+
+input[type="date"]::-webkit-datetime-edit,
+input[type="datetime-local"]::-webkit-datetime-edit {
+  min-width: 0;
+  overflow: hidden;
 }
 
 /* Custom Scrollbar Styles */

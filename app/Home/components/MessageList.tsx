@@ -196,6 +196,8 @@ interface MessageListProps {
   handleToggleReminder: (id: string) => void;
   onOpenSharedItem: (kind: "task" | "reminder") => void;
   onViewDisappearingMessages?: (messageIds: string[]) => void;
+  highlightedMessageId?: string | null;
+  onClearHighlight?: () => void;
 }
 
 export const MessageList: React.FC<MessageListProps> = ({
@@ -244,6 +246,8 @@ export const MessageList: React.FC<MessageListProps> = ({
   handleToggleReminder,
   onOpenSharedItem,
   onViewDisappearingMessages,
+  highlightedMessageId = null,
+  onClearHighlight,
 }) => {
   const [swipingMessageId, setSwipingMessageId] = React.useState<string | null>(null);
   const [swipeDistance, setSwipeDistance] = React.useState(0);
@@ -253,6 +257,40 @@ export const MessageList: React.FC<MessageListProps> = ({
   const viewFlushTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const onViewRef = React.useRef(onViewDisappearingMessages);
   onViewRef.current = onViewDisappearingMessages;
+  const onClearHighlightRef = React.useRef(onClearHighlight);
+  onClearHighlightRef.current = onClearHighlight;
+  const pinnedToLatestRef = React.useRef(false);
+
+  const pinToLatest = React.useCallback(() => {
+    const el = messagesContainerRef.current;
+    if (!el) return;
+    const prevBehavior = el.style.scrollBehavior;
+    el.style.scrollBehavior = "auto";
+    el.scrollTop = el.scrollHeight;
+    el.style.scrollBehavior = prevBehavior;
+  }, [messagesContainerRef]);
+
+  React.useEffect(() => {
+    if (highlightedMessageId) {
+      pinnedToLatestRef.current = true;
+      return;
+    }
+    if (messages.length === 0) return;
+    if (pinnedToLatestRef.current) return;
+    pinnedToLatestRef.current = true;
+
+    pinToLatest();
+    const frame = requestAnimationFrame(pinToLatest);
+    const t1 = window.setTimeout(pinToLatest, 50);
+    const t2 = window.setTimeout(pinToLatest, 180);
+    const t3 = window.setTimeout(pinToLatest, 400);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+      window.clearTimeout(t3);
+    };
+  }, [messages.length, highlightedMessageId, pinToLatest]);
 
   const openMediaSafety = (kind: MediaSafetyInfo["kind"], url: string) => {
     // New uploads are authenticated assets behind the login proxy. Legacy files
@@ -283,6 +321,31 @@ export const MessageList: React.FC<MessageListProps> = ({
       el.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
     });
   }, [editingMessage]);
+
+  React.useEffect(() => {
+    if (!highlightedMessageId) return;
+    let attempts = 0;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let clearTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const tryScroll = () => {
+      const el = document.getElementById(`message-${highlightedMessageId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+        clearTimer = setTimeout(() => onClearHighlightRef.current?.(), 2500);
+        return;
+      }
+      if (attempts++ < 25) {
+        retryTimer = setTimeout(tryScroll, 80);
+      }
+    };
+
+    retryTimer = setTimeout(tryScroll, 60);
+    return () => {
+      if (retryTimer) clearTimeout(retryTimer);
+      if (clearTimer) clearTimeout(clearTimer);
+    };
+  }, [highlightedMessageId, messages]);
 
   React.useEffect(() => {
     if (partnerIsTyping && !showScrollButton) {
@@ -723,12 +786,16 @@ export const MessageList: React.FC<MessageListProps> = ({
                       transform: swipingMessageId === m._id ? `translateX(${swipeDistance}px)` : 'none',
                       transition: swipingMessageId === m._id ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)'
                     }}
-                      className={`flex flex-col w-full transition-all duration-300 relative group/msg ${
+                      className={`flex flex-col w-full transition-all duration-300 relative group/msg scroll-mt-24 ${
                         sameSenderAsNext ? "mb-0.5" : "mb-3"
                       } ${
                         isMe ? "items-end" : "items-start"
                       } ${actionMenuId === m._id ? "z-[160]" : ""} ${
                         editingMessage === m._id ? "max-sm:scroll-mt-16 scroll-mb-24" : ""
+                      } ${
+                        highlightedMessageId === m._id
+                          ? "rounded-2xl ring-2 ring-amber-300/80 bg-white/10 shadow-[0_0_24px_rgba(252,211,77,0.18)]"
+                          : ""
                       }`}
                     >
                     {swipingMessageId === m._id && swipeDistance > 20 && (
