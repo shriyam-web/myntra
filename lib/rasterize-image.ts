@@ -60,26 +60,31 @@ async function blobFromHeic(file: Blob): Promise<Blob> {
   return out;
 }
 
+function fileFromBlob(blob: Blob, originalName: string, ext: string, type: string): File {
+  const base = (originalName || "photo").replace(/\.[^.]+$/, "") || "photo";
+  return new File([blob], `${base}.${ext}`, { type, lastModified: Date.now() });
+}
+
 async function toDrawableBlob(file: File): Promise<{ blob: Blob; mime: string }> {
   const bytes = await readFileBytes(file);
   const mime = sniffMediaMime(bytes, file.type || "").toLowerCase();
+  const original = new Blob([bytes.slice()], { type: mime || file.type || "application/octet-stream" });
 
   if (mime.includes("gif")) {
-    return { blob: new Blob([bytes.slice()], { type: "image/gif" }), mime };
+    return { blob: new Blob([bytes.slice()], { type: "image/gif" }), mime: "image/gif" };
   }
 
   const jpeg = extractLargestJpeg(bytes);
+  const jpegLooksLikeStill = jpeg && (jpeg.length >= 40_000 || jpeg.length >= bytes.byteLength * 0.5);
+
   if (mime.includes("jpeg") || mime.includes("jpg") || bytes[0] === 0xff) {
-    if (!jpeg) {
-      throw new Error("That photo did not finish loading. Pick it again from Gallery.");
+    if (jpegLooksLikeStill) {
+      return { blob: new Blob([jpeg.slice()], { type: "image/jpeg" }), mime: "image/jpeg" };
     }
-    if (bytes.byteLength > 200_000 && jpeg.length < 25_000) {
-      throw new Error("That photo did not finish loading. Pick it again from Gallery.");
-    }
-    return { blob: new Blob([jpeg.slice()], { type: "image/jpeg" }), mime: "image/jpeg" };
+    return { blob: original, mime: mime || "image/jpeg" };
   }
 
-  if (jpeg && jpeg.length >= 40_000) {
+  if (jpegLooksLikeStill) {
     return { blob: new Blob([jpeg.slice()], { type: "image/jpeg" }), mime: "image/jpeg" };
   }
 
@@ -113,56 +118,69 @@ async function toDrawableBlob(file: File): Promise<{ blob: Blob; mime: string }>
     }
   }
 
-  if (mime.includes("png") || mime.includes("webp")) {
-    return { blob: new Blob([bytes.slice()], { type: mime || file.type }), mime };
+  if (mime.includes("png") || mime.includes("webp") || mime.includes("image/")) {
+    return { blob: original, mime: mime || file.type || "image/jpeg" };
   }
 
-  throw new Error("That photo format is not supported. Try a JPG or PNG from Gallery.");
+  return { blob: original, mime: mime || file.type || "application/octet-stream" };
+}
+
+async function rasterizeToFile(prepared: { blob: Blob; mime: string }, originalName: string): Promise<File | null> {
+  try {
+    const img = await loadHtmlImage(prepared.blob);
+    await img.decode?.().catch(() => undefined);
+    const srcW = img.naturalWidth || img.width;
+    const srcH = img.naturalHeight || img.height;
+    if (srcW < 16 || srcH < 16 || srcW * srcH < MIN_DECODE_PIXELS) return null;
+
+    let outW = srcW;
+    let outH = srcH;
+    const edge = Math.max(outW, outH);
+    if (edge > MAX_EDGE) {
+      const scale = MAX_EDGE / edge;
+      outW = Math.max(1, Math.round(outW * scale));
+      outH = Math.max(1, Math.round(outH * scale));
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = outW;
+    canvas.height = outH;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.drawImage(img, 0, 0, outW, outH);
+
+    const preferPng = prepared.mime.includes("png");
+    const outType = preferPng ? "image/png" : "image/jpeg";
+    const blob = await canvasToBlob(canvas, outType, 0.92);
+    return fileFromBlob(blob, originalName, preferPng ? "png" : "jpg", outType);
+  } catch {
+    return null;
+  }
 }
 
 /**
- * Decode a Gallery/camera file into a complete JPEG/PNG.
- * Android: full copy, Motion Photo still extraction, HEIC convert, canvas rewrite.
+ * Decode a Gallery/camera file into a complete JPEG/PNG when possible.
+ * If conversion fails, keep the original bytes so the picker never blocks.
  */
 export async function prepareChatImageFile(file: File): Promise<File> {
-  const prepared = await toDrawableBlob(await materializeFile(file));
-  if (prepared.mime.includes("gif")) {
-    return new File([prepared.blob], (file.name || "photo").replace(/\.[^.]+$/, "") + ".gif", {
-      type: "image/gif",
-      lastModified: Date.now(),
-    });
+  const materialized = await materializeFile(file);
+  try {
+    const prepared = await toDrawableBlob(materialized);
+    if (prepared.mime.includes("gif")) {
+      return fileFromBlob(prepared.blob, file.name, "gif", "image/gif");
+    }
+    const rasterized = await rasterizeToFile(prepared, file.name);
+    if (rasterized) return rasterized;
+    if (prepared.blob.size >= 32) {
+      const ext = prepared.mime.includes("png")
+        ? "png"
+        : prepared.mime.includes("webp")
+          ? "webp"
+          : "jpg";
+      return fileFromBlob(prepared.blob, file.name, ext, prepared.mime || materialized.type);
+    }
+  } catch {
+    // Fall through to the original gallery file.
   }
-
-  const img = await loadHtmlImage(prepared.blob);
-  await img.decode?.().catch(() => undefined);
-  const srcW = img.naturalWidth || img.width;
-  const srcH = img.naturalHeight || img.height;
-  if (srcW < 16 || srcH < 16 || srcW * srcH < MIN_DECODE_PIXELS) {
-    throw new Error("That photo did not finish loading. Pick it again from Gallery.");
-  }
-
-  let outW = srcW;
-  let outH = srcH;
-  const edge = Math.max(outW, outH);
-  if (edge > MAX_EDGE) {
-    const scale = MAX_EDGE / edge;
-    outW = Math.max(1, Math.round(outW * scale));
-    outH = Math.max(1, Math.round(outH * scale));
-  }
-
-  const canvas = document.createElement("canvas");
-  canvas.width = outW;
-  canvas.height = outH;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Could not process that photo on this device.");
-  ctx.drawImage(img, 0, 0, outW, outH);
-
-  const preferPng = prepared.mime.includes("png");
-  const outType = preferPng ? "image/png" : "image/jpeg";
-  const blob = await canvasToBlob(canvas, outType, 0.92);
-  const base = (file.name || "photo").replace(/\.[^.]+$/, "") || "photo";
-  return new File([blob], `${base}.${preferPng ? "png" : "jpg"}`, {
-    type: outType,
-    lastModified: Date.now(),
-  });
+  return materialized;
 }

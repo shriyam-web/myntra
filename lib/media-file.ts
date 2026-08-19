@@ -37,6 +37,12 @@ export async function readFileBytes(file: File): Promise<Uint8Array> {
         continue;
       }
       if (file.size > 0 && bytes.byteLength < file.size) {
+        const looksUsable =
+          imageBufferLooksComplete(bytes, file.type) ||
+          bytes[0] === 0xff ||
+          bytes[0] === 0x89 ||
+          looksLikeHeic(bytes);
+        if (looksUsable && bytes.byteLength >= 8_192) return bytes;
         await sleep(250 * (attempt + 1));
         continue;
       }
@@ -57,15 +63,19 @@ export function extractJpegStill(bytes: Uint8Array): Uint8Array | null {
   if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) return null;
   let i = 2;
   while (i < bytes.length - 1) {
-    if (bytes[i] !== 0xff) return null;
+    if (bytes[i] !== 0xff) {
+      i += 1;
+      continue;
+    }
     while (i < bytes.length && bytes[i] === 0xff) i++;
     if (i >= bytes.length) return null;
     const marker = bytes[i]!;
     i += 1;
 
     if (marker === 0xd9) return bytes.subarray(0, i);
-    if (marker === 0xd8) continue;
-    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) continue;
+    if (marker === 0xd8 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7) || marker === 0x00) {
+      continue;
+    }
 
     if (i + 1 >= bytes.length) return null;
     const len = (bytes[i]! << 8) | bytes[i + 1]!;
@@ -74,13 +84,22 @@ export function extractJpegStill(bytes: Uint8Array): Uint8Array | null {
 
     if (marker === 0xda) {
       while (i < bytes.length - 1) {
-        if (bytes[i] === 0xff && bytes[i + 1] !== 0x00 && !(bytes[i + 1]! >= 0xd0 && bytes[i + 1]! <= 0xd7)) {
-          if (bytes[i + 1] === 0xd9) return bytes.subarray(0, i + 2);
-          break;
+        if (bytes[i] !== 0xff) {
+          i += 1;
+          continue;
         }
-        i += 1;
+        let j = i + 1;
+        while (j < bytes.length && bytes[j] === 0xff) j++;
+        if (j >= bytes.length) break;
+        const next = bytes[j]!;
+        if (next === 0x00 || (next >= 0xd0 && next <= 0xd7)) {
+          i = j + 1;
+          continue;
+        }
+        if (next === 0xd9) return bytes.subarray(0, j + 1);
+        // Progressive JPEG: more header markers after this scan. Resume at this 0xFF.
+        break;
       }
-      return null;
     }
   }
   return null;
