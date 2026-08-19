@@ -7,10 +7,10 @@ import {
   getReplyThumbUrl,
 } from "../../../lib/utils";
 import {
-  MAX_ATTACHMENT_BYTES,
   MAX_ATTACHMENTS_PER_MESSAGE,
   classifyFile,
   formatFileSize,
+  maxBytesForKind,
 } from "../../../lib/attachments";
 import { materializeFile } from "../../../lib/media-file";
 import { prepareChatImageFile } from "../../../lib/rasterize-image";
@@ -183,18 +183,20 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       const errors: string[] = [];
 
       for (const file of incoming.slice(0, remainingSlots)) {
-        if (file.size > MAX_ATTACHMENT_BYTES) {
-          errors.push(`${file.name} is over 50 MB`);
-          continue;
-        }
         const kind = classifyFile(file);
         if (!kind) {
           errors.push(`${file.name} is not allowed`);
           continue;
         }
+        if (file.size > maxBytesForKind(kind)) {
+          errors.push(`${file.name} is over ${formatFileSize(maxBytesForKind(kind))}`);
+          continue;
+        }
         try {
           if (kind === "image") {
             accepted.push(await prepareChatImageFile(file));
+          } else if (kind === "video") {
+            accepted.push(file);
           } else {
             accepted.push(await materializeFile(file));
           }
@@ -882,7 +884,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               <div className="relative w-24 h-24 rounded-[1.5rem] border-2 border-zinc-800 overflow-hidden bg-zinc-900 group-hover:border-white transition-all">
                 <img
                   src={url}
-                  className="absolute inset-0 block w-full h-full object-cover"
+                  className="absolute inset-0 block w-full h-full object-contain"
                   alt=""
                 />
               </div>
@@ -970,14 +972,14 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                   {queueLabel}
                 </span>
                 {sendQueueStatus.isMediaUploading && (
-                  <span>{sendQueueStatus.uploadProgress}%</span>
+                  <span>{Math.max(sendQueueStatus.uploadProgress, 1)}%</span>
                 )}
               </div>
               {sendQueueStatus.isMediaUploading && (
                 <div className="w-full h-1.5 bg-zinc-900 rounded-full overflow-hidden">
                   <div
-                    className={`h-full ${activeTheme.bubbleMe} transition-all duration-300 shadow-[0_0_10px_rgba(255,255,255,0.2)]`}
-                    style={{ width: `${sendQueueStatus.uploadProgress}%` }}
+                    className={`h-full ${activeTheme.bubbleMe} transition-[width] duration-150 ease-linear shadow-[0_0_10px_rgba(255,255,255,0.2)]`}
+                    style={{ width: `${Math.max(sendQueueStatus.uploadProgress, 1)}%` }}
                   />
                 </div>
               )}

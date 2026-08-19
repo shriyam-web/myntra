@@ -1037,7 +1037,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                                           <img 
                                               src={mediaUrl} 
                                               alt="Shared content" 
-                                              className="w-full h-auto max-h-[250px] object-contain bg-zinc-950 hover:scale-[1.02] transition-transform duration-500 cursor-pointer"
+                                              className="w-full h-auto max-h-[250px] object-contain bg-zinc-950 cursor-pointer"
                                               onError={(event) => {
                                                   const img = event.currentTarget;
                                                   const tries = Number(img.dataset.retry || "0");

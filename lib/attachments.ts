@@ -1,6 +1,11 @@
 /** Shared attachment validation + classification for chat media. */
 
-export const MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024; // 50 MB
+/** Images/docs stay smaller; videos use Cloudinary chunked-upload capacity (Plus plan max). */
+export const MAX_IMAGE_BYTES = 50 * 1024 * 1024;
+export const MAX_AUDIO_BYTES = 100 * 1024 * 1024;
+export const MAX_DOCUMENT_BYTES = 50 * 1024 * 1024;
+export const MAX_VIDEO_BYTES = 2 * 1024 * 1024 * 1024;
+export const MAX_ATTACHMENT_BYTES = MAX_VIDEO_BYTES;
 export const MAX_ATTACHMENTS_PER_MESSAGE = 10;
 
 const BLOCKED_EXTENSIONS = new Set([
@@ -91,11 +96,23 @@ export function cloudinaryResourceForKind(kind: AttachmentKind): "image" | "vide
   return "raw";
 }
 
+export function maxBytesForKind(kind: AttachmentKind): number {
+  if (kind === "video") return MAX_VIDEO_BYTES;
+  if (kind === "audio") return MAX_AUDIO_BYTES;
+  if (kind === "image") return MAX_IMAGE_BYTES;
+  return MAX_DOCUMENT_BYTES;
+}
+
 export function formatFileSize(bytes: number): string {
   if (!bytes || bytes < 0) return "";
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(bytes < 10 * 1024 * 1024 ? 1 : 0)} MB`;
+  if (bytes < 1024 * 1024 * 1024) {
+    const mb = bytes / (1024 * 1024);
+    return `${mb.toFixed(mb < 10 ? 1 : 0)} MB`;
+  }
+  const gb = bytes / (1024 * 1024 * 1024);
+  return `${gb.toFixed(gb < 10 ? 1 : 0)} GB`;
 }
 
 export function mapsUrl(lat: number, lng: number): string {

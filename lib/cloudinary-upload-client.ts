@@ -30,13 +30,16 @@ type CloudinaryUploadJson = {
   error?: { message?: string };
 };
 
-const MIN_CHUNK_BYTES = 20 * 1024 * 1024;
-const CHUNK_BYTES = 8 * 1024 * 1024;
-const CHUNK_TIMEOUT_MS = 120_000;
-const MAX_CHUNK_RETRIES = 1;
+const MIN_CHUNK_BYTES = 8 * 1024 * 1024;
+const CHUNK_BYTES = 12 * 1024 * 1024;
+const MAX_CHUNK_RETRIES = 2;
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function chunkTimeoutMs(chunkBytes: number) {
+  return Math.min(8 * 60_000, Math.max(90_000, Math.ceil(chunkBytes / (32 * 1024)) * 1000));
 }
 
 function buildFormData(
@@ -55,12 +58,23 @@ function buildFormData(
   return formData;
 }
 
+function createProgress(report: (percent: number) => void) {
+  let max = 0;
+  return (percent: number) => {
+    const next = Math.max(max, Math.min(99, Math.round(percent)));
+    if (next === max) return;
+    max = next;
+    report(max);
+  };
+}
+
 function xhrPost(opts: {
   url: string;
   formData: FormData;
   headers?: Record<string, string>;
   timeoutMs: number;
-  onProgress?: (loaded: number, total: number) => void;
+  expectedBytes: number;
+  onBytes?: (sentBytes: number) => void;
 }): Promise<CloudinaryUploadJson> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -72,11 +86,20 @@ function xhrPost(opts: {
       }
     }
 
+    const mapLoadedToFileBytes = (loaded: number, total: number) => {
+      if (total > 0) {
+        return Math.min(opts.expectedBytes, (loaded / total) * opts.expectedBytes);
+      }
+      return Math.min(opts.expectedBytes, loaded);
+    };
+
     xhr.upload.onprogress = (event) => {
-      if (event.lengthComputable) opts.onProgress?.(event.loaded, event.total);
+      const total = event.lengthComputable ? event.total : 0;
+      opts.onBytes?.(mapLoadedToFileBytes(event.loaded, total));
     };
 
     xhr.onload = () => {
+      opts.onBytes?.(opts.expectedBytes);
       let json: CloudinaryUploadJson = {};
       try {
         json = JSON.parse(xhr.responseText || "{}") as CloudinaryUploadJson;
@@ -108,7 +131,7 @@ async function withRetries<T>(work: () => Promise<T>, retries: number): Promise<
     } catch (error) {
       lastError = error;
       if (attempt === retries) break;
-      await sleep(600 * (attempt + 1));
+      await sleep(700 * (attempt + 1));
     }
   }
   throw lastError instanceof Error ? lastError : new Error("Upload failed.");
@@ -119,17 +142,16 @@ async function uploadSingle(
   url: string,
   signature: CloudinarySignature,
   useAuthenticated: boolean,
-  onProgress: (percent: number) => void
+  onBytes: (sent: number) => void
 ) {
   return withRetries(
     () =>
       xhrPost({
         url,
         formData: buildFormData(file, file.name, signature, useAuthenticated),
-        timeoutMs: CHUNK_TIMEOUT_MS,
-        onProgress: (loaded, total) => {
-          onProgress(Math.min(99, Math.round((loaded / Math.max(total, 1)) * 100)));
-        },
+        timeoutMs: chunkTimeoutMs(file.size),
+        expectedBytes: file.size,
+        onBytes,
       }),
     MAX_CHUNK_RETRIES
   );
@@ -141,11 +163,12 @@ async function uploadChunked(
   signature: CloudinarySignature,
   useAuthenticated: boolean,
   uniqueUploadId: string,
-  onProgress: (percent: number) => void
+  onBytes: (sent: number) => void
 ) {
   let lastResponse: CloudinaryUploadJson = {};
   for (let start = 0; start < file.size; start += CHUNK_BYTES) {
     const end = Math.min(start + CHUNK_BYTES, file.size);
+    const chunkLen = end - start;
     const chunk = file.slice(start, end);
     lastResponse = await withRetries(
       () =>
@@ -156,14 +179,13 @@ async function uploadChunked(
             "X-Unique-Upload-Id": uniqueUploadId,
             "Content-Range": `bytes ${start}-${end - 1}/${file.size}`,
           },
-          timeoutMs: CHUNK_TIMEOUT_MS,
-          onProgress: (loaded) => {
-            const sent = start + loaded;
-            onProgress(Math.min(99, Math.round((sent / file.size) * 100)));
-          },
+          timeoutMs: chunkTimeoutMs(chunkLen),
+          expectedBytes: chunkLen,
+          onBytes: (sentInChunk) => onBytes(start + sentInChunk),
         }),
       MAX_CHUNK_RETRIES
     );
+    onBytes(end);
   }
   return lastResponse;
 }
@@ -184,10 +206,18 @@ export async function uploadFileToCloudinary(
   if (!kind) throw new Error(`Unsupported file: ${file.name}`);
   const endpointResource = cloudinaryResourceForKind(kind);
   const useAuthenticated = kind !== "document";
+  const report = createProgress(opts.onProgress);
 
-  opts.onProgress(0);
+  report(1);
+
   const readyFile =
-    kind === "image" ? await prepareChatImageFile(file) : await materializeFile(file);
+    kind === "image"
+      ? await prepareChatImageFile(file)
+      : kind === "video" || file.size > MIN_CHUNK_BYTES
+        ? file
+        : await materializeFile(file);
+
+  report(2);
 
   let signature: CloudinarySignature | null = null;
   let signatureError: unknown;
@@ -210,6 +240,10 @@ export async function uploadFileToCloudinary(
 
   const uploadUrl = `https://api.cloudinary.com/v1_1/${signature.cloudName}/${endpointResource}/upload`;
   const uniqueUploadId = `${Date.now()}${Math.floor(Math.random() * 1e9)}`;
+  const totalBytes = Math.max(readyFile.size, 1);
+  const onBytes = (sent: number) => {
+    report(Math.min(99, (sent / totalBytes) * 100));
+  };
 
   const response =
     readyFile.size > MIN_CHUNK_BYTES
@@ -219,9 +253,9 @@ export async function uploadFileToCloudinary(
           signature,
           useAuthenticated,
           uniqueUploadId,
-          opts.onProgress
+          onBytes
         )
-      : await uploadSingle(readyFile, uploadUrl, signature, useAuthenticated, opts.onProgress);
+      : await uploadSingle(readyFile, uploadUrl, signature, useAuthenticated, onBytes);
 
   const publicId = response.public_id;
   const resourceType = (response.resource_type || endpointResource) as "image" | "video" | "raw";

@@ -150,19 +150,23 @@ export function useMessageSendQueue({
             const result = await withTimeout(
               uploadToCloudinary(file, (percent) => {
                 if (!mountedRef.current) return;
+                const next =
+                  job.files.length === 1
+                    ? Math.min(Math.round(percent), 99)
+                    : Math.min(
+                        Math.round(((i + percent / 100) / job.files.length) * 100),
+                        99
+                      );
                 setSendQueueStatus((prev) => ({
                   ...prev,
                   isMediaUploading: true,
-                  uploadProgress:
-                    job.files.length === 1
-                      ? Math.min(Math.round(percent), 99)
-                      : Math.min(
-                          Math.round(((i + percent / 100) / job.files.length) * 100),
-                          99
-                        ),
+                  uploadProgress: Math.max(prev.uploadProgress, next),
                 }));
               }),
-              180000,
+              Math.min(
+                40 * 60_000,
+                Math.max(3 * 60_000, Math.ceil(file.size / (12 * 1024 * 1024)) * 90_000 + 60_000)
+              ),
               "Media upload timed out. Your files were not sent."
             );
 
@@ -279,7 +283,9 @@ export function useMessageSendQueue({
       waitingCount: Math.max(0, waiting),
       activeText: active?.text || prev.activeText,
       isMediaUploading: Boolean(mediaJob && mediaJob.files.length > 0),
-      uploadProgress: mediaJob ? prev.uploadProgress : 0,
+      uploadProgress: mediaJob
+        ? Math.max(prev.uploadProgress, mediaJob.files.length > 0 ? 1 : 0)
+        : 0,
     }));
   }, []);
 
