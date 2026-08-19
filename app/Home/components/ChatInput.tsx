@@ -881,10 +881,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         <div className="mb-4 flex gap-3 overflow-x-auto no-scrollbar pb-2 animate-in slide-in-from-bottom-2 duration-300">
           {selectedImages.map((url, idx) => (
             <div key={`img-${idx}`} className="relative group shrink-0">
-              <div className="relative w-24 h-24 rounded-[1.5rem] border-2 border-zinc-800 overflow-hidden bg-zinc-900 group-hover:border-white transition-all">
+              <div className="relative w-36 h-36 rounded-[1.5rem] border-2 border-zinc-800 overflow-hidden bg-zinc-900 group-hover:border-white transition-all">
                 <img
                   src={url}
-                  className="absolute inset-0 block w-full h-full object-contain"
+                  className="absolute inset-0 block w-full h-full object-contain p-1"
                   alt=""
                 />
               </div>
