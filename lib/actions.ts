@@ -1592,11 +1592,29 @@ export async function markAllAsRead(username: string) {
   noStore();
   try {
     await dbConnect();
+    const uname = username.trim().toLowerCase();
+    const partner = uname === "alpha 1" ? "delta 1" : "alpha 1";
+    const now = new Date();
+    const me = await User.findOne({ username: uname }).lean();
+    const previousReadAt = me?.lastReadAt ? new Date(me.lastReadAt) : new Date(0);
+
     await User.findOneAndUpdate(
-      { username: username.trim().toLowerCase() },
-      { lastReadAt: new Date() },
+      { username: uname },
+      { lastReadAt: now },
       { upsert: true, new: true }
     );
+
+    // Stamp only messages that became newly visible in this read, so older
+    // already-read chats keep an unknown seen time instead of "just now".
+    await Message.updateMany(
+      {
+        createdBy: partner,
+        seenAt: null,
+        createdAt: { $gt: previousReadAt, $lte: now },
+      },
+      { $set: { seenAt: now } }
+    );
+    notifyRealtime();
   } catch (error) {
     console.error('Failed to mark as read:', error);
     throw new Error('Failed to mark as read. Database connection error.');

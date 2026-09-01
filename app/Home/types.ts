@@ -85,6 +85,7 @@ export interface Message {
   sharedItemMeta?: SharedItemMeta;
   disappearing?: boolean;
   viewedAt?: string | null;
+  seenAt?: string | null;
   expiresAt?: string | null;
   createdAt: string;
   createdBy: UserType;

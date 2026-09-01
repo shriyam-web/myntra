@@ -135,6 +135,7 @@ const MessageSchema = new Schema({
   // Disappearing-mode snapshot (set at creation; cleared permanently if pinned)
   disappearing: { type: Boolean, default: false },
   viewedAt: { type: Date, default: null },
+  seenAt: { type: Date, default: null },
   expiresAt: { type: Date, default: null },
 });
 

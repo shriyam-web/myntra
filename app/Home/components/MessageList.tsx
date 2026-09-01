@@ -9,6 +9,7 @@ import { MediaSafetyModal, MediaSafetyInfo } from "./MediaSafetyModal";
 import { PollCard } from "./PollCard";
 import { SharedItemCard } from "./SharedItemCard";
 import { MessageActionMenu } from "./MessageActionMenu";
+import { MessageInfoModal } from "./MessageInfoModal";
 import { ReactionPickerBar } from "./ReactionPickerBar";
 
 const VoiceNotePlayer: React.FC<{
@@ -303,6 +304,7 @@ export const MessageList: React.FC<MessageListProps> = ({
   const [zoomedAvatar, setZoomedAvatar] = React.useState<string | null>(null);
   const [reactionPickerId, setReactionPickerId] = React.useState<string | null>(null);
   const [actionMenuId, setActionMenuId] = React.useState<string | null>(null);
+  const [infoMessageId, setInfoMessageId] = React.useState<string | null>(null);
   const [burstReaction, setBurstReaction] = React.useState<ReactionType | null>(null);
   const activeAudioRef = React.useRef<HTMLAudioElement | null>(null);
   const touchStartRef = React.useRef<{ x: number; y: number; time: number } | null>(null);
@@ -787,7 +789,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                       transition: swipingMessageId === m._id ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)'
                     }}
                       className={`flex flex-col w-full transition-all duration-300 relative group/msg scroll-mt-24 ${
-                        sameSenderAsNext ? "mb-0.5" : "mb-3"
+                        sameSenderAsNext ? "mb-1.5" : "mb-3"
                       } ${
                         isMe ? "items-end" : "items-start"
                       } ${actionMenuId === m._id ? "z-[160]" : ""} ${
@@ -1260,7 +1262,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                             </a>
                           )}
 
-                          <div className={`${sameSenderAsNext ? "hidden" : "flex"} text-[10px] mt-1 items-center gap-1 font-medium tracking-normal ${isMe ? "justify-end text-white/50" : "justify-start text-zinc-500"}`}>
+                          <div className={`flex text-[10px] mt-1 items-center gap-1 font-medium tracking-normal ${isMe ? "justify-end text-white/50" : "justify-start text-zinc-500"}`}>
                               {isDisappearingMsg && (
                                 <span className="text-violet-200/90 normal-case tracking-normal" title={disappearLabel || ""}>
                                   ⏱
@@ -1309,6 +1311,7 @@ export const MessageList: React.FC<MessageListProps> = ({
                             isPinned={isPinnedForMe}
                             onPin={() => handleTogglePinMessage(m._id)}
                             onReply={() => setReplyingTo(m)}
+                            onInfo={() => setInfoMessageId(m._id)}
                             onCopy={m.text ? () => handleCopyMessage(m.text || "") : undefined}
                             onEdit={isMe && m.text && !["poll", "task", "reminder", "call-log"].includes(m.kind || "") ? () => {
                               setEditingMessage(m._id);
@@ -1392,6 +1395,32 @@ export const MessageList: React.FC<MessageListProps> = ({
       {mediaSafetyInfo && (
         <MediaSafetyModal info={mediaSafetyInfo} onClose={() => setMediaSafetyInfo(null)} />
       )}
+      {infoMessageId && (() => {
+        const infoMessage = messages.find((msg) => msg._id === infoMessageId);
+        if (!infoMessage) return null;
+        const infoIsMe = infoMessage.createdBy.trim().toLowerCase() === currentUser.trim().toLowerCase();
+        const partnerUsername = currentUser.trim().toLowerCase() === "alpha 1" ? "delta 1" : "alpha 1";
+        const partner = users.find((u) => u.username.trim().toLowerCase() === partnerUsername);
+        const meUser = users.find((u) => u.username.trim().toLowerCase() === currentUser.trim().toLowerCase());
+        const infoIsRead = infoIsMe
+          ? Boolean(
+              partner?.lastReadAt &&
+              new Date(infoMessage.createdAt).getTime() <= new Date(partner.lastReadAt).getTime()
+            )
+          : Boolean(
+              meUser?.lastReadAt &&
+              new Date(infoMessage.createdAt).getTime() <= new Date(meUser.lastReadAt).getTime()
+            );
+        return (
+          <MessageInfoModal
+            message={infoMessage}
+            isMe={infoIsMe}
+            isRead={infoIsRead}
+            isOptimistic={isOptimisticMessageId(infoMessage._id)}
+            onClose={() => setInfoMessageId(null)}
+          />
+        );
+      })()}
     </div>
     </div>
   );

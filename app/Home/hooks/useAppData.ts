@@ -109,6 +109,7 @@ export function useAppData(view: ViewType, messageLimit: number) {
           (m.pinnedBy?.length || 0) !== (finalMessages[i].pinnedBy?.length || 0) ||
           Boolean(m.disappearing) !== Boolean(finalMessages[i].disappearing) ||
           (m.viewedAt || null) !== (finalMessages[i].viewedAt || null) ||
+          (m.seenAt || null) !== (finalMessages[i].seenAt || null) ||
           (m.expiresAt || null) !== (finalMessages[i].expiresAt || null) ||
           JSON.stringify(m.reactions || []) !== JSON.stringify(finalMessages[i].reactions || []) ||
           JSON.stringify(m.pollMeta || null) !== JSON.stringify(finalMessages[i].pollMeta || null)
