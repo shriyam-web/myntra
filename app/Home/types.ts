@@ -116,6 +116,7 @@ export interface PresenceUser {
   username: string;
   lastSeen: string;
   lastReadAt?: string;
+  whatsNewSeenId?: string | null;
   chatBackgroundColor?: string;
   chatBubbleColor?: string;
   themeName?: string;

@@ -156,6 +156,7 @@ const UserSchema = new Schema({
   username: { type: String, required: true, unique: true },
   lastSeen: { type: Date, default: Date.now },
   lastReadAt: { type: Date },
+  whatsNewSeenId: { type: String, default: null },
   // Typing indicator: user counts as typing while typingUntil is in the future.
   // Stored in Mongo (not memory) so it works across serverless instances.
   typingUntil: { type: Date, default: null },

@@ -31,6 +31,7 @@ import { MediaTab } from "./Home/components/MediaTab";
 import { CallOverlay } from "./Home/components/CallOverlay";
 import { DisappearingModeModal } from "./Home/components/DisappearingModeModal";
 import { DueReminderModal } from "./Home/components/DueReminderModal";
+import { WhatsNewModal } from "./Home/components/WhatsNewModal";
 import { useCall } from "./Home/hooks/useCall";
 import { useRealtimeSync } from "./Home/hooks/useRealtimeSync";
 import { useTypingSignal, usePartnerTypingState } from "./Home/hooks/useTypingIndicator";
@@ -39,6 +40,7 @@ import { MAINTENANCE_REDIRECT_URL } from "../lib/maintenance";
 import { toProtectedMediaUrl } from "../lib/media-url";
 import { detectIncognitoMode } from "./Home/utils/detectIncognito";
 import { loginAction, logoutAction } from "../lib/auth/actions";
+import { getUnreadWhatsNew, latestWhatsNewId } from "../lib/whats-new";
 
 const DISAPPEARING_ACK_KEY = "disappearing_mode_ack_at";
 const DUE_REMINDER_ACK_PREFIX = "due_reminder_ack";
@@ -155,6 +157,8 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
   const [showThemeSettings, setShowThemeSettings] = useState(false);
   const [showClearHistoryModal, setShowClearHistoryModal] = useState(false);
   const [includePinnedInDelete, setIncludePinnedInDelete] = useState(false);
+  const [whatsNewCutId, setWhatsNewCutId] = useState<string | null>(null);
+  const [markingWhatsNew, setMarkingWhatsNew] = useState(false);
   
   const [chatWallpaper, setChatWallpaper] = useState<string>("");
   const [chatBgColor, setChatBgColor] = useState<string>("bg-zinc-900/50");
@@ -512,6 +516,10 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
     }
   }, [view, users]);
 
+  useEffect(() => {
+    setWhatsNewCutId(null);
+  }, [view]);
+
   // Handlers
   const handleLogin = async (e?: React.FormEvent, passwordOverride?: string) => {
     if (e) e.preventDefault();
@@ -533,6 +541,26 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
       setLoginError("Login failed");
     } finally {
       setIsLoggingIn(false);
+    }
+  };
+
+  const handleMarkWhatsNewRead = async () => {
+    const latestId = latestWhatsNewId();
+    if (!latestId) return;
+    setMarkingWhatsNew(true);
+    try {
+      await actions.markWhatsNewRead(latestId);
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.username.trim().toLowerCase() === currentUser.trim().toLowerCase()
+            ? { ...u, whatsNewSeenId: latestId }
+            : u
+        )
+      );
+    } catch (error) {
+      console.error("Failed to mark What's New as read:", error);
+    } finally {
+      setMarkingWhatsNew(false);
     }
   };
 
@@ -1249,6 +1277,14 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
       new Date(r.dueAt).getTime() <= Date.now() &&
       !dismissedReminderIds.includes(r._id)
   );
+  const meUser = users.find((u) => u.username.trim().toLowerCase() === currentUser.trim().toLowerCase());
+  const unreadWhatsNew = getUnreadWhatsNew(meUser?.whatsNewSeenId);
+  const latestUpdateId = latestWhatsNewId();
+  const showWhatsNew =
+    users.length > 0 &&
+    unreadWhatsNew.length > 0 &&
+    Boolean(latestUpdateId) &&
+    whatsNewCutId !== latestUpdateId;
 
   if (isIncognito === null) return <IncognitoVerify status="verifying" />;
   if (isIncognito === false) return <IncognitoVerify status="blocked" />;
@@ -1789,6 +1825,15 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
         }}
         onOpenDates={() => setActiveTab("dates")}
       />
+
+      {showWhatsNew && (
+        <WhatsNewModal
+          releases={unreadWhatsNew}
+          marking={markingWhatsNew}
+          onCut={() => setWhatsNewCutId(latestUpdateId)}
+          onMarkRead={() => void handleMarkWhatsNewRead()}
+        />
+      )}
 
       <CallOverlay 
         currentUser={currentUser as string}

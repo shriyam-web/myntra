@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:mongodb": "tsx lib/test-mongodb.ts"
+    "test:mongodb": "tsx lib/test-mongodb.ts",
+    "test:whats-new": "tsx lib/whats-new.test.ts"
   },
   "dependencies": {
     "cloudinary": "^2.9.0",

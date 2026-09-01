@@ -18,7 +18,7 @@ import {
 import { revalidatePath, unstable_noStore as noStore } from "next/cache";
 import { v2 as cloudinary } from "cloudinary";
 import { APP_SETTINGS_KEY } from "./maintenance";
-import { requireUser } from "./auth/session";
+import { WHATS_NEW_RELEASES } from "./whats-new";
 import * as callService from "./calls/service";
 import type { CallEndReason, CallSignalType } from "./calls/types";
 import {
@@ -54,11 +54,16 @@ interface CloudinaryResult {
 interface UserDocument {
   username: string;
   lastSeen: Date | string;
+  lastReadAt?: Date | string;
+  whatsNewSeenId?: string | null;
   chatBackgroundColor?: string;
   chatBubbleColor?: string;
   themeName?: string;
   chatWallpaper?: string;
 }
+
+const USER_CHAT_SELECT =
+  "username lastSeen lastReadAt whatsNewSeenId chatBackgroundColor chatBubbleColor themeName chatWallpaper";
 
 async function getMaintenancePayload() {
   const settings = await AppSettings.findOne({ key: APP_SETTINGS_KEY }).lean();
@@ -392,7 +397,7 @@ export async function fetchData(messageLimit = 50, currentUser?: string) {
       Reminder.find(sharedAlive).sort({ dueAt: 1 }).lean(),
       MoodCheckIn.find({}).sort({ day: -1 }).limit(60).lean(),
       Message.find(messageQuery).sort({ createdAt: -1 }).limit(messageLimit).populate('repliedTo').lean(),
-      User.find({}).select('username lastSeen lastReadAt chatBackgroundColor chatBubbleColor themeName chatWallpaper').lean(),
+      User.find({}).select(USER_CHAT_SELECT).lean(),
     ]);
 
     // Deduplicate users by username (lowercase)
@@ -478,7 +483,7 @@ export async function fetchMessages(messageLimit = 50, currentUser?: string) {
 
     const [messages, rawUsers] = await Promise.all([
       Message.find(messageQuery).sort({ createdAt: -1 }).limit(messageLimit).populate('repliedTo').lean(),
-      User.find({}).select('username lastSeen lastReadAt chatBackgroundColor chatBubbleColor themeName chatWallpaper').lean(),
+      User.find({}).select(USER_CHAT_SELECT).lean(),
     ]);
 
     const userMap = new Map<string, UserDocument>();
@@ -1618,6 +1623,28 @@ export async function markAllAsRead(username: string) {
   } catch (error) {
     console.error('Failed to mark as read:', error);
     throw new Error('Failed to mark as read. Database connection error.');
+  }
+}
+
+export async function markWhatsNewRead(releaseId: string) {
+  noStore();
+  const me = await requireUser();
+  const id = (releaseId || "").trim();
+  if (!id) throw new Error("Missing update id.");
+  if (!WHATS_NEW_RELEASES.some((release) => release.id === id)) {
+    throw new Error("Unknown update.");
+  }
+
+  try {
+    await dbConnect();
+    await User.findOneAndUpdate(
+      { username: me },
+      { whatsNewSeenId: id },
+      { upsert: true, new: true }
+    );
+  } catch (error) {
+    console.error("Failed to mark What's New as read:", error);
+    throw new Error("Could not save What's New.");
   }
 }
 
