@@ -469,7 +469,7 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
       }
     };
 
-    const timeoutId = setTimeout(() => resolve(true), 2500);
+    const timeoutId = setTimeout(() => resolve(true), 4000);
 
     void detectIncognitoMode()
       .then(resolve)
