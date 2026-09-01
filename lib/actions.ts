@@ -18,6 +18,7 @@ import {
 import { revalidatePath, unstable_noStore as noStore } from "next/cache";
 import { v2 as cloudinary } from "cloudinary";
 import { APP_SETTINGS_KEY } from "./maintenance";
+import { requireUser } from "./auth/session";
 import { WHATS_NEW_RELEASES } from "./whats-new";
 import * as callService from "./calls/service";
 import type { CallEndReason, CallSignalType } from "./calls/types";
