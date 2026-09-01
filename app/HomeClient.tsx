@@ -1830,7 +1830,7 @@ export default function HomeClient({ initialUser = null }: { initialUser?: strin
         <WhatsNewModal
           releases={unreadWhatsNew}
           marking={markingWhatsNew}
-          onCut={() => setWhatsNewCutId(latestUpdateId)}
+          onClose={() => setWhatsNewCutId(latestUpdateId)}
           onMarkRead={() => void handleMarkWhatsNewRead()}
         />
       )}

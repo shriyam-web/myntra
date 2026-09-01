@@ -19,7 +19,6 @@ export const WHATS_NEW_RELEASES: WhatsNewRelease[] = [
     title: "What's New is here",
     items: [
       "This board pops up after login whenever something new ships.",
-      "Mark as read is yours alone — your partner still sees it until they mark it too.",
       "Every chat bubble shows its own time and ticks again.",
       "Long-press a message → Info for sent and seen times.",
       "Chrome incognito opens the site again (Google had blocked the old check).",

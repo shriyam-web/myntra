@@ -4,12 +4,12 @@ import type { WhatsNewRelease } from "../../../lib/whats-new";
 export function WhatsNewModal({
   releases,
   marking,
-  onCut,
+  onClose,
   onMarkRead,
 }: {
   releases: WhatsNewRelease[];
   marking: boolean;
-  onCut: () => void;
+  onClose: () => void;
   onMarkRead: () => void;
 }) {
   if (!releases.length) return null;
@@ -25,25 +25,21 @@ export function WhatsNewModal({
         <div className="relative px-6 pt-6 pb-4 border-b border-zinc-800/80">
           <button
             type="button"
-            onClick={onCut}
-            className="absolute top-4 right-4 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-400 hover:text-white hover:bg-zinc-800 border border-zinc-800 transition-colors"
-            aria-label="Cut"
+            onClick={onClose}
+            className="absolute top-4 right-4 p-2 rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+            aria-label="Close"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
             </svg>
-            Cut
           </button>
           <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-fuchsia-300/80">
             Update
           </p>
-          <h2 id="whats-new-title" className="mt-1 text-xl font-semibold text-white pr-16">
+          <h2 id="whats-new-title" className="mt-1 text-xl font-semibold text-white pr-10">
             What&apos;s New
           </h2>
-          <p className="mt-1 text-xs text-zinc-500">
-            Mark as read is only for you. Your partner still sees this until they mark it too.
-          </p>
         </div>
 
         <div className="px-6 py-4 max-h-[min(52vh,22rem)] overflow-y-auto space-y-5">
@@ -68,10 +64,10 @@ export function WhatsNewModal({
         <div className="p-4 grid grid-cols-2 gap-2">
           <button
             type="button"
-            onClick={onCut}
+            onClick={onClose}
             className="py-3 rounded-2xl bg-zinc-900 border border-zinc-800 text-sm font-medium text-zinc-300 hover:bg-zinc-800 transition-colors"
           >
-            Cut
+            Close
           </button>
           <button
             type="button"
