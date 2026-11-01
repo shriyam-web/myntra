@@ -80,15 +80,6 @@ input[type="datetime-local"]::-webkit-datetime-edit {
   will-change: transform;
 }
 
-@keyframes app-download-sheen {
-  0% { transform: translateX(-130%) skewX(-18deg); }
-  100% { transform: translateX(240%) skewX(-18deg); }
-}
-
-.animate-app-download-sheen {
-  animation: app-download-sheen 2.8s ease-in-out infinite;
-}
-
 @keyframes fade-in {
   from { opacity: 0; }
   to { opacity: 1; }
