@@ -38,6 +38,14 @@ export function ComplaintsTab({
 
   return (
     <div className="space-y-5">
+      <a
+        href="https://drive.google.com/file/d/1KPa8fqLV9ALzL4izp-sNCNKO9hYpMxKw/view?usp=sharing"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center justify-center w-full bg-white text-black py-2.5 rounded-xl text-sm font-semibold hover:bg-zinc-200 transition-colors active:scale-[0.98]"
+      >
+        Download App
+      </a>
       <section className="space-y-2.5">
         <h2 className="text-sm font-semibold text-white tracking-tight px-0.5">
           New complaint
