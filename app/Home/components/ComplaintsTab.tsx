@@ -39,7 +39,7 @@ export function ComplaintsTab({
   return (
     <div className="min-w-0 space-y-5">
       <a
-        href="https://drive.google.com/file/d/1EAzOgRfgRaBukETvMB29_aExMA2mVDvR/view?usp=drive_link"
+        href="https://drive.google.com/file/d/1EAzOgRfgRaBukETvMB29_aExMA2mVDvR/view?usp=sharing"
         target="_blank"
         rel="noopener noreferrer"
         className="flex w-full min-w-0 max-w-full items-center gap-3 rounded-2xl bg-gradient-to-r from-[#FF4B91] via-[#E80071] to-[#B8005A] px-3.5 py-3 text-white shadow-md shadow-[#E80071]/30 ring-1 ring-inset ring-white/20 transition-[filter,transform] duration-150 hover:brightness-110 active:scale-[0.98]"
