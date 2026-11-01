@@ -1,6 +1,6 @@
 # Calling & Auth Environment
 
-Deploy trigger note: env checklist only — no runtime effect. (redeploy 2026-11-01 APK banner)
+Deploy trigger note: env checklist only — no runtime effect. (redeploy 2026-11-01 APK 1I9BOEmq)
 
 ## Required
 - `SESSION_SECRET` — long random string for signing HttpOnly session cookies
