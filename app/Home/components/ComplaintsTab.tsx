@@ -42,9 +42,27 @@ export function ComplaintsTab({
         href="https://drive.google.com/file/d/1KPa8fqLV9ALzL4izp-sNCNKO9hYpMxKw/view?usp=sharing"
         target="_blank"
         rel="noopener noreferrer"
-        className="flex items-center justify-center w-full bg-white text-black py-2.5 rounded-xl text-sm font-semibold hover:bg-zinc-200 transition-colors active:scale-[0.98]"
+        className="group relative isolate overflow-hidden rounded-2xl px-4 py-3.5 text-white shadow-[0_12px_32px_-8px_rgba(232,0,113,0.65)] ring-1 ring-white/20 transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_40px_-8px_rgba(232,0,113,0.8)] active:scale-[0.98]"
+        style={{ background: "linear-gradient(135deg, #FF4B91 0%, #E80071 48%, #8A2C56 100%)" }}
       >
-        Download App
+        <span className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_0%,rgba(255,255,255,0.35),transparent_42%)]" />
+        <span className="pointer-events-none absolute -inset-y-6 w-16 bg-white/25 blur-md animate-app-download-sheen" />
+        <span className="relative flex items-center gap-3">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-black/20 ring-1 ring-white/25 shadow-inner">
+            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M12 3v12" />
+              <path d="m7 10 5 5 5-5" />
+              <path d="M5 19h14" />
+            </svg>
+          </span>
+          <span className="min-w-0 flex-1 text-left">
+            <span className="block text-[15px] font-semibold tracking-tight">Download App</span>
+            <span className="block text-[11px] font-medium text-white/80">Nykaa Fashion · Android APK</span>
+          </span>
+          <span className="shrink-0 text-xs font-semibold tracking-wide text-white/90 transition-transform duration-200 group-hover:translate-x-0.5">
+            GET →
+          </span>
+        </span>
       </a>
       <section className="space-y-2.5">
         <h2 className="text-sm font-semibold text-white tracking-tight px-0.5">
